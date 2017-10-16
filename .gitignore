@@ -1,0 +1,7 @@
+.vs/
+packages/
+Backup/
+Relax/
+obj
+bin
+*.htm
