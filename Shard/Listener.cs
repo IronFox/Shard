@@ -17,8 +17,9 @@ namespace Shard
 			this.simulation = simulation;
 
 			server = new TcpListener(IPAddress.Any, new Host(simulation.ID).Port);
-
+			server.Start();
 			listenerThread = new Thread(new ThreadStart(Listen));
+			listenerThread.Start();
 		}
 
 		private void Listen()

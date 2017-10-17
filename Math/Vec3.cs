@@ -128,7 +128,7 @@ namespace VectorMath
 
 		public static Vec3 Decode(string str)
 		{
-			string[] parts = str.Split('-');
+			string[] parts = str.Split('_');
 			if (parts.Length != 3)
 				throw new FormatException("Expected three parts in vector expression '"+str+'\'');
 
@@ -141,7 +141,7 @@ namespace VectorMath
 
 		public string Encode()
 		{
-			return Convert.ToString(X)+'-'+Convert.ToString(Y) + '-' + Convert.ToString(Z);
+			return Convert.ToString(X)+ '_' + Convert.ToString(Y) + '_' + Convert.ToString(Z);
 		}
 
         //public static implicit operator string(Vec3 v)
@@ -158,7 +158,7 @@ namespace VectorMath
 
 	public struct Int3
 	{
-		public readonly int X, Y, Z;
+		public int X, Y, Z;
 
 		public static readonly Int3 Zero = new Int3(0);
 
@@ -176,7 +176,23 @@ namespace VectorMath
 					case 2:
 						return Z;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Vec3[]");
+				throw new IndexOutOfRangeException("Unexpected index for Int3[]");
+			}
+			set
+			{
+				switch (key)
+				{
+					case 0:
+						X = value;
+					break;
+					case 1:
+						Y = value;
+						break;
+					case 2:
+						Z = value;
+						break;
+				}
+				throw new IndexOutOfRangeException("Unexpected index for Int3[]");
 			}
 		}
 
@@ -283,7 +299,7 @@ namespace VectorMath
 
 		public static Int3 Decode(string str)
 		{
-			string[] parts = str.Split('-');
+			string[] parts = str.Split('_');
 			if (parts.Length != 3)
 				throw new FormatException("Expected three parts in vector expression '" + str + '\'');
 
@@ -294,9 +310,12 @@ namespace VectorMath
 				);
 		}
 
-		public string Encode()
+		public string Encoded
 		{
-			return Convert.ToString(X) + '-' + Convert.ToString(Y) + '-' + Convert.ToString(Z);
+			get
+			{
+				return Convert.ToString(X) + '_' + Convert.ToString(Y) + '_' + Convert.ToString(Z);
+			}
 		}
 
 		public override string ToString()

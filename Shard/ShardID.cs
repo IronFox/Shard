@@ -5,12 +5,13 @@ namespace Shard
 {
 	public struct ShardID
 	{
-		public readonly Int3 XYZ;
-		public readonly int ReplicaLevel;
+		public Int3 XYZ;
+		public int ReplicaLevel;
 
-		public int X { get { return XYZ.X; } }
-		public int Y { get { return XYZ.Y; } }
-		public int Z { get { return XYZ.Z; } }
+		public int X { get { return XYZ.X; } set { XYZ.X = value; } }
+		public int Y { get { return XYZ.Y; } set { XYZ.Y = value; } }
+		public int Z { get { return XYZ.Z; } set { XYZ.Z = value; } }
+
 		public static readonly ShardID Zero = new ShardID(0,0,0,0);
 
 		public ShardID(int x, int y, int z, int r)
