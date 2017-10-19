@@ -8,15 +8,12 @@ namespace Shard
 {
 	internal class Listener
 	{
-		private readonly Simulation simulation;
 		private readonly TcpListener server;
 		private readonly Thread listenerThread;
 
-		public Listener(Simulation simulation)
+		public Listener()
 		{
-			this.simulation = simulation;
-
-			server = new TcpListener(IPAddress.Any, new Host(simulation.ID).Port);
+			server = new TcpListener(IPAddress.Any, new Host(Simulation.ID).Port);
 			server.Start();
 			listenerThread = new Thread(new ThreadStart(Listen));
 			listenerThread.Start();
@@ -34,7 +31,7 @@ namespace Shard
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
 						Host host = new Host(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
-						Link link = simulation.FindLink(host.ID);
+						Link link = Simulation.FindLink(host.ID);
 						link.SetPassiveClient(client);
 					}
 					catch (Exception ex)

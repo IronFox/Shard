@@ -12,13 +12,13 @@ namespace Shard
 {
 	internal class Outbound
 	{
-		private ConcurrentQueue<object> dispatch = new ConcurrentQueue<object>()
-								, sent = new ConcurrentQueue<object>();
+		private ConcurrentQueue<Tuple<string, object>> dispatch = new ConcurrentQueue<Tuple<string, object>>()
+									, sent = new ConcurrentQueue<Tuple<string, object>>();
 		private Semaphore sem = new Semaphore(0, 1000);
 
 		public void SignalConnectionRestart()
 		{
-			object item;
+			Tuple<string,object> item;
 			int cnt = 0;
 			while (sent.TryDequeue(out item))
 			{
@@ -32,47 +32,53 @@ namespace Shard
 		public object GetNext()
 		{
 			sem.WaitOne();
-			object rs = null;
+			Tuple<string,object> rs = null;
 			if (dispatch.TryDequeue(out rs))
 			{
 				sent.Enqueue(rs);
-				return rs;
+				return rs.Item2;
 			}
 			return null;
 		}
 
-		public void Add(object item)
+		public void Set(string key, object item)
 		{
-			dispatch.Enqueue(item);
+			Filter((k, obj) => k != key);
+			dispatch.Enqueue(new Tuple<string,object>(key,item));
 			sem.Release();
 		}
 
-		SpinLock removeLock = new SpinLock();
-		public void Filter(Func<object,bool> filter)
+		SpinLock filterLock = new SpinLock();
+		public int Filter(Func<string,object,bool> filter)
 		{
 			bool isIn = false;
-			removeLock.Enter(ref isIn);
+			int removed = 0;
+			filterLock.Enter(ref isIn);
 			if (!isIn)
 				throw new Exception("Failed to acquire lock");
 			try
 			{
 
-				Queue<object> temp = new Queue<object>();
-				object tmp;
+				Queue<Tuple<string, object>> temp = new Queue<Tuple<string, object>>();
+				Tuple<string,object> tmp;
 				while (dispatch.TryDequeue(out tmp))
-					if (filter(tmp))
+					if (filter(tmp.Item1, tmp.Item2))
 					{
 						temp.Enqueue(tmp);
 					}
+					else
+						removed++;
 				while (temp.Count > 0)
 					dispatch.Enqueue(temp.Dequeue());
 
 
 				while (sent.TryDequeue(out tmp))
-					if (filter(tmp))
+					if (filter(tmp.Item1, tmp.Item2))
 					{
 						temp.Enqueue(tmp);
 					}
+					else
+						removed++;
 				while (temp.Count > 0)
 					sent.Enqueue(temp.Dequeue());
 
@@ -80,7 +86,8 @@ namespace Shard
 			}
 			catch (Exception)
 			{}
-			removeLock.Exit();
+			filterLock.Exit();
+			return removed;
 		}
 
 	}
@@ -97,12 +104,15 @@ namespace Shard
 		private TcpClient client;
 		private readonly Host host;
 		private NetworkStream stream;
-		private readonly Simulation simulation;
+		public readonly int LinearIndex;
+		public readonly bool IsSibling;
+
 
 		public readonly bool IsActive;
-		public Link(ShardID addr, Simulation simulation, bool isActive)
+		public Link(ShardID addr, bool isActive, int linearIndex, bool isSibling)
 		{
-			this.simulation = simulation;
+			IsSibling = isSibling;
+			LinearIndex = linearIndex;
 			host = new Host(addr);
 			IsActive = isActive;
 			if (isActive)
@@ -121,6 +131,16 @@ namespace Shard
 				return;
 			connectThread = new Thread(new ThreadStart(Connect));
 			connectThread.Start();
+		}
+
+		public RCS.IDG InboundRCS(int generation)
+		{
+			return new RCS.IDG(ID.XYZ, Simulation.ID.XYZ, generation);
+		}
+
+		public RCS.IDG OutboundRCS(int generation)
+		{
+			return new RCS.IDG(Simulation.ID.XYZ, ID.XYZ, generation);
 		}
 
 		private void Connect()
@@ -216,6 +236,9 @@ namespace Shard
 			}
 		}
 
+		public bool IsResponsive { get; internal set; }
+		public int OldestGeneration { get; internal set; }
+
 		private void Read(byte[] data, int bytes)
 		{
 			int offset = 0;
@@ -252,7 +275,7 @@ namespace Shard
 				while (client.Connected)
 				{
 					object obj = formatter.Deserialize(stream);
-					simulation.FetchIncoming(obj);
+					Simulation.FetchIncoming(this,obj);
 
 				}
 			}
@@ -267,13 +290,13 @@ namespace Shard
 		}
 
 
-		public void Add(object obj)
+		public void Set(string id, object obj)
 		{
-			outbound.Add(obj);
+			outbound.Set(id,obj);
 		}
-		public void Filter(Func<object, bool> filter)
+		public int Filter(Func<string, object, bool> filter)
 		{
-			outbound.Filter(filter);
+			return outbound.Filter(filter);
 		}
 
 		private void WriteMain()
@@ -309,6 +332,5 @@ namespace Shard
 				writeOut.Release();
 			}
 		}
-
 	}
 }

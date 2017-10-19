@@ -126,6 +126,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Clock.cs" />
+    <Compile Include="InconsistencyCoverage.cs" />
     <Compile Include="RCS.cs" />
     <Compile Include="SDS.cs" />
     <Compile Include="ShardID.cs" />

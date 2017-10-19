@@ -21,11 +21,11 @@ namespace Shard
 			}
 
 			Simulation sim;
-			DBConnector db;
+			DB db;
 			{
 				int at = 0;
 				var dbHost = new Host(args[at++]);
-				db = new DBConnector(dbHost);
+				db = new DB(dbHost);
 				ShardID addr = ShardID.Decode(args[at++]);
 
 				if ((addr >= db.Config.extent).Any)
