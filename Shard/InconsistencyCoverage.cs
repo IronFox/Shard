@@ -1,9 +1,16 @@
-﻿namespace Shard
+﻿using System;
+
+namespace Shard
 {
 	public class InconsistencyCoverage
 	{
-		
-		public InconsistencyCoverage(DBEntry iC)
+		private BitCube data;
+
+
+
+
+
+		public InconsistencyCoverage(Serial iC)
 		{
 			
 		}
@@ -11,8 +18,13 @@
 		public bool IsFullyConsistent { get { return Inconsistency == 0; } }
 		public int Inconsistency { get; private set; }
 
-		public class DBEntry
+		public class Serial
 		{
+		}
+
+		internal Serial Export()
+		{
+			throw new NotImplementedException();
 		}
 	}
 }

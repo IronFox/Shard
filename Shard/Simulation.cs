@@ -222,11 +222,11 @@ namespace Shard
 				int timeStep = TimeStep;
 				Console.WriteLine("Starting at " + timeStep);
 
-				List<RCS.IDG> queryRCS = new List<RCS.IDG>();
+				List<RCS.GenID> queryRCS = new List<RCS.GenID>();
 				foreach (var link in neighbors)
 					for (int i = sds.Generation + 1; i < timeStep; i++)
 					{
-						queryRCS.Add(new RCS.IDG(link.ID.XYZ, addr.XYZ, i));
+						queryRCS.Add(new RCS.GenID(link.ID.XYZ, addr.XYZ, i));
 					}
 				Console.WriteLine("Querying " + queryRCS.Count + " RCS's");
 				DB.BeginFetch(queryRCS);

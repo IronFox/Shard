@@ -133,14 +133,14 @@ namespace Shard
 			connectThread.Start();
 		}
 
-		public RCS.IDG InboundRCS(int generation)
+		public RCS.GenID InboundRCS(int generation)
 		{
-			return new RCS.IDG(ID.XYZ, Simulation.ID.XYZ, generation);
+			return new RCS.GenID(ID.XYZ, Simulation.ID.XYZ, generation);
 		}
 
-		public RCS.IDG OutboundRCS(int generation)
+		public RCS.GenID OutboundRCS(int generation)
 		{
-			return new RCS.IDG(Simulation.ID.XYZ, ID.XYZ, generation);
+			return new RCS.GenID(Simulation.ID.XYZ, ID.XYZ, generation);
 		}
 
 		private void Connect()

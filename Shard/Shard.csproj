@@ -126,12 +126,15 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BitCube.cs" />
     <Compile Include="Clock.cs" />
+    <Compile Include="Entity.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
+    <Compile Include="IntArray.cs" />
     <Compile Include="RCS.cs" />
     <Compile Include="SDS.cs" />
     <Compile Include="ShardID.cs" />
-    <Compile Include="DBConnector.cs" />
+    <Compile Include="DB.cs" />
     <Compile Include="Host.cs" />
     <Compile Include="Listener.cs" />
     <Compile Include="Link.cs" />

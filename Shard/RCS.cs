@@ -8,22 +8,33 @@ namespace Shard
 	{
 		public class Serial
 		{
+			public string _id, _rev;
+
+			public Entity.Serial[] Entities { get; set; }
+			public InconsistencyCoverage.Serial IC { get; set; }
+			public int[] NumericID { get; set; }
 			public int Generation { get; set; }
 		}
 
 		public readonly int Generation;
+		public readonly string Revision;
+		public readonly Entity[] Entities;
+		public readonly InconsistencyCoverage IC;
 
 		public RCS(Serial rcs)
 		{
 			Generation = rcs.Generation;
+			Revision = rcs._rev;
+			Entities = Entity.Import(rcs.Entities);
+			IC = new InconsistencyCoverage(rcs.IC);
 		}
 
-		public InconsistencyCoverage IC { get; private set; }
 		public bool IsFullyConsistent { get { return IC.IsFullyConsistent; } }
 
 		public struct ID
 		{
 			public readonly Int3 FromShard, ToShard;
+			public const int ExportInts = 6;
 
 			public ID(Int3 fromShard, Int3 toShard)
 			{
@@ -40,60 +51,94 @@ namespace Shard
 			public static bool operator ==(ID a, ID b) => a.FromShard == b.FromShard && a.ToShard == b.ToShard;
 			public static bool operator !=(ID a, ID b) => !(a == b);
 			public override bool Equals(object obj) => (obj is ID) && ((ID)obj) == (this);
-		}
 
-		public struct IDG
-		{
-			public readonly ID ID;
-			public readonly int Generation;
-
-			public string Key {
-				get
-				{
-					return ID + "g"+(Generation%100);
-				}
+			public void Export(int[] ar, int offset)
+			{
+				FromShard.Export(ar, offset);
+				ToShard.Export(ar, offset+3);
 			}
-			public string P2PKey
+			public int[] IntArray
 			{
 				get
 				{
-					return ID + "g" + Generation;
+					int[] rs = new int[ExportInts];
+					Export(rs, 0);
+					return rs;
 				}
 			}
+		}
 
-			public IDG(Int3 fromShard, Int3 toShard, int generation)
+		public struct GenID
+		{
+			public readonly ID ID;
+			public readonly int Generation;
+			public const int ExportInts = ID.ExportInts + 1;
+
+			public GenID(Int3 fromShard, Int3 toShard, int generation)
 			{
 				ID = new ID(fromShard, toShard);
 				Generation = generation;
 			}
 
+			public GenID(ID myID, int generation)
+			{
+				ID = myID;
+				Generation = generation;
+			}
+
 			public override string ToString()
 			{
-				return P2PKey;
+				return ID + "g" + Generation;
 			}
 			public override int GetHashCode()
 			{
 				return ID.GetHashCode() * 31 +  Generation.GetHashCode();
 			}
 
-			public static bool operator ==(IDG a, IDG b)
+			public static bool operator ==(GenID a, GenID b)
 			{
 				return a.ID == b.ID && a.Generation == b.Generation;
 			}
-			public static bool operator !=(IDG a, IDG b)
+			public static bool operator !=(GenID a, GenID b)
 			{
 				return !(a == b);
 			}
 
 			public override bool Equals(object obj)
 			{
-				return (obj is IDG) && ((IDG)obj) == (this);
+				return (obj is GenID) && ((GenID)obj) == (this);
+			}
+
+			public void Export(int[] ar, int offset)
+			{
+				ID.Export(ar, offset);
+				ar[offset + ID.ExportInts] = Generation;
+			}
+
+			public int[] IntArray
+			{
+				get
+				{
+					int[] rs = new int[ExportInts];
+					Export(rs, 0);
+					return rs;
+				}
 			}
 		}
 
-		public Serial Export()
+		public Serial Export(ID myID)
 		{
-			throw new NotImplementedException();
+			var genID = new GenID(myID, Generation);
+			Serial rs = new Serial();
+			rs.Generation = Generation;
+			rs.NumericID = genID.IntArray;
+			rs.IC = IC.Export();
+			rs.Entities = Entity.Export(Entities);
+
+			rs._id = genID.ToString();
+			rs._rev = Revision;
+
+			return rs;
 		}
 	}
 }

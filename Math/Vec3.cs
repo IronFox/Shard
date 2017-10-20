@@ -210,6 +210,11 @@ namespace VectorMath
 			this.Z = v;
 		}
 
+		public static Int3 operator-(Int3 v)
+		{
+			return new Int3(-v.X, -v.Y, -v.Z);
+		}
+
 		public int OrthographicCompare(Int3 other)
 		{
 			if (X < other.X)
@@ -323,6 +328,12 @@ namespace VectorMath
 			return "(" + Convert.ToString(X) + ", " + Convert.ToString(Y) + ", " + Convert.ToString(Z) + ")";
 		}
 
+		public void Export(int[] ar, int offset)
+		{
+			ar[offset] = X;
+			ar[offset+1] = Y;
+			ar[offset+2] = Z;
+		}
 	}
 
 

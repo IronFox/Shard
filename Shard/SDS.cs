@@ -27,24 +27,10 @@ namespace Shard
 	{
 		public class Serial
 		{
-			public struct Entity
-			{
-				public EntityAppearance Appearance;
-				public byte[] Guid;
-				public string LogicID;
-				public byte[] LogicState;
-
-				internal void BeginFetchLogic()
-				{
-					if (LogicID != null && LogicID.Length > 0)
-						DB.BeginFetchLogic(LogicID);
-				}
-			}
-
+			public string _id, _rev;
 			public int Generation { get; set; }
-			public Entity[] Entities { get; set; }
-			public InconsistencyCoverage.DBEntry IC { get; set; }
-
+			public Entity.Serial[] Entities { get; set; }
+			public InconsistencyCoverage.Serial IC { get; set; }
 		}
 
 
@@ -91,38 +77,13 @@ namespace Shard
 			}
 		}
 
-		public struct Entity
-		{
-			public readonly EntityAppearance Appearance;
-			public readonly Guid Guid;
-			public readonly EntityLogic.State LogicState;
-			public readonly bool IsInconsistent;
-
-			public Entity(Serial.Entity entity)
-			{
-				IsInconsistent = false;
-				Appearance = entity.Appearance;
-				Guid = new Guid(entity.Guid);
-				if (entity.LogicID == null || entity.LogicID.Length == 0)
-					LogicState = null;
-				else
-				{
-					EntityLogic logic = DB.TryGetLogic(entity.LogicID);
-					if (logic != null)
-						LogicState = logic.Instantiate(entity.LogicState);
-					else
-					{
-						LogicState = null;
-						IsInconsistent = true;
-					}
-				}
-			}
-		}
 
 		public readonly Entity[] Entities;
 		public readonly int Generation;
 		public readonly bool InputConsistent;
 		public readonly InconsistencyCoverage IC;
+		public readonly string Revision;
+
 		public bool SignificantInboundChange { get; private set; }
 		public RCS[] OutboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
@@ -148,9 +109,8 @@ namespace Shard
 			foreach (var e in dbSDS.Entities)
 				e.BeginFetchLogic();
 
-			Entities = new Entity[dbSDS.Entities.Length];
-			for (int i = 0; i < dbSDS.Entities.Length; i++)
-				Entities[i] = new Entity(dbSDS.Entities[i]);
+			Revision = dbSDS._rev;
+			Entities = Entity.Import(dbSDS.Entities);
 
 			Generation = dbSDS.Generation;
 			IC = new InconsistencyCoverage(dbSDS.IC);
@@ -165,7 +125,7 @@ namespace Shard
 
 		public bool IsSet { get { return IC != null; } }
 
-		public int Inconsistency { get { return IC != null ? IC.Inconsistency : -1; }
+		public int Inconsistency { get { return IC != null ? IC.Inconsistency : -1; } }
 
 		public class Computation
 		{
@@ -249,7 +209,13 @@ namespace Shard
 
 		public Serial Export()
 		{
-			throw new NotImplementedException();
+			Serial rs = new Serial();
+			rs.Entities = Entity.Export(Entities);
+			rs.Generation = Generation;
+			rs.IC = IC.Export();
+			rs._rev = Revision;
+			rs._id = Simulation.ID.XYZ.Encoded;
+			return rs;
 		}
 	}
 }

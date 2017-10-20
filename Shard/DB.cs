@@ -114,9 +114,10 @@ namespace Shard
 		}
 
 
-		public static DB_SDS LoadLatest(Int3 myID)
+		public static SDS.Serial LoadLatest(Int3 myID)
 		{
-			return sdsStore.GetByIdAsync<DB_SDS>(myID.Encoded).Result;
+			//sdsStore.QueryAsync(new Query(new ViewIdentity()))
+			return sdsStore.GetByIdAsync<SDS.Serial>(myID.Encoded).Result;
 		}
 
 		private class MyLogicState : EntityLogic.State
@@ -153,12 +154,12 @@ namespace Shard
 
 
 
-		private static ConcurrentDictionary<RCS.IDG, ContinuousPoller<RCS.Serial>> rcsRequests = new ConcurrentDictionary<RCS.IDG, ContinuousPoller<RCS.Serial>>();
+		private static ConcurrentDictionary<RCS.GenID, ContinuousPoller<RCS.Serial>> rcsRequests = new ConcurrentDictionary<RCS.GenID, ContinuousPoller<RCS.Serial>>();
 		private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
 		private static ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>> logicRequests = new ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>>();
 		private static ConcurrentDictionary<string, MyLogic> loadedLogics = new ConcurrentDictionary<string, MyLogic>();
 
-		public static void BeginFetch(RCS.IDG id)
+		public static void BeginFetch(RCS.GenID id)
 		{
 			if (rcsRequests.ContainsKey(id))
 				return;
@@ -168,7 +169,7 @@ namespace Shard
 			poller.Start(rcsStore, id.Key, rcs => rcs.Generation == id.Generation);
 		}
 
-		public static RCS.Serial TryGet(RCS.IDG id)
+		public static RCS.Serial TryGet(RCS.GenID id)
 		{
 			ContinuousPoller<RCS.Serial> poller;
 			if (rcsRequests.TryGetValue(id,out poller))
@@ -208,7 +209,7 @@ namespace Shard
 			return rs;
 		}
 
-		public static void BeginFetch(IEnumerable<RCS.IDG> ids)
+		public static void BeginFetch(IEnumerable<RCS.GenID> ids)
 		{
 			foreach (var id in ids)
 				BeginFetch(id);
