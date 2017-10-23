@@ -95,47 +95,92 @@ namespace Shard
 			return rs;
 		}
 
-		public BitCube GrowOnes()
+		public BitCube GrowOnesX()
 		{
-			BitCube rs0 = new BitCube(Size + 2);
-			if (IsEmpty)
-				return rs0;
+			Int3 rsSize = Size;
+			rsSize.X += 2;
+			BitCube rs = new BitCube(rsSize);
+			for (int y = 0; y < grid.GetLength(1); y++)
+				for (int z = 0; z < grid.GetLength(2); z++)
+				{
+					for (int x = 0; x < grid.GetLength(0); x++)
+						rs.grid[x + 1, y, z] = grid[x, y, z];
+					for (int x = 0; x + 1 < grid.GetLength(0); x++)
+						rs.grid[x + 1, y, z] |= grid[x + 1, y, z];
+					rs.grid[0, y, z] = grid[0, y, z];
+					for (int x = 1; x <= grid.GetLength(0); x++)
+						rs.grid[x + 1, y, z] |= grid[x - 1, y, z];
+					rs.grid[rs.grid.GetLength(0) - 1, y, z] = grid[grid.GetLength(0) - 1, y, z];
+				}
+			return rs;
+		}
+		public BitCube GrowOnesY()
+		{
+			Int3 rsSize = Size;
+			rsSize.Y += 2;
+			int lenY = grid.GetLength(1);
+			BitCube rs = new BitCube(rsSize);
+			for (int x = 0; x < grid.GetLength(0); x++)
+				for (int z = 0; z < grid.GetLength(2); z++)
+				{
+					for (int y = 0; y < lenY; y++)
+						rs.grid[x, y + 1, z] = grid[x, y, z];
+					for (int y = 0; y + 1 < lenY; y++)
+						rs.grid[x, y + 1, z] |= grid[x, y + 1, z];
+					rs.grid[x, 0, z] = grid[x, 0, z];
+					for (int y = 1; y <= lenY; y++)
+						rs.grid[x, y + 1, z] |= grid[x, y - 1, z];
+					rs.grid[x, lenY + 1, z] = grid[x, lenY - 1, z];
+				}
+			return rs;
+		}
 
+		public BitCube GrowOnesZ()
+		{
+			Int3 rsSize = Size;
+			rsSize.Z += 2;
+			int lenZ = grid.GetLength(2);
+			BitCube rs = new BitCube(rsSize);
 			for (int x = 0; x < grid.GetLength(0); x++)
 				for (int y = 0; y < grid.GetLength(1); y++)
 				{
-					for (int z = 0; z < grid.GetLength(2); z++)
+					for (int z = 0; z < lenZ; z++)
 					{
-						rs0.grid[x, y, z] = grid[x, y, z] | (grid[x, y, z] << 1) | (grid[x, y, z] >> 1);
+						var input = grid[x, y, z];
+						rs.grid[x, y, z] = input | (input << 1) | (input << 2);
 					}
-					for (int z = 1; z < rs0.grid.GetLength(2); z++)
+					for (int z = 1; z < lenZ; z++)
 					{
-						rs0.grid[x, y, z] |= (grid[x, y, z - 1] & HighestBit) != 0 ? 1u : 0;
+						var edge = grid[x, y, z - 1];
+						rs.grid[x, y, z] |= (edge >> (BitsPerEntry - 1)) & 1;
+						rs.grid[x, y, z] |= (edge >> (BitsPerEntry - 2)) & 1;
 					}
-					for (int z = 0; z+1 < grid.GetLength(2); z++)
-					{
-						rs0.grid[x, y, z] |= (grid[x, y, z + 1] & (1u)) != 0 ? HighestBit : 0;
-					}
+					//for (int z = 0; z + 1 < lenZ; z++)
+					//{
+					//	rs.grid[x, y, z] |= (grid[x, y, z + 1] & (1u)) != 0 ? HighestBit : 0;
+					//}
 				}
-			BitCube rs1 = new BitCube(Size + 2);
-			for (int x = 0; x < rs1.grid.GetLength(0); x++)
-				for (int y = 1; y+1 < rs1.grid.GetLength(1); y++)
-					for (int z = 0; z < rs1.grid.GetLength(2); z++)
-					{
-						rs1.grid[x, y, z] = rs0.grid[x, y, z] | rs0.grid[x, y + 1, z] | rs0.grid[x, y - 1, z];
-					}
-			BitCube rs2 = new BitCube(Size + 2);
-			for (int x = 1; x + 1 < rs1.grid.GetLength(0); x++)
-				for (int y = 0; y < rs1.grid.GetLength(1); y++)
-					for (int z = 0; z < rs1.grid.GetLength(2); z++)
-					{
-						rs2.grid[x, y, z] = rs1.grid[x, y, z] | rs1.grid[x + 1, y, z] | rs1.grid[x -1 , y , z];
-					}
+			return rs;
+		}
 
-			rs2.rangeUnknown = false;
-			rs2.allZero = false;
 
-			return rs2;
+		public BitCube GrowOnes(int axis)
+		{
+			switch (axis)
+			{
+				case 0:
+					return GrowOnesX();
+				case 1:
+					return GrowOnesY();
+				case 2:
+					return GrowOnesZ();
+			}
+			return null;
+		}
+
+		public BitCube GrowOnes()
+		{
+			return GrowOnesZ().GrowOnesX().GrowOnesY();
 		}
 
 		private void ReDetermineRange()
@@ -158,12 +203,21 @@ namespace Shard
 			allZero = true;
 			rangeUnknown = false;
 		}
+
 		public void SetAllOne()
 		{
+			int edgeOnes = Size.Z % BitsPerEntry;
+			uint edgeValue = (uint)(1 << edgeOnes) - 1;
+			if (edgeValue == 0)
+				edgeValue = uint.MaxValue;
 			for (int x = 0; x < grid.GetLength(0); x++)
 				for (int y = 0; y < grid.GetLength(1); y++)
-					for (int z = 0; z < grid.GetLength(2); z++)
+				{
+					for (int z = 0; z + 1 < grid.GetLength(2); z++)
 						grid[x, y, z] = uint.MaxValue;
+					if (grid.GetLength(2) > 0)
+						grid[x, y, grid.GetLength(2) - 1] = edgeValue;
+				}
 			allZero = false;
 			rangeUnknown = false;
 		}

@@ -176,7 +176,7 @@ namespace VectorMath
 					case 2:
 						return Z;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Int3[]");
+				throw new IndexOutOfRangeException("Unexpected index for Int3[]: " + key);
 			}
 			set
 			{
@@ -184,15 +184,16 @@ namespace VectorMath
 				{
 					case 0:
 						X = value;
-					break;
+						break;
 					case 1:
 						Y = value;
 						break;
 					case 2:
 						Z = value;
 						break;
+					default:
+						throw new IndexOutOfRangeException("Unexpected index for Int3[]: " + key);
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Int3[]");
 			}
 		}
 
@@ -235,6 +236,23 @@ namespace VectorMath
 			return 0;
 		}
 
+		public static Int3 operator /(Int3 u, int v)
+		{
+			return new Int3(u.X / v, u.Y / v, u.Z / v);
+		}
+		public static Int3 operator %(Int3 u, int v)
+		{
+			return new Int3(u.X % v, u.Y % v, u.Z % v);
+		}
+
+		public static Int3 operator*(Int3 u, int v)
+		{
+			return new Int3(u.X * v, u.Y * v, u.Z * v);
+		}
+		public static Int3 operator *(int v, Int3 u)
+		{
+			return new Int3(u.X * v, u.Y * v, u.Z * v);
+		}
 
 		public static Int3 operator +(Int3 u, Int3 v)
 		{
@@ -323,6 +341,45 @@ namespace VectorMath
 			}
 		}
 
+		public int Product { get { return X * Y * Z; } }
+
+		public Int2 YZ
+		{
+			get
+			{
+				return new Int2(Y, Z);
+			}
+			set
+			{
+				Y = value.X;
+				Z = value.Y;
+			}
+		}
+		public Int2 XZ
+		{
+			get
+			{
+				return new Int2(X, Z);
+			}
+			set
+			{
+				X = value.X;
+				Z = value.Y;
+			}
+		}
+		public Int2 XY
+		{
+			get
+			{
+				return new Int2(X, Y);
+			}
+			set
+			{
+				X = value.X;
+				Y = value.Y;
+			}
+		}
+
 		public override string ToString()
 		{
 			return "(" + Convert.ToString(X) + ", " + Convert.ToString(Y) + ", " + Convert.ToString(Z) + ")";
@@ -357,7 +414,7 @@ namespace VectorMath
 					case 2:
 						return Z;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Vec3[]");
+				throw new IndexOutOfRangeException("Unexpected index for Bool3[]: " + key);
 			}
 		}
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using VectorMath;
 
 namespace Shard
 {
@@ -7,10 +8,13 @@ namespace Shard
 		private BitCube data;
 
 
+		public InconsistencyCoverage(Int3 size)
+		{
+			data = new BitCube(size);
+		}
 
 
-
-		public InconsistencyCoverage(Serial iC)
+		public InconsistencyCoverage(Serial serial)
 		{
 			
 		}

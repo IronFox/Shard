@@ -337,7 +337,10 @@ namespace Shard
 						{
 							var rcs = sds.OutboundRCS[lnk.LinearIndex];
 							if (rcs != null)
-								lnk.Set(lnk.OutboundRCS(rcs.Generation).P2PKey, rcs.Export());
+							{
+								var id = lnk.OutboundRCS(rcs.Generation);
+								lnk.Set(id.ToString(), rcs.Export(id.ID));
+							}
 						}
 					}
 				}

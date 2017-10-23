@@ -63,7 +63,6 @@ namespace Shard
 		{
 			public Task<T> Task { get; private set; }
 			private Thread pollThread;
-			private Func<T, bool> validator;
 			private MyCouchStore store;
 			private string id;
 
@@ -71,13 +70,12 @@ namespace Shard
 			{
 			}
 
-			public Task<T> Start(MyCouchStore store, string id, Func<T,bool> validator)
+			public Task<T> Start(MyCouchStore store, string id)
 			{
-				this.validator = validator;
 				this.store = store;
 				this.id = id;
 				Task = store.GetByIdAsync<T>(id);
-				if (Task.IsCompleted && validator(Task.Result))
+				if (Task.IsCompleted)
 					return Task;
 
 				pollThread = new Thread(new ThreadStart(ThreadedPoll));
@@ -90,9 +88,8 @@ namespace Shard
 				{
 					try
 					{
-						if (validator(Task.Result))	//force wait
+						if (Task.Result != null)
 							return;
-						Task = store.GetByIdAsync<T>(id);
 					}
 					catch (Exception ex)
 					{
@@ -106,8 +103,6 @@ namespace Shard
 			public T TryGet()
 			{
 				if (Task == null || !Task.IsCompleted)
-					return null;
-				if (!validator(Task.Result))
 					return null;
 				return Task.Result;
 			}
@@ -166,7 +161,7 @@ namespace Shard
 			ContinuousPoller<RCS.Serial> poller = new ContinuousPoller<RCS.Serial>();
 			if (!rcsRequests.TryAdd(id, poller))
 				return;
-			poller.Start(rcsStore, id.Key, rcs => rcs.Generation == id.Generation);
+			poller.Start(rcsStore, id.ToString());
 		}
 
 		public static RCS.Serial TryGet(RCS.GenID id)
@@ -186,7 +181,7 @@ namespace Shard
 			ContinuousPoller<MyLogic.Serial> poller = new ContinuousPoller<MyLogic.Serial>();
 			if (!logicRequests.TryAdd(id, poller))
 				return;
-			poller.Start(rcsStore, id, rcs => true);
+			poller.Start(rcsStore, id);
 		}
 
 		public static EntityLogic TryGetLogic(string id)

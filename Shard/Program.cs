@@ -20,24 +20,19 @@ namespace Shard
 				return;
 			}
 
-			Simulation sim;
-			DB db;
 			{
 				int at = 0;
 				var dbHost = new Host(args[at++]);
-				db = new DB(dbHost);
+				DB.Start(dbHost);
 				ShardID addr = ShardID.Decode(args[at++]);
 
-				if ((addr >= db.Config.extent).Any)
-					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + db.Config.extent);
+				if ((addr >= DB.Config.extent).Any)
+					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + DB.Config.extent);
 				if ((addr < ShardID.Zero).Any)
 					throw new ArgumentOutOfRangeException("addr", addr, "Is (partially) negative");
 
-
-				sim = new Simulation(addr, db);
+				Simulation.Init(addr);
 			}
-
-			sim.Run();
 
 		}
 	}
