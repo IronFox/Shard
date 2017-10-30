@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace Shard
 {
-	internal class Outbound
+	internal class Outbound : IDisposable
 	{
 		private ConcurrentQueue<Tuple<string, object>> dispatch = new ConcurrentQueue<Tuple<string, object>>()
 									, sent = new ConcurrentQueue<Tuple<string, object>>();
@@ -90,10 +90,16 @@ namespace Shard
 			return removed;
 		}
 
+		public void Dispose()
+		{
+			dispatch = null;
+			sent = null;
+			sem.Dispose();
+		}
 	}
 
 
-	public class Link
+	public sealed class Link : IDisposable
 	{
 
 		private Outbound outbound = new Outbound();
@@ -109,11 +115,14 @@ namespace Shard
 
 
 		public readonly bool IsActive;
-		public Link(ShardID addr, bool isActive, int linearIndex, bool isSibling)
+		public Link(ShardID remoteAddr, bool isActive, int linearIndex, bool isSibling) : this(new Host(remoteAddr),isActive,linearIndex,isSibling)
+		{}
+
+		public Link(Host remoteHost, bool isActive, int linearIndex, bool isSibling)
 		{
 			IsSibling = isSibling;
 			LinearIndex = linearIndex;
-			host = new Host(addr);
+			host  = remoteHost;
 			IsActive = isActive;
 			if (isActive)
 				StartConnectionThread();
@@ -143,11 +152,13 @@ namespace Shard
 			return new RCS.GenID(Simulation.ID.XYZ, ID.XYZ, generation);
 		}
 
+		private bool dispose = false;
+
 		private void Connect()
 		{
 			CloseThread(ref readThread);
 
-			while (true)
+			while (!dispose)
 			{
 				try
 				{
@@ -331,6 +342,48 @@ namespace Shard
 				}
 				writeOut.Release();
 			}
+		}
+
+		public void Dispose()
+		{
+			GC.SuppressFinalize(this);
+
+			try
+			{
+				dispose = true;
+				if (connectThread != null)
+					connectThread.Join();
+			}
+			catch { }
+
+			try
+			{
+				if (client != null)
+					client.Close();
+			}
+			catch { }
+			try
+			{
+				writeLock.Release(1000);
+			}
+			catch { }
+			try
+			{
+				if (connectThread != null)
+					connectThread.Join();
+			}
+			catch { }
+			try
+			{
+				if (writeThread != null)
+					writeThread.Join();
+			}
+			catch { }
+			client.Dispose();
+			stream.Dispose();
+			writeOut.Dispose();
+			writeLock.Dispose();
+			outbound.Dispose();
 		}
 	}
 }

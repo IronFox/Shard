@@ -152,7 +152,7 @@ namespace VectorMath
 					case 3:
 						return W;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Bool4[]");
+				throw new ArgumentOutOfRangeException("Unexpected index for Bool4[]");
 			}
 		}
 

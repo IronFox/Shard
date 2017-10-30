@@ -32,7 +32,7 @@ namespace VectorMath
                     case 2:
                         return Z;
                 }
-                throw new IndexOutOfRangeException("Unexpected index for Vec3[]");
+                throw new ArgumentOutOfRangeException("Unexpected index for Vec3[]");
             }
         }
 
@@ -176,7 +176,7 @@ namespace VectorMath
 					case 2:
 						return Z;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Int3[]: " + key);
+				throw new ArgumentOutOfRangeException("Unexpected index for Int3[]: " + key);
 			}
 			set
 			{
@@ -192,7 +192,7 @@ namespace VectorMath
 						Z = value;
 						break;
 					default:
-						throw new IndexOutOfRangeException("Unexpected index for Int3[]: " + key);
+						throw new ArgumentOutOfRangeException("Unexpected index for Int3[]: " + key);
 				}
 			}
 		}
@@ -414,7 +414,7 @@ namespace VectorMath
 					case 2:
 						return Z;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Bool3[]: " + key);
+				throw new ArgumentOutOfRangeException("Unexpected index for Bool3[]: " + key);
 			}
 		}
 

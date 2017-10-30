@@ -24,11 +24,28 @@ namespace Shard
 
 		public class Serial
 		{
+			public byte[] Data { get; set; }
+
+			public Serial(BitCube cube)
+			{
+				Data = cube.ToByteArray();
+			}
+
+			public BitCube Export()
+			{
+				return new BitCube(Data);
+			}
+
 		}
 
-		internal Serial Export()
+		public Serial Export()
 		{
 			throw new NotImplementedException();
+		}
+
+		public void VerifyIntegrity()
+		{
+			//nothing for now
 		}
 	}
 }

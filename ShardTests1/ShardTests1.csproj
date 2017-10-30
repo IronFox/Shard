@@ -57,6 +57,8 @@
   </Choose>
   <ItemGroup>
     <Compile Include="BitCubeTests.cs" />
+    <Compile Include="ByteBufferTests.cs" />
+    <Compile Include="LinkTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

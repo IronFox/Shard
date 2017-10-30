@@ -134,7 +134,7 @@ namespace VectorMath
 					case 1:
 						return Y;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Int2[]: " + key);
+				throw new ArgumentOutOfRangeException("Unexpected index for Int2[]: " + key);
 			}
 			set
 			{
@@ -147,7 +147,7 @@ namespace VectorMath
 						Y = value;
 						break;
 					default:
-						throw new IndexOutOfRangeException("Unexpected index for Int2[]: "+key);
+						throw new ArgumentOutOfRangeException("Unexpected index for Int2[]: "+key);
 				}
 			}
 		}
@@ -312,7 +312,7 @@ namespace VectorMath
 					case 1:
 						return Y;
 				}
-				throw new IndexOutOfRangeException("Unexpected index for Bool2[]: " + key);
+				throw new ArgumentOutOfRangeException("Unexpected index for Bool2[]: " + key);
 			}
 		}
 

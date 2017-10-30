@@ -75,7 +75,7 @@ namespace VectorMath
                     case 1:
                         return y;
                 }
-                throw new Exception("Unexpected index for Rect[]");
+                throw new ArgumentOutOfRangeException("Unexpected index for Rect[]");
             }
             set
             {
@@ -88,7 +88,7 @@ namespace VectorMath
                         y = value;
                         break;
                     default:
-                        throw new Exception("Unexpected index for Rect[]");
+                        throw new ArgumentOutOfRangeException("Unexpected index for Rect[]");
                 }
             }
         }
@@ -160,7 +160,7 @@ namespace VectorMath
                     case 2:
                         return z;
                 }
-                throw new Exception("Unexpected index for Box[]");
+                throw new ArgumentOutOfRangeException("Unexpected index for Box[]");
             }
             set
             {
@@ -176,7 +176,7 @@ namespace VectorMath
                         z = value;
                         break;
                     default:
-                        throw new Exception("Unexpected index for Box[]");
+                        throw new ArgumentOutOfRangeException("Unexpected index for Box[]");
                 }
             }
         }

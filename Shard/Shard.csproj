@@ -127,6 +127,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BitCube.cs" />
+    <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
     <Compile Include="Entity.cs" />
     <Compile Include="InconsistencyCoverage.cs" />

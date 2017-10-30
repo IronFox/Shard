@@ -129,9 +129,134 @@ namespace Shard
 
 		public class Computation
 		{
+			private SDS output;
 			public Computation(int generation)
 			{
-				throw new NotImplementedException();
+				SDS input = Simulation.FindGeneration(generation - 1);
+				output = new SDS(generation);
+				input.IC.VerifyIntegrity();
+
+	//			input->ic.VerifyIntegrity(CLOCATION);
+	//			Hasher inputHash;
+	//			inputHash.AppendPOD(input->IsFullyConsistent());
+	//			input->Hash(inputHash);
+	//			//foreach (userMessages,msg)
+	//			//{
+	//			//	msg->target.Hash(inputHash);
+	//			//	inputHash.AppendPOD(msg->targetProcess);
+	//			//	inputHash.Append(msg->message);
+	//			//}
+
+	//			Hasher::HashContainer c;
+	//			inputHash.Finish(c);
+	//			ASSERT__(!rs.GetOutput() || !rs.GetOutput()->IsFullyConsistent());
+
+	//			rs.InitGeneration(generation + 1, currentTimestep, true, CLOCATION, caller);
+	//			ASSERT__(!rs.GetOutput()->ic.IsSealed());
+	//			if (c == rs.inputHash)
+	//			{
+	//				rs.GetOutput()->entities = rs.processed;
+	//				//	if (!rs.outputConsistent)
+	//				{
+	//					InconsistencyCoverage ic;
+	//					input->ic.Grow(ic);
+	//					rs.GetOutput()->ic.CopyCoreArea(TGridCoords(), ic);
+	//				}
+	//				return;
+	//			}
+	//			if (consistentSuccessorMatch && input->IsFullyConsistent())
+	//				ASSERT__(c == consistentSuccessorMatch->inputHash);
+	//			rs.inputHash = c;
+	//			rs.processed = input->entities;
+
+
+	//			foreach (userMessages,msg)
+	//{
+	//				Entity* e = rs.processed.FindEntity(msg->target.guid);
+	//				if (!e)
+	//					LogUnexpected("User Message: Unable to find target entity", msg->target);
+	//				else
+	//				{
+	//					auto ws = e->FindLogic(msg->targetProcess);
+	//					if (!ws)
+	//						LogUnexpected("User Message: Unable to find target logic process", msg->target);
+	//					else
+	//						ws->receiver.Append().data = msg->message;
+	//				}
+	//			}
+
+	//			InconsistencyCoverage ic;
+	//			input->ic.Grow(ic);
+	//			rs.GetOutput()->ic.CopyCoreArea(TGridCoords(), ic);
+
+	//			rs.GetOutput()->ic.VerifyIntegrity(CLOCATION);
+
+	//			rs.localCS.Clear();
+	//			rs.ExecuteLogic(rs.localCS, rs.GetGeneration(), shard.gridCoords, motionSpace);
+	//			if (consistentSuccessorMatch && input->IsFullyConsistent())
+	//			{
+	//				rs.localCS.AssertEqual(consistentSuccessorMatch->localCS);
+	//			}
+
+	//			for (int i = 0; i < NumNeighbors; i++)
+	//			{
+	//				const TGridCoords&delta = shard.neighbors[i].delta;
+	//				if (!motionSpace.Contains(shard.gridCoords + delta))
+	//				{
+	//					ASSERT__(shard.neighbors[i].shard == nullptr);
+	//					const index_t inbound = shard.neighbors[i].inboundIndex;
+	//					auto &in = rs.inboundRCS[inbound];
+	//		in = edgeInboundRCS;
+	//		in->VerifyIntegrity(CLOCATION);
+	//				}
+	//				else
+	//					ASSERT__(shard.neighbors[i].shard != nullptr);
+	//				OutRemoteChangeSet & rcs = rs.outboundRCS[i];
+	//				if (rcs.ref && rcs.ref->ic.IsFullyConsistent())
+	//	{
+	//				//no changes since already consistent
+
+
+	//				rcs.ref->VerifyIntegrity(CLOCATION);
+
+	//				if (consistentSuccessorMatch)
+	//					rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
+	//				continue;
+	//			}
+	//			ASSERT__(rcs.ref != edgeInboundRCS);
+	//			rcs.ref.reset(new RCS(caller));
+	//			rcs.ref->ic.CopyCoreArea(-delta, ic);
+	//			rs.localCS.ExportEdge(delta, shard.gridCoords, rcs.ref->cs);
+	//			input->hGrid.core.ExportEdge(rcs.ref->hGrid, delta);
+	//			rcs.confirmed = shard.neighbors[i].shard == nullptr;
+	//			ASSERT_EQUAL__(rcs.confirmed, !motionSpace.Contains(shard.gridCoords + delta));
+
+
+	//			if (consistentSuccessorMatch && rcs.ref->ic.IsFullyConsistent())
+	//		rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
+
+
+	//			if (rcs.ref->ic.IsFullyConsistent() && shard.neighbors[i].shard)
+	//	{
+	//				const auto id = DB::ID(&shard, shard.neighbors[i].shard, rs.GetGeneration());
+	//				shard.client.Upload(id, rcs.ref);
+	//			}
+
+	//			rcs.ref->VerifyIntegrity(CLOCATION);
+
+
+	//			if (input->IsFullyConsistent())
+	//				ASSERT__(rcs.ref->ic.IsFullyConsistent());
+
+	//		}
+
+
+
+
+
+
+
+	//			throw new NotImplementedException();
 			}
 
 			public SDS Complete()

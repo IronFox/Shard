@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using VectorMath;
 
+
 namespace Shard.Tests
 {
 	[TestClass()]
@@ -15,6 +16,7 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void BitCubeTest()
 		{
+
 			BitCube cube = new BitCube(new Int3(2));
 			Assert.AreEqual(cube.OneCount, 0);
 			Assert.AreEqual(cube.Size, new Int3(2));
@@ -55,6 +57,11 @@ namespace Shard.Tests
 		{
 			Int3 size = new Int3(random.Next(1, 64), random.Next(1, 64), random.Next(1, 64));
 			return new BitCube(size);
+		}
+		private static BitCube MakeRandomCube(Random random)
+		{
+			int set;
+			return MakeRandomCube(random, out set);
 		}
 		private static BitCube MakeRandomCube(Random random, out int numSet)
 		{
@@ -161,7 +168,7 @@ namespace Shard.Tests
 			{
 				int set;
 				var cube = MakeRandomCube(random, out set);
-				if (cube.OneCount != cube.Size.Product) ;
+				//if (cube.OneCount != cube.Size.Product) ;
 				numNonOne++;
 				cube.SetAllOne();
 				Assert.AreEqual(cube.OneCount, cube.Size.Product);
@@ -205,7 +212,7 @@ namespace Shard.Tests
 
 			int expectNewOnes = ones
 								+ slice * 2;
-			Assert.AreEqual(expectNewOnes, newOnes, "old=" + ones + ", " + half+" in "+cube.Size+" at "+offset+" => "+truncated.Size);
+			Assert.AreEqual(expectNewOnes, newOnes, "old=" + ones + ", " + half + " in " + cube.Size + " at " + offset + " => " + truncated.Size);
 
 			Foreach(cube.Size, (p)
 			 =>
@@ -214,8 +221,8 @@ namespace Shard.Tests
 					if (input)
 					{
 						Assert.IsTrue(truncated[p]);
-						Assert.IsTrue(expanded[p+offset]);
-						Assert.IsTrue(expanded[p + offset+offset]);
+						Assert.IsTrue(expanded[p + offset]);
+						Assert.IsTrue(expanded[p + offset + offset]);
 						Assert.IsTrue(expanded[p]);
 					}
 				}
@@ -240,7 +247,7 @@ namespace Shard.Tests
 			Random random = new Random();
 
 			{
-				BitCube cube = new BitCube( new Int3(4) );  //make sure divisible by 2
+				BitCube cube = new BitCube(new Int3(4));  //make sure divisible by 2
 				GrowAxisTest(cube, 2);
 			}
 
@@ -252,6 +259,19 @@ namespace Shard.Tests
 					BitCube cube = new BitCube(RandomInt3(random, new Int3(1), new Int3(16)) * 4);  //make sure divisible by 4
 					GrowAxisTest(cube, a);
 				}
+		}
+
+		[TestMethod()]
+		public void ToByteArrayTest()
+		{
+			Random random = new Random();
+
+			for (int i = 0; i < 100; i++)
+			{
+				BitCube cube = MakeRandomCube(random);
+				BitCube decoded = new BitCube(cube.ToByteArray());
+				Assert.IsTrue(cube == decoded);
+			}
 		}
 	}
 }

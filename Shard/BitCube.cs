@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using VectorMath;
 
 namespace Shard
@@ -24,20 +25,82 @@ namespace Shard
 			}
 		}
 
+		private Int3 GridSize
+		{
+			get
+			{
+				return new Int3(size.X, size.Y, (size.Z + BitsPerEntry - 1) / BitsPerEntry);
+			}
+		}
+
+		private IEnumerable<uint> Flat
+		{
+			get
+			{
+				for (int i = 0; i < grid.GetLength(0); i++)
+					for (int j = 0; j < grid.GetLength(1); j++)
+						for (int k = 0; k < grid.GetLength(2); k++)
+							yield return grid[i, j, k];
+			}
+		}
+
 		private void UpdateSize(Int3 newSize)
 		{
 			size = newSize;
-			grid = new uint[size.X, size.Y, (size.Z + BitsPerEntry-1) / BitsPerEntry];
-			SetAllZero();
+			Int3 gridSize = GridSize;
+			grid = new uint[gridSize.X, gridSize.Y, gridSize.Z];
+			//SetAllZero();	//should be all zero in C# anyways
+			allZero = true;
+			rangeUnknown = false;
 		}
 
+
+		public BitCube() { }
 		public BitCube(Int3 size)
 		{
 			UpdateSize(size);
 		}
 
-		public BitCube()
+		public static bool operator==(BitCube a, BitCube b)
 		{
+			return a.size == b.size && 
+				((a.grid == null && b.grid == null)
+				||
+				System.Linq.Enumerable.SequenceEqual(a.Flat, b.Flat));
+		}
+		public static bool operator !=(BitCube a, BitCube b)
+		{
+			return !(a == b);
+		}
+
+		public override bool Equals(object obj)
+		{
+			return obj is BitCube && ((BitCube)obj == this);
+		}
+
+		public override int GetHashCode()
+		{
+			return size.GetHashCode() * 17 + (grid != null ? grid.GetHashCode() : 0);
+		}
+
+		public byte[] ToByteArray()
+		{
+			ByteBuffer stream = new ByteBuffer();
+			stream.Add(size);
+			stream.Add(grid);
+			return stream.ToArray();
+		}
+
+		public BitCube(byte[] data)
+		{
+			Int3 size;
+			size.X = BitConverter.ToInt32(data, 0);
+			size.Y = BitConverter.ToInt32(data, 4);
+			size.Z = BitConverter.ToInt32(data, 8);
+			UpdateSize(size);
+			if (GridSize.Product * 4 != (data.Length - 12))
+				throw new ArgumentOutOfRangeException("Got extra "+ (data.Length - 12)+" byte(s), but needed "+GridSize+"*4 = "+GridSize.Product*4);
+			Buffer.BlockCopy(data, 12, grid, 0, data.Length - 12);
 		}
 
 		private bool allZero = true;
