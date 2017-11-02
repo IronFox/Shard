@@ -7,7 +7,8 @@ namespace Shard
 		public readonly string URL;
 		public readonly int Port;
 
-		public readonly static int DefaultPort = 16234;
+		//public readonly static int DefaultPort = 16235;
+		public static int DefaultPort { get; set; } = 16235;
 		public static string Domain { get; set; } = null;
 		public static bool HaveDomain { get { return Domain != null && Domain.Length > 0; } }
 
@@ -25,7 +26,8 @@ namespace Shard
 		{
 			get
 			{
-				Debug.Assert(URL.StartsWith(Prefix));
+				if (!URL.StartsWith(Prefix))
+					return new ShardID();
 				if (HaveDomain)
 					Debug.Assert(URL.EndsWith(Domain));
 				string sid = URL.Substring(Prefix.Length);

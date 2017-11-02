@@ -14,23 +14,29 @@ namespace Shard
 	{
 		private ConcurrentQueue<Tuple<string, object>> dispatch = new ConcurrentQueue<Tuple<string, object>>()
 									, sent = new ConcurrentQueue<Tuple<string, object>>();
-		private Semaphore sem = new Semaphore(0, 1000);
 
-		public void SignalConnectionRestart()
+		private const int MaxDispatch = 1000;
+		private Semaphore sem = new Semaphore(0, MaxDispatch);
+		private bool disposed = false;
+
+		public Outbound Destroy()
 		{
+			Outbound rs = new Outbound();
 			Tuple<string,object> item;
-			int cnt = 0;
+			while (dispatch.TryDequeue(out item))
+				rs.Set(item.Item1, item.Item2);
 			while (sent.TryDequeue(out item))
-			{
-				dispatch.Enqueue(item);
-				cnt++;
-			}
-			sem.Release(cnt > 0 ? cnt : 1);
+				rs.Set(item.Item1, item.Item2);
+
+			Dispose();
+			return rs;
 		}
 
 
 		public object GetNext()
 		{
+			if (disposed)
+				return null;
 			sem.WaitOne();
 			Tuple<string,object> rs = null;
 			if (dispatch.TryDequeue(out rs))
@@ -43,12 +49,21 @@ namespace Shard
 
 		public void Set(string key, object item)
 		{
+			if (disposed)
+				throw new ObjectDisposedException("Outbound");
 			Filter((k, obj) => k != key);
 			dispatch.Enqueue(new Tuple<string,object>(key,item));
 			sem.Release();
 		}
 
 		SpinLock filterLock = new SpinLock();
+
+		public bool IsDisposed { get { return disposed; } }
+
+		public int ItemCount { get { return sent.Count + dispatch.Count; } }
+
+		public int SentCount { get { return sent.Count; } }
+
 		public int Filter(Func<string,object,bool> filter)
 		{
 			bool isIn = false;
@@ -92,8 +107,15 @@ namespace Shard
 
 		public void Dispose()
 		{
-			dispatch = null;
+			disposed = true;
+			Filter((k, o) => false);
 			sent = null;
+			try
+			{
+				sem.Release(MaxDispatch);
+			}
+			catch
+			{ }
 			sem.Dispose();
 		}
 	}
@@ -113,6 +135,8 @@ namespace Shard
 		public readonly int LinearIndex;
 		public readonly bool IsSibling;
 
+		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
+
 
 		public readonly bool IsActive;
 		public Link(ShardID remoteAddr, bool isActive, int linearIndex, bool isSibling) : this(new Host(remoteAddr),isActive,linearIndex,isSibling)
@@ -130,13 +154,14 @@ namespace Shard
 			writeThread = new Thread(new ThreadStart(WriteMain));
 			writeThread.Start();
 
-			Console.WriteLine(Name + ": Created");
+			Log.Message(Name + ": Created");
 		}
 		private void StartConnectionThread()
 		{
+			onComm.Reset();
 			if (connectThread != null)
 				connectThread.Join();
-			if (client.Connected)
+			if (ConnectionIsActive)
 				return;
 			connectThread = new Thread(new ThreadStart(Connect));
 			connectThread.Start();
@@ -173,39 +198,41 @@ namespace Shard
 			StartCommunication();
 		}
 
-		public void SetPassiveClient(TcpClient client)
+		public void SetPassiveClient(TcpClient newClient)
 		{
+			if (dispose)
+				return;
 			Debug.Assert(!IsActive);
 
 			try
 			{
-				if (client != null)
+				if (this.stream != null)
 				{
-					stream.Close();
-					client.Close();
+					this.stream.Close();
+					this.stream = null;
 				}
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine(ex);
+				Log.Error(ex);
 			}
-
-			CloseThread(ref connectThread);
-
 			try
 			{
-				if (client != null && client.Connected)
-					client.Close();
+				if (this.client != null)
+				{
+					this.client.Close();
+					//this.client = null;
+				}
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine(ex);
+				Log.Error(ex);
 			}
 
+			CloseThread(ref connectThread);
 			CloseThread(ref readThread);
 
-			this.client = client;
-			stream = client.GetStream();
+			this.client = newClient;
 			StartCommunication();
 		}
 
@@ -220,23 +247,30 @@ namespace Shard
 				}
 				catch (Exception ex)
 				{
-					Console.Error.WriteLine(ex);
+					Log.Error(ex);
 				}
 				thread = null;
 			}
 		}
 
-		private Semaphore writeLock = new Semaphore(0,1);
-		private Semaphore writeOut = new Semaphore(1, 1);
+		private ManualResetEvent onComm = new ManualResetEvent(false);
+
+		private EventWaitHandle writerIsWaiting = new AutoResetEvent(false),
+								writerShouldStart = new AutoResetEvent(false);
+
 
 		private void StartCommunication()
 		{
+			stream = client.GetStream();
 			readThread = new Thread(new ThreadStart(ReadMain));
 			readThread.Start();
-			outbound.SignalConnectionRestart();
-			writeOut.WaitOne();
-			writeLock.Release();
-			Console.WriteLine(Name+ ": Connected to "+host);
+			var newOutbound = outbound.Destroy();
+			//Log.Message(Name + ": Connecting to " + host);
+			writerIsWaiting.WaitOne();
+			outbound = newOutbound;
+			writerShouldStart.Set();
+			Log.Message(Name+ ": Connected to "+host);
+			onComm.Set();
 		}
 
 		public string Name
@@ -247,8 +281,29 @@ namespace Shard
 			}
 		}
 
-		public bool IsResponsive { get; internal set; }
+		public override string ToString()
+		{
+			return Name;
+		}
+
+		public bool IsResponsive { get { return ConnectionIsActive; } }
 		public int OldestGeneration { get; internal set; }
+		public bool ConnectionIsActive
+		{
+			get
+			{
+				try
+				{
+					return client != null && client.Client != null && client.Connected;
+				}
+				catch
+				{
+					return false;
+				}
+			}
+		}
+
+		public int OutboundItemCount { get { return outbound.ItemCount; } }
 
 		private void Read(byte[] data, int bytes)
 		{
@@ -263,7 +318,18 @@ namespace Shard
 				remaining -= read;
 			}
 		}
-
+		private void Read(byte[] buffer, Stream outData, int bytes)
+		{
+			int remaining = bytes;
+			while (remaining > 0)
+			{
+				int read = stream.Read(buffer, 0, Math.Min(remaining,buffer.Length));
+				if (read <= 0)
+					throw new Exception("stream.Read() returned " + read);
+				remaining -= read;
+				outData.Write(buffer, 0, read);
+			}
+		}
 		private static byte[] skipBuffer = new byte[0x1000];
 		private void Skip(int bytes)
 		{
@@ -278,28 +344,43 @@ namespace Shard
 		private void ReadMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();
-
+			byte[] frame = new byte[4];
+			byte[] buffer = new byte[client.ReceiveBufferSize];
 			//outer loop
 			try
 			{
 				//communication loop
-				while (client.Connected)
+				while (ConnectionIsActive)
 				{
-					object obj = formatter.Deserialize(stream);
-					Simulation.FetchIncoming(this,obj);
-
+					Read(frame, 4);
+					int size = BitConverter.ToInt32(frame,0);
+					//Log.Debug(this + ": ReadMain() read frame of size "+size);
+					using (var ms = new MemoryStream())
+					{
+						Read(buffer,ms, size);
+						//Log.Debug(this + ": ReadMain() deserializing");
+						ms.Seek(0, SeekOrigin.Begin);
+						object obj = formatter.Deserialize(ms);
+						//Log.Debug(this + ": ReadMain() dispatching " +obj);
+						OnData(this, obj);
+					}
 				}
 			}
 			catch (Exception ex)
 			{
-				Console.Error.WriteLine(ex);
+				Log.Error(ex);
 				client.Close();
-				if (IsActive)
-					StartConnectionThread();
-				return;
 			}
+			onComm.Reset();
+			//Log.Debug(this + ": ReadMain() exit");
+			if (IsActive)
+				StartConnectionThread();
 		}
 
+		public void ClearOutData()
+		{
+			Filter((key, obj) => false);
+		}
 
 		public void Set(string id, object obj)
 		{
@@ -310,47 +391,89 @@ namespace Shard
 			return outbound.Filter(filter);
 		}
 
+
+		public int SentSinceLastReconnect { get; private set; } = 0;
+		public int OutboundSentCount { get { return outbound.SentCount; } }
+
+		public bool VerboseWriter { get; set; } = false;
+
 		private void WriteMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();
 
+			byte[] frame = new byte[4];
+
 			//outer loop
-			while (true)
+			while (!dispose)
 			{
-				writeLock.WaitOne();
+				LogDebugW(this + ": WriteMain() waiting for connection");
+				WaitHandle.SignalAndWait(writerIsWaiting, writerShouldStart);
+				LogDebugW(this + ": WriteMain() begin");
+
+				SentSinceLastReconnect = 0;
 				while (true)
 				{
 					try
 					{
-						if (client != null && client.Connected)
+						if (ConnectionIsActive)
 						{
 							//communication loop
+							//Log.Debug(this + ": WriteMain() waiting for next object");
 							object send = outbound.GetNext();
 							if (send == null)
-								continue;
-							formatter.Serialize(stream, send);
+								if (outbound.IsDisposed)
+								{
+									LogDebugW(this + ": WriteMain() interrupt (" + SentSinceLastReconnect + "). Outbound is disposed");
+									break;
+								}
+								else
+									continue;
+							using (var ms = new MemoryStream())
+							{
+								//Log.Debug(this + ": WriteMain() sending "+send);
+
+								formatter.Serialize(ms, send);
+								ByteBuffer.Put(frame, 0, (int)ms.Length);
+								stream.Write(frame, 0, frame.Length);
+								ms.Seek(0, SeekOrigin.Begin);
+								ms.CopyTo(stream);
+								SentSinceLastReconnect++;
+
+								//Log.Debug(this + ": WriteMain() "+ms.Length+" byte(s) sent");
+							}
 						}
 						else
+						{
+							LogDebugW(this + ": WriteMain() interrupt (" + SentSinceLastReconnect + "). Connection died");
 							break;
+						}
 					}
 					catch (Exception ex)
 					{
-						Console.Error.WriteLine(ex);
+						LogDebugW(this + ": WriteMain() exception (" + SentSinceLastReconnect + ")");
+						Log.Error(ex);
 						client.Close();
 						break;
 					}
 				}
-				writeOut.Release();
+				//Log.Debug(this + ": WriteMain() restart");
 			}
+		}
+
+
+		private void LogDebugW(string msg)
+		{
+			if (VerboseWriter)
+				Log.Debug(msg);
 		}
 
 		public void Dispose()
 		{
 			GC.SuppressFinalize(this);
+			dispose = true;
 
 			try
 			{
-				dispose = true;
 				if (connectThread != null)
 					connectThread.Join();
 			}
@@ -364,13 +487,8 @@ namespace Shard
 			catch { }
 			try
 			{
-				writeLock.Release(1000);
-			}
-			catch { }
-			try
-			{
-				if (connectThread != null)
-					connectThread.Join();
+				outbound.Dispose();
+				writerShouldStart.Set();
 			}
 			catch { }
 			try
@@ -379,11 +497,18 @@ namespace Shard
 					writeThread.Join();
 			}
 			catch { }
+
 			client.Dispose();
 			stream.Dispose();
-			writeOut.Dispose();
-			writeLock.Dispose();
-			outbound.Dispose();
+			writerShouldStart.Dispose();
+			writerIsWaiting.Dispose();
+		}
+
+		public void AwaitConnection()
+		{
+			onComm.WaitOne();
+			//WaitHandle.WaitAny(new WaitHandle[]{ onComm});
+
 		}
 	}
 }

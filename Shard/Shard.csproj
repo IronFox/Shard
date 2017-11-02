@@ -132,6 +132,7 @@
     <Compile Include="Entity.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
     <Compile Include="IntArray.cs" />
+    <Compile Include="Log.cs" />
     <Compile Include="RCS.cs" />
     <Compile Include="SDS.cs" />
     <Compile Include="ShardID.cs" />

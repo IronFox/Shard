@@ -194,7 +194,7 @@ namespace Shard
 
 			AdvertiseOldestGeneration(0);
 
-			listener = new Listener();
+			listener = new Listener(h => Simulation.FindLink(h.ID));
 
 			Console.Write("Polling SDS state...");
 			Console.Out.Flush();

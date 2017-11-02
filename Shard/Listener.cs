@@ -6,17 +6,25 @@ using System.Threading;
 
 namespace Shard
 {
-	internal class Listener
+	public class Listener : IDisposable
 	{
 		private readonly TcpListener server;
 		private readonly Thread listenerThread;
+		private readonly Func<Host, Link> linkLookup;
 
-		public Listener()
+		public Listener(Func<Host, Link> linkLookup)
 		{
+			this.linkLookup = linkLookup;
 			server = new TcpListener(IPAddress.Any, new Host(Simulation.ID).Port);
 			server.Start();
 			listenerThread = new Thread(new ThreadStart(Listen));
 			listenerThread.Start();
+		}
+
+		public void Dispose()
+		{
+			server.Stop();
+			listenerThread.Join();
 		}
 
 		private void Listen()
@@ -25,13 +33,14 @@ namespace Shard
 			{
 				while (true)
 				{
-					Console.WriteLine("Waiting for a connection... ");
+					Console.WriteLine("Listener: Waiting for next connection... ");
 					TcpClient client = server.AcceptTcpClient();
 					try
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
 						Host host = new Host(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
-						Link link = Simulation.FindLink(host.ID);
+						Link link = linkLookup(host);
+							//Simulation.FindLink(host.ID);
 						link.SetPassiveClient(client);
 					}
 					catch (Exception ex)
