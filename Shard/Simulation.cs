@@ -12,8 +12,8 @@ namespace Shard
 	{
 		public static ShardID ID { get; private set; }
 		private static ShardID ext;
-		private static float r;
-		private static float m;
+		public static float R { get; private set; }
+		public static float M { get; private set; }
 
 		private static List<Link> neighbors = new List<Link>();
 		private static Link[] siblings;
@@ -159,8 +159,8 @@ namespace Shard
 
 			ID = addr;
 			ext = DB.Config.extent;
-			r = DB.Config.r;
-			m = DB.Config.m;
+			R = DB.Config.r;
+			M = DB.Config.m;
 
 
 			if (ext.ReplicaLevel > 1)
@@ -297,6 +297,20 @@ namespace Shard
 				else
 					Clock.Sleep(Clock.Milliseconds(msRemainingInSubStep));
 			}
+		}
+
+		internal static bool Owns(Vec3 position)
+		{
+			throw new NotImplementedException();
+		}
+
+		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
+		{
+			throw new NotImplementedException();
+		}
+		internal static bool CheckDistance(string task, Vec3 referencePosition, Vec3 targetPosition, float maxDistance)
+		{
+			throw new NotImplementedException();
 		}
 
 		internal static void FetchIncoming(Link lnk, object obj)

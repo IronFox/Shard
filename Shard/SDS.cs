@@ -1,27 +1,12 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
 using VectorMath;
 
 namespace Shard
 {
-	public struct EntityAppearance
-	{
-		public readonly Vec3 Position;
-
-	}
-
-
-	public abstract class EntityLogic
-	{
-		public abstract class State
-		{
-			public abstract State Evolve(EntityAppearance oldState, out EntityAppearance newState);
-			public abstract byte[] BinaryState { get; }
-		}
-
-		public abstract State Instantiate(byte[] binaryState);
-	}
-	
 
 	public class SDS
 	{
@@ -78,11 +63,19 @@ namespace Shard
 		}
 
 
-		public readonly Entity[] Entities;
+		public struct IntermediateData
+		{
+			public Entity[] entities;
+			public Hasher.Hash inputHash;
+			public EntityChangeSet localChangeSet;
+		};
+
+		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
 		public readonly bool InputConsistent;
 		public readonly InconsistencyCoverage IC;
 		public readonly string Revision;
+		public readonly IntermediateData Intermediate;
 
 		public bool SignificantInboundChange { get; private set; }
 		public RCS[] OutboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
@@ -110,7 +103,7 @@ namespace Shard
 				e.BeginFetchLogic();
 
 			Revision = dbSDS._rev;
-			Entities = Entity.Import(dbSDS.Entities);
+			FinalEntities = Entity.Import(dbSDS.Entities);
 
 			Generation = dbSDS.Generation;
 			IC = new InconsistencyCoverage(dbSDS.IC);
@@ -127,139 +120,108 @@ namespace Shard
 
 		public int Inconsistency { get { return IC != null ? IC.Inconsistency : -1; } }
 
+
+
 		public class Computation
 		{
-			private SDS output;
+			//private SDS output;
+			InconsistencyCoverage ic;
+			IntermediateData data;
+			RCS[] outbound;
+
 			public Computation(int generation)
 			{
 				SDS input = Simulation.FindGeneration(generation - 1);
-				output = new SDS(generation);
+				SDS old = Simulation.FindGeneration(generation);
+				//output = new SDS(generation);
 				input.IC.VerifyIntegrity();
-
-	//			input->ic.VerifyIntegrity(CLOCATION);
-	//			Hasher inputHash;
-	//			inputHash.AppendPOD(input->IsFullyConsistent());
-	//			input->Hash(inputHash);
-	//			//foreach (userMessages,msg)
-	//			//{
-	//			//	msg->target.Hash(inputHash);
-	//			//	inputHash.AppendPOD(msg->targetProcess);
-	//			//	inputHash.Append(msg->message);
-	//			//}
-
-	//			Hasher::HashContainer c;
-	//			inputHash.Finish(c);
-	//			ASSERT__(!rs.GetOutput() || !rs.GetOutput()->IsFullyConsistent());
-
-	//			rs.InitGeneration(generation + 1, currentTimestep, true, CLOCATION, caller);
-	//			ASSERT__(!rs.GetOutput()->ic.IsSealed());
-	//			if (c == rs.inputHash)
-	//			{
-	//				rs.GetOutput()->entities = rs.processed;
-	//				//	if (!rs.outputConsistent)
-	//				{
-	//					InconsistencyCoverage ic;
-	//					input->ic.Grow(ic);
-	//					rs.GetOutput()->ic.CopyCoreArea(TGridCoords(), ic);
-	//				}
-	//				return;
-	//			}
-	//			if (consistentSuccessorMatch && input->IsFullyConsistent())
-	//				ASSERT__(c == consistentSuccessorMatch->inputHash);
-	//			rs.inputHash = c;
-	//			rs.processed = input->entities;
+				using (Hasher hasher = new Hasher())
+				{
+					hasher.Add(input.IsFullyConsistent);
+					foreach (var e in input.FinalEntities)
+						e.AddTo(hasher);
+					input.IC.AddTo(hasher);
+					hasher.Add(generation);
+					data.inputHash = hasher.Finish();
+				}
+				Debug.Assert(old == null || !old.IsFullyConsistent);
+				if (old != null && old.Intermediate.inputHash == data.inputHash)
+				{
+					data = old.Intermediate;
+					ic = input.IC.Grow(true);
+					outbound = old.OutboundRCS;
+					return;
+				}
+				outbound = new RCS[Simulation.NeighborCount];
+				//			rs.processed = input->entities;
 
 
-	//			foreach (userMessages,msg)
-	//{
-	//				Entity* e = rs.processed.FindEntity(msg->target.guid);
-	//				if (!e)
-	//					LogUnexpected("User Message: Unable to find target entity", msg->target);
-	//				else
-	//				{
-	//					auto ws = e->FindLogic(msg->targetProcess);
-	//					if (!ws)
-	//						LogUnexpected("User Message: Unable to find target logic process", msg->target);
-	//					else
-	//						ws->receiver.Append().data = msg->message;
-	//				}
-	//			}
+				//			foreach (userMessages,msg)
+				//{
+				//				Entity* e = rs.processed.FindEntity(msg->target.guid);
+				//				if (!e)
+				//					LogUnexpected("User Message: Unable to find target entity", msg->target);
+				//				else
+				//				{
+				//					auto ws = e->FindLogic(msg->targetProcess);
+				//					if (!ws)
+				//						LogUnexpected("User Message: Unable to find target logic process", msg->target);
+				//					else
+				//						ws->receiver.Append().data = msg->message;
+				//				}
+				//			}
 
-	//			InconsistencyCoverage ic;
-	//			input->ic.Grow(ic);
-	//			rs.GetOutput()->ic.CopyCoreArea(TGridCoords(), ic);
+				ic = input.IC.Grow(true);
+				data.entities = new Entity[input.FinalEntities.Length];
+				data.localChangeSet = new EntityChangeSet();
 
-	//			rs.GetOutput()->ic.VerifyIntegrity(CLOCATION);
+				Parallel.For(0, data.entities.Length, (i) =>
+				{
+					data.entities[i] = input.FinalEntities[i].Evolve(data.localChangeSet);
+				});
+				
 
-	//			rs.localCS.Clear();
-	//			rs.ExecuteLogic(rs.localCS, rs.GetGeneration(), shard.gridCoords, motionSpace);
-	//			if (consistentSuccessorMatch && input->IsFullyConsistent())
-	//			{
-	//				rs.localCS.AssertEqual(consistentSuccessorMatch->localCS);
-	//			}
-
-	//			for (int i = 0; i < NumNeighbors; i++)
-	//			{
-	//				const TGridCoords&delta = shard.neighbors[i].delta;
-	//				if (!motionSpace.Contains(shard.gridCoords + delta))
-	//				{
-	//					ASSERT__(shard.neighbors[i].shard == nullptr);
-	//					const index_t inbound = shard.neighbors[i].inboundIndex;
-	//					auto &in = rs.inboundRCS[inbound];
-	//		in = edgeInboundRCS;
-	//		in->VerifyIntegrity(CLOCATION);
-	//				}
-	//				else
-	//					ASSERT__(shard.neighbors[i].shard != nullptr);
-	//				OutRemoteChangeSet & rcs = rs.outboundRCS[i];
-	//				if (rcs.ref && rcs.ref->ic.IsFullyConsistent())
-	//	{
-	//				//no changes since already consistent
+				foreach (var n in Simulation.Neighbors)
+				{
+					var delta = n.ID.XYZ - Simulation.ID.XYZ;
+					RCS rcs = outbound[n.LinearIndex] = new RCS(generation);
+					rcs.Generation = 
+				rcs.ref.reset(new RCS(caller));
+				rcs.ref->ic.CopyCoreArea(-delta, ic);
+				rs.localCS.ExportEdge(delta, shard.gridCoords, rcs.ref->cs);
+				input->hGrid.core.ExportEdge(rcs.ref->hGrid, delta);
+				rcs.confirmed = shard.neighbors[i].shard == nullptr;
+				ASSERT_EQUAL__(rcs.confirmed, !motionSpace.Contains(shard.gridCoords + delta));
 
 
-	//				rcs.ref->VerifyIntegrity(CLOCATION);
-
-	//				if (consistentSuccessorMatch)
-	//					rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
-	//				continue;
-	//			}
-	//			ASSERT__(rcs.ref != edgeInboundRCS);
-	//			rcs.ref.reset(new RCS(caller));
-	//			rcs.ref->ic.CopyCoreArea(-delta, ic);
-	//			rs.localCS.ExportEdge(delta, shard.gridCoords, rcs.ref->cs);
-	//			input->hGrid.core.ExportEdge(rcs.ref->hGrid, delta);
-	//			rcs.confirmed = shard.neighbors[i].shard == nullptr;
-	//			ASSERT_EQUAL__(rcs.confirmed, !motionSpace.Contains(shard.gridCoords + delta));
+				if (consistentSuccessorMatch && rcs.ref->ic.IsFullyConsistent())
+						rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
 
 
-	//			if (consistentSuccessorMatch && rcs.ref->ic.IsFullyConsistent())
-	//		rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
+				if (rcs.ref->ic.IsFullyConsistent() && shard.neighbors[i].shard)
+					{
+					const auto id = DB::ID(&shard, shard.neighbors[i].shard, rs.GetGeneration());
+					shard.client.Upload(id, rcs.ref);
+				}
+
+				rcs.ref->VerifyIntegrity(CLOCATION);
 
 
-	//			if (rcs.ref->ic.IsFullyConsistent() && shard.neighbors[i].shard)
-	//	{
-	//				const auto id = DB::ID(&shard, shard.neighbors[i].shard, rs.GetGeneration());
-	//				shard.client.Upload(id, rcs.ref);
-	//			}
+				if (input->IsFullyConsistent())
+					ASSERT__(rcs.ref->ic.IsFullyConsistent());
 
-	//			rcs.ref->VerifyIntegrity(CLOCATION);
-
-
-	//			if (input->IsFullyConsistent())
-	//				ASSERT__(rcs.ref->ic.IsFullyConsistent());
-
-	//		}
-
-
-
-
-
-
-
-	//			throw new NotImplementedException();
 			}
 
-			public SDS Complete()
+
+
+
+
+
+
+			//			throw new NotImplementedException();
+		}
+
+		public SDS Complete()
 			{
 				throw new NotImplementedException();
 			}
@@ -335,7 +297,7 @@ namespace Shard
 		public Serial Export()
 		{
 			Serial rs = new Serial();
-			rs.Entities = Entity.Export(Entities);
+			rs.Entities = Entity.Export(FinalEntities);
 			rs.Generation = Generation;
 			rs.IC = IC.Export();
 			rs._rev = Revision;

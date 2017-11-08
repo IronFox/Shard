@@ -4,13 +4,12 @@ using VectorMath;
 namespace Shard
 {
 
-	public class RCS
+	public class RCS : EntityChangeSet
 	{
 		public class Serial
 		{
 			public string _id, _rev;
 
-			public Entity.Serial[] Entities { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
 			public int[] NumericID { get; set; }
 			public int Generation { get; set; }
@@ -18,16 +17,16 @@ namespace Shard
 
 		public readonly int Generation;
 		public readonly string Revision;
-		public readonly Entity[] Entities;
 		public readonly InconsistencyCoverage IC;
 
-		public RCS(Serial rcs)
+		public RCS(Serial rcs) : base(rcs.Generation)
 		{
-			Generation = rcs.Generation;
 			Revision = rcs._rev;
-			Entities = Entity.Import(rcs.Entities);
 			IC = new InconsistencyCoverage(rcs.IC);
 		}
+
+		public RCS(int generation, EntityChangeSet.Change[] changes) : base(generation,changes)
+		{}
 
 		public bool IsFullyConsistent { get { return IC.IsFullyConsistent; } }
 

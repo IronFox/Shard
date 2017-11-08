@@ -7,7 +7,7 @@ using System.Text;
 
 namespace VectorMath
 {
-    public struct Vec3
+    public struct Vec3 : IComparable<Vec3>
     {
         public readonly float X, Y, Z;
         public Vec2 xy { get { return new Vec2(X, Y); } }
@@ -63,7 +63,10 @@ namespace VectorMath
         }
 
         public float Length { get { return (float)System.Math.Sqrt(Vec.Dot(this, this)); } }
-        public Vec3 Normalize() { return this / Length; }
+
+		public Int3 FloorInt3 { get { return new Int3((int)Math.Floor(X), (int)Math.Floor(Y), (int)Math.Floor(Z)); } }
+
+		public Vec3 Normalize() { return this / Length; }
 
         public static Vec3 operator+(Vec3 u, Vec3 v)
         {
@@ -153,7 +156,19 @@ namespace VectorMath
             return "(" + Convert.ToString(X) + ", " + Convert.ToString(Y) + ", " + Convert.ToString(Z) + ")";
         }
 
-    }
+		public int CompareTo(Vec3 other)
+		{
+			int cmp;
+			cmp = X.CompareTo(other.X);
+			if (cmp != 0)
+				return cmp;
+			cmp = Y.CompareTo(other.Y);
+			if (cmp != 0)
+				return cmp;
+			cmp = Z.CompareTo(other.Z);
+			return cmp;
+		}
+	}
 
 
 	public struct Int3

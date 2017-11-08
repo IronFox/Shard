@@ -23,6 +23,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -32,6 +33,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Ensure.That, Version=6.0.1.29, Culture=neutral, processorArchitecture=MSIL">
@@ -130,6 +132,7 @@
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
     <Compile Include="Entity.cs" />
+    <Compile Include="Hasher.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="Log.cs" />

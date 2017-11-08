@@ -54,6 +54,11 @@ namespace Shard
 			rangeUnknown = false;
 		}
 
+		public void AddTo(Hasher h)
+		{
+			h.Add(GridSize);
+			h.Add(grid);
+		}
 
 		public BitCube() { }
 		public BitCube(Int3 size)
