@@ -94,7 +94,7 @@ namespace VectorMath
 
         public static Matrix4 Assemble(Vec3 orientationX, Vec3 orientationY, Vec3 position)
         {
-            return new Matrix4(new Vec4(orientationX.Normalize(), 0), new Vec4(orientationY.Normalize(), 0), new Vec4(Vec.Cross(orientationX, orientationY).Normalize(), 0), new Vec4(position, 1));
+            return new Matrix4(new Vec4(orientationX.Normalized(), 0), new Vec4(orientationY.Normalized(), 0), new Vec4(Vec.Cross(orientationX, orientationY).Normalized(), 0), new Vec4(position, 1));
         }
     }
 }

@@ -3,29 +3,20 @@ using VectorMath;
 
 namespace Shard
 {
-	public class InconsistencyCoverage
+	public class InconsistencyCoverage : BitCube
 	{
-		private BitCube data;
+		public static int CommonResolution { get; set; }
 
 
-		public InconsistencyCoverage(Int3 size)
-		{
-			data = new BitCube(size);
-		}
+		private InconsistencyCoverage(BitCube raw) : base(raw)
+		{ }
 
-		private InconsistencyCoverage(BitCube cube)
-		{
-			data = cube;
-		}
+		public InconsistencyCoverage(Int3 size) : base(size)
+		{}
 
+		public InconsistencyCoverage(Serial serial) : base(serial.Data)
+		{}
 
-		public InconsistencyCoverage(Serial serial)
-		{
-			
-		}
-
-		public bool IsFullyConsistent { get { return Inconsistency == 0; } }
-		public int Inconsistency { get; private set; }
 
 		public class Serial
 		{
@@ -40,34 +31,38 @@ namespace Shard
 			{
 				return new BitCube(Data);
 			}
-
 		}
 
 		public Serial Export()
 		{
-			throw new NotImplementedException();
-		}
-
-		public void VerifyIntegrity()
-		{
-			//nothing for now
-		}
-
-		internal void AddTo(Hasher inputHash)
-		{
-			data.AddTo(inputHash);
+			return new Serial(this);
 		}
 
 		public InconsistencyCoverage Grow(bool trimToLocalSize)
 		{
-			BitCube cube = data.GrowOnes();
+			BitCube cube = base.GrowOnes();
 			if (trimToLocalSize)
 			{
-				cube = cube.SubCube(new Int3(1), data.Size);
-				if (cube.Size != data.Size)
-					throw new Exception("Unexpted grown size: "+cube.Size+". Expected "+data.Size);
+				cube = cube.SubCube(new Int3(1), base.Size);
+				if (cube.Size != base.Size)
+					throw new Exception("Unexpted grown size: "+cube.Size+". Expected "+base.Size);
 			}
 			return new InconsistencyCoverage(cube);
 		}
+
+		public InconsistencyCoverage TrimToCommonResolution()
+		{
+			if ((Size <= CommonResolution).All)
+				return this;
+			return new InconsistencyCoverage(this.SubCube(Int3.Zero, new Int3(CommonResolution)));
+		}
+
+		public InconsistencyCoverage Sub(Int3 offset, Int3 size)
+		{
+			return new InconsistencyCoverage(SubCube(offset,size));
+		}
+
+
+
 	}
 }

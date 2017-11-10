@@ -396,6 +396,7 @@ namespace Shard
 		public int OutboundSentCount { get { return outbound.SentCount; } }
 
 		public bool VerboseWriter { get; set; } = false;
+		public SpaceCube WorldSpace { get; internal set; }
 
 		private void WriteMain()
 		{

@@ -6,16 +6,16 @@ namespace Shard
 
 	public class RCS : EntityChangeSet
 	{
-		public class Serial
+		public new class Serial
 		{
 			public string _id, _rev;
 
+			public EntityChangeSet.Serial CS { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
 			public int[] NumericID { get; set; }
 			public int Generation { get; set; }
 		}
 
-		public readonly int Generation;
 		public readonly string Revision;
 		public readonly InconsistencyCoverage IC;
 
@@ -25,10 +25,13 @@ namespace Shard
 			IC = new InconsistencyCoverage(rcs.IC);
 		}
 
-		public RCS(int generation, EntityChangeSet.Change[] changes) : base(generation,changes)
-		{}
+		public RCS(int generation, EntityChangeSet localCS, SpaceCube cube, InconsistencyCoverage ic) : base(generation)
+		{
+			base.Load(localCS, cube);
+			IC = ic;
+		}
 
-		public bool IsFullyConsistent { get { return IC.IsFullyConsistent; } }
+		public bool IsFullyConsistent { get { return !IC.AnySet; } }
 
 		public struct ID
 		{
@@ -132,7 +135,7 @@ namespace Shard
 			rs.Generation = Generation;
 			rs.NumericID = genID.IntArray;
 			rs.IC = IC.Export();
-			rs.Entities = Entity.Export(Entities);
+			rs.CS = base.Export();
 
 			rs._id = genID.ToString();
 			rs._rev = Revision;

@@ -64,6 +64,14 @@ namespace Shard
 			throw new Exception("Unable to find neighbor shard with ID " + id);
 		}
 
+		public static bool NeighborExists(Int3 coordinates)
+		{
+			foreach (var n in neighbors)
+				if (n.ID.XYZ == coordinates)
+					return true;
+			return false;
+		}
+
 
 
 		public static int TimeStep
@@ -163,6 +171,9 @@ namespace Shard
 			M = DB.Config.m;
 
 
+			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling( 1f / R);
+
+
 			if (ext.ReplicaLevel > 1)
 			{
 				int at = 0;
@@ -191,6 +202,7 @@ namespace Shard
 							}
 						}
 			}
+			Space = new SpaceCube(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
 
 			AdvertiseOldestGeneration(0);
 
@@ -299,10 +311,12 @@ namespace Shard
 			}
 		}
 
-		internal static bool Owns(Vec3 position)
+		public static bool Owns(Vec3 position)
 		{
-			throw new NotImplementedException();
+			return Space.Contains(position);
 		}
+
+		public static SpaceCube Space { get; private set; } = new SpaceCube(Vec3.Zero, Vec3.One, Bool3.True);
 
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
 		{
@@ -405,6 +419,11 @@ namespace Shard
 
 			Console.Error.WriteLine("Unsupported update from sibling " + lnk + ": "+obj.GetType());
 
+		}
+
+		internal static float GetDistance(Vec3 senderPosition, Vec3 position)
+		{
+			throw new NotImplementedException();
 		}
 
 		public static bool HaveSibling(Link lnk)

@@ -117,13 +117,18 @@ namespace Shard
 
 		private class MyLogicState : EntityLogic.State
 		{
-			public MyLogicState(byte[] binaryState)
+			readonly MyLogic logic;
+			public MyLogicState(MyLogic logic, byte[] binaryState)
 			{
+				this.logic = logic;
 			}
 
 			public override byte[] BinaryState => throw new NotImplementedException();
 
-			public override EntityLogic.State Evolve(EntityAppearance oldState, out EntityAppearance newState)
+			public override string LogicID => logic.ID;
+
+
+			public override Changes Evolve(Entity currentState)
 			{
 				throw new NotImplementedException();
 			}
@@ -133,17 +138,21 @@ namespace Shard
 		{
 			public class Serial
 			{
-
+				public string _id;  //"current"
+				public string _rev;
 			}
+
+			public readonly string ID;
 
 			public MyLogic(Serial serial)
 			{
+				ID = serial._id;
 				throw new NotImplementedException();
 			}
 
 			public override State Instantiate(byte[] binaryState)
 			{
-				return new MyLogicState(binaryState);
+				return new MyLogicState(this,binaryState);
 			}
 		}
 
@@ -208,6 +217,11 @@ namespace Shard
 		{
 			foreach (var id in ids)
 				BeginFetch(id);
+		}
+
+		internal static void Put(RCS.Serial serial)
+		{
+			throw new NotImplementedException();
 		}
 	}
 }

@@ -65,7 +65,7 @@ namespace Shard
 
 		public struct IntermediateData
 		{
-			public Entity[] entities;
+			public EntityPool entities;
 			public Hasher.Hash inputHash;
 			public EntityChangeSet localChangeSet;
 		};
@@ -86,8 +86,8 @@ namespace Shard
 		{
 			var candidate = new RCS(entry);
 			var existing = InboundRCS[neighbor.LinearIndex];
-			bool significant = existing != null && candidate.IC.Inconsistency < existing.IC.Inconsistency;
-			if (existing!= null && candidate.IC.Inconsistency > existing.IC.Inconsistency)
+			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
+			if (existing!= null && candidate.IC.OneCount > existing.IC.OneCount)
 			{
 				Console.Error.WriteLine("Unable to incorportate RCS from "+neighbor+": RCS at generation "+entry.Generation+" is worse than known");
 				return;
@@ -114,11 +114,11 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public bool IsFullyConsistent { get { return IC != null && IC.IsFullyConsistent; } }
+		public bool IsFullyConsistent { get { return IC != null && !IC.AnySet; } }
 
 		public bool IsSet { get { return IC != null; } }
 
-		public int Inconsistency { get { return IC != null ? IC.Inconsistency : -1; } }
+		public int Inconsistency { get { return IC != null ? IC.OneCount : -1; } }
 
 
 
@@ -134,13 +134,12 @@ namespace Shard
 				SDS input = Simulation.FindGeneration(generation - 1);
 				SDS old = Simulation.FindGeneration(generation);
 				//output = new SDS(generation);
-				input.IC.VerifyIntegrity();
 				using (Hasher hasher = new Hasher())
 				{
 					hasher.Add(input.IsFullyConsistent);
 					foreach (var e in input.FinalEntities)
-						e.AddTo(hasher);
-					input.IC.AddTo(hasher);
+						e.Hash(hasher);
+					input.IC.Hash(hasher);
 					hasher.Add(generation);
 					data.inputHash = hasher.Finish();
 				}
@@ -171,57 +170,33 @@ namespace Shard
 				//				}
 				//			}
 
-				ic = input.IC.Grow(true);
-				data.entities = new Entity[input.FinalEntities.Length];
-				data.localChangeSet = new EntityChangeSet();
+				InconsistencyCoverage untrimmed = input.IC.Grow(false);
+				if (untrimmed.Size != InconsistencyCoverage.CommonResolution + 2)
+					throw new IntegrityViolation("IC of unsupported size: "+untrimmed.Size);
+				ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
+				data.entities = new EntityPool(input.FinalEntities);
+				data.localChangeSet = new EntityChangeSet(generation);
 
-				Parallel.For(0, data.entities.Length, (i) =>
+				Parallel.For(0, input.FinalEntities.Length, (i) =>
 				{
-					data.entities[i] = input.FinalEntities[i].Evolve(data.localChangeSet);
+					input.FinalEntities[i].Evolve(data.localChangeSet);
 				});
 				
 
 				foreach (var n in Simulation.Neighbors)
 				{
 					var delta = n.ID.XYZ - Simulation.ID.XYZ;
-					RCS rcs = outbound[n.LinearIndex] = new RCS(generation);
-					rcs.Generation = 
-				rcs.ref.reset(new RCS(caller));
-				rcs.ref->ic.CopyCoreArea(-delta, ic);
-				rs.localCS.ExportEdge(delta, shard.gridCoords, rcs.ref->cs);
-				input->hGrid.core.ExportEdge(rcs.ref->hGrid, delta);
-				rcs.confirmed = shard.neighbors[i].shard == nullptr;
-				ASSERT_EQUAL__(rcs.confirmed, !motionSpace.Contains(shard.gridCoords + delta));
-
-
-				if (consistentSuccessorMatch && rcs.ref->ic.IsFullyConsistent())
-						rcs.ref->Verify(consistentSuccessorMatch->outboundRCS[i].ref);
-
-
-				if (rcs.ref->ic.IsFullyConsistent() && shard.neighbors[i].shard)
-					{
-					const auto id = DB::ID(&shard, shard.neighbors[i].shard, rs.GetGeneration());
-					shard.client.Upload(id, rcs.ref);
+					Int3 offset = (delta* InconsistencyCoverage.CommonResolution + 1).Clamp(0,InconsistencyCoverage.CommonResolution+1);
+					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution-1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
+					var ic = untrimmed.Sub(offset, end - offset + 1);
+					RCS rcs = outbound[n.LinearIndex] = new RCS(generation, data.localChangeSet, n.WorldSpace,ic);
+		
+					if (rcs.IsFullyConsistent)
+						DB.Put(rcs.Export(n.OutboundRCS(generation).ID));
 				}
-
-				rcs.ref->VerifyIntegrity(CLOCATION);
-
-
-				if (input->IsFullyConsistent())
-					ASSERT__(rcs.ref->ic.IsFullyConsistent());
-
 			}
 
-
-
-
-
-
-
-			//			throw new NotImplementedException();
-		}
-
-		public SDS Complete()
+			public SDS Complete()
 			{
 				throw new NotImplementedException();
 			}

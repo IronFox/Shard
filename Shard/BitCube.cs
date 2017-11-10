@@ -4,7 +4,7 @@ using VectorMath;
 
 namespace Shard
 {
-	public class BitCube
+	public class BitCube : IHashable
 	{
 		private uint[,,] grid;
 		public const int BitsPerEntry = 32;
@@ -50,11 +50,10 @@ namespace Shard
 			Int3 gridSize = GridSize;
 			grid = new uint[gridSize.X, gridSize.Y, gridSize.Z];
 			//SetAllZero();	//should be all zero in C# anyways
-			allZero = true;
-			rangeUnknown = false;
+			oneCount = 0;
 		}
 
-		public void AddTo(Hasher h)
+		public void Hash(Hasher h)
 		{
 			h.Add(GridSize);
 			h.Add(grid);
@@ -108,15 +107,21 @@ namespace Shard
 			Buffer.BlockCopy(data, 12, grid, 0, data.Length - 12);
 		}
 
-		private bool allZero = true;
-		private bool rangeUnknown = false;
+		protected BitCube(BitCube source)
+		{
+			size = source.size;
+			grid = source.grid;
+			oneCount = source.oneCount;
+		}
+
+		private int oneCount = -1;
 
 		public bool IsEmpty {
 			get
 			{
-				if (rangeUnknown)
+				if (oneCount == -1)
 					ReDetermineRange();
-				return allZero;
+				return oneCount == 0;
 			}
 		}
 
@@ -124,17 +129,9 @@ namespace Shard
 		{
 			get
 			{
-				int rs = 0;
-				foreach (var value in grid)
-				{
-					uint v = value;
-					while (v != 0)
-					{
-						v &= (v - 1);
-						rs++;
-					}
-				}
-				return rs;
+				if (oneCount == -1)
+					ReDetermineRange();
+				return oneCount;
 			}
 		}
 
@@ -159,7 +156,6 @@ namespace Shard
 				for (int y = 0; y < size.Y; y++)
 					for (int z = 0; z < size.Z; z++)
 						rs[x, y, z] = this[offset.X + x, offset.Y + y, offset.Z + z];
-
 			return rs;
 		}
 
@@ -180,6 +176,7 @@ namespace Shard
 						rs.grid[x + 1, y, z] |= grid[x - 1, y, z];
 					rs.grid[rs.grid.GetLength(0) - 1, y, z] = grid[grid.GetLength(0) - 1, y, z];
 				}
+			rs.oneCount = -1;
 			return rs;
 		}
 		public BitCube GrowOnesY()
@@ -200,6 +197,7 @@ namespace Shard
 						rs.grid[x, y + 1, z] |= grid[x, y - 1, z];
 					rs.grid[x, lenY + 1, z] = grid[x, lenY - 1, z];
 				}
+			rs.oneCount = -1;
 			return rs;
 		}
 
@@ -228,6 +226,7 @@ namespace Shard
 					//	rs.grid[x, y, z] |= (grid[x, y, z + 1] & (1u)) != 0 ? HighestBit : 0;
 					//}
 				}
+			rs.oneCount = -1;
 			return rs;
 		}
 
@@ -253,11 +252,17 @@ namespace Shard
 
 		private void ReDetermineRange()
 		{
-			allZero = true;
+			int rs = 0;
 			foreach (var value in grid)
-				if (value != 0)
-					allZero = false;
-			rangeUnknown = false;
+			{
+				uint v = value;
+				while (v != 0)
+				{
+					v &= (v - 1);
+					rs++;
+				}
+			}
+			oneCount = rs;
 		}
 
 		public bool AnySet { get { return !IsEmpty; } }
@@ -268,8 +273,7 @@ namespace Shard
 				for (int y = 0; y < grid.GetLength(1); y++)
 					for (int z = 0; z < grid.GetLength(2); z++)
 						grid[x, y, z] = 0;
-			allZero = true;
-			rangeUnknown = false;
+			oneCount = 0;
 		}
 
 		public void SetAllOne()
@@ -286,8 +290,7 @@ namespace Shard
 					if (grid.GetLength(2) > 0)
 						grid[x, y, grid.GetLength(2) - 1] = edgeValue;
 				}
-			allZero = false;
-			rangeUnknown = false;
+			oneCount = Size.Product;
 		}
 
 		public bool this[int x, int y, int z]
@@ -304,18 +307,16 @@ namespace Shard
 				int zBit = z % BitsPerEntry;
 				z /= BitsPerEntry;
 				uint val = grid[x, y, z];
+				uint orig = val;
 				if (value)
 				{
 					val |= (1u << zBit);
-					allZero = false;
-					rangeUnknown = false;
 				}
 				else
 				{
 					val &= ~(1u << zBit);
-					if (!allZero)
-						rangeUnknown = true;
 				}
+				oneCount = -1;
 				grid[x, y, z] = val;
 			}
 		}
