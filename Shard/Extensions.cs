@@ -35,6 +35,11 @@ namespace Shard
 			}
 		}
 
+		public static T PickRandom<T>(this T[] array, Random random)
+		{
+			return array[random.Next(array.Length)];
+		}
+
 		public static float NextFloat(this Random random, float min, float max)
 		{
 			return (float)random.NextDouble() * (max - min) + min;

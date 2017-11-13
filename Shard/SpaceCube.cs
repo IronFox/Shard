@@ -1,4 +1,5 @@
-﻿using VectorMath;
+﻿using System;
+using VectorMath;
 
 namespace Shard
 {
@@ -35,5 +36,37 @@ namespace Shard
 				;
 		}
 
+		private static float Clamp(float v, float min, float max, bool maxIsInclusive)
+		{
+			v = Math.Max(v, min);
+			if (!maxIsInclusive)
+				max -= float.Epsilon * 2;
+			v = Math.Min(v, max);
+			return v;
+		}
+
+		private static float Relativate(float v, float min, float max)
+		{
+			return (v - min) / (max - min);
+		}
+
+		public Vec3 Relativate(Vec3 p)
+		{
+			return new Vec3(
+				Relativate(p.X, Min.X, Max.X),
+				Relativate(p.Y, Min.Y, Max.Y),
+				Relativate(p.Z, Min.Z, Max.Z)
+				);
+		}
+
+
+		public Vec3 Clamp(Vec3 p)
+		{
+			return new Vec3(
+					Clamp(p.X, Min.X, Max.X, MaxIsInclusive.X),
+					Clamp(p.Y, Min.Y, Max.Y, MaxIsInclusive.Y),
+					Clamp(p.Z, Min.Z, Max.Z, MaxIsInclusive.Z)
+				);
+		}
 	}
 }

@@ -41,11 +41,11 @@ namespace Shard.Tests
 
 		}
 
-		private List<Entity> CreateEntities(int count, Random random)
+		public static List<Entity> CreateEntities(int count, Random random, EntityLogic logic = null)
 		{
 			var rs = new List<Entity>();
 			for (int i = 0; i < count; i++)
-				rs.Add(new Entity(new EntityID(Guid.NewGuid(), random.NextVec3(0, 1000)), null, null, new EntityAppearance(), null, null));
+				rs.Add(new Entity(new EntityID(Guid.NewGuid(), random.NextVec3(Simulation.MySpace)), logic != null ? logic.Instantiate(null) : null, null, null, null));
 			return rs;
 		}
 
@@ -62,7 +62,9 @@ namespace Shard.Tests
 			{
 				Entity old = entities[0];
 				Entity moved = new Entity(old.ID.Relocate( random.NextVec3(0, 1000)), old.LogicState, old.Appearance, null, null);
+				Assert.IsTrue(pool.Contains(old.ID));
 				Assert.IsTrue(pool.UpdateEntity(entities[0], moved),"Update moved entity "+i);
+				Assert.IsFalse(pool.Contains(old.ID));
 				entities[0] = moved;
 				Assert.AreEqual(pool.Count, entities.Count);
 				foreach (var e in entities)

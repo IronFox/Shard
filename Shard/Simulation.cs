@@ -12,8 +12,8 @@ namespace Shard
 	{
 		public static ShardID ID { get; private set; }
 		private static ShardID ext;
-		public static float R { get; private set; }
-		public static float M { get; private set; }
+		public static float R { get; private set; } = 1f / 8;
+		public static float M { get; private set; } = 1f / 16;
 
 		private static List<Link> neighbors = new List<Link>();
 		private static Link[] siblings;
@@ -202,7 +202,7 @@ namespace Shard
 							}
 						}
 			}
-			Space = new SpaceCube(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
+			MySpace = new SpaceCube(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
 
 			AdvertiseOldestGeneration(0);
 
@@ -313,18 +313,27 @@ namespace Shard
 
 		public static bool Owns(Vec3 position)
 		{
-			return Space.Contains(position);
+			return MySpace.Contains(position);
 		}
 
-		public static SpaceCube Space { get; private set; } = new SpaceCube(Vec3.Zero, Vec3.One, Bool3.True);
+		public static SpaceCube MySpace { get; private set; } = new SpaceCube(Vec3.Zero, Vec3.One, Bool3.True);
+		public static float SensorRange { get { return R - M; } }
 
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
 		{
-			throw new NotImplementedException();
+			float dist = GetDistance(referencePosition, e.ID.Position);
+			if (dist <= maxDistance)
+				return true;
+			Log.Error(e + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
+			return false;
 		}
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Vec3 targetPosition, float maxDistance)
 		{
-			throw new NotImplementedException();
+			float dist = GetDistance(referencePosition, targetPosition);
+			if (dist <= maxDistance)
+				return true;
+			Log.Error(task + ": exceeded maximum range (" + maxDistance + "): " + dist);
+			return false;
 		}
 
 		internal static void FetchIncoming(Link lnk, object obj)
@@ -421,9 +430,9 @@ namespace Shard
 
 		}
 
-		internal static float GetDistance(Vec3 senderPosition, Vec3 position)
+		public static float GetDistance(Vec3 a, Vec3 b)
 		{
-			throw new NotImplementedException();
+			return Vec3.GetChebyshevDistance(a, b);
 		}
 
 		public static bool HaveSibling(Link lnk)

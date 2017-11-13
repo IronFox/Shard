@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
 
 
 namespace VectorMath
@@ -150,7 +146,32 @@ namespace VectorMath
             return new Vec3(u.X * v, u.Y * v, u.Z * v);
         }
 
-        private bool Eq(Vec3 other)
+		public static Bool3 operator <(Vec3 u, Vec3 v)
+		{
+			return new Bool3(
+				u.X < v.X,
+				u.Y < v.Y,
+				u.Z < v.Z
+				);
+		}
+		public static Bool3 operator >(Vec3 u, Vec3 v)
+		{
+			return v < u;
+		}
+		public static Bool3 operator <=(Vec3 u, Vec3 v)
+		{
+			return new Bool3(
+				u.X <= v.X,
+				u.Y <= v.Y,
+				u.Z <= v.Z
+				);
+		}
+		public static Bool3 operator >=(Vec3 u, Vec3 v)
+		{
+			return v <= u;
+		}
+
+		private bool Eq(Vec3 other)
         {
             return X == other.X && Y == other.Y && Z == other.Z;
         }
@@ -186,16 +207,16 @@ namespace VectorMath
 
 		public string Encode()
 		{
-			return Convert.ToString(X)+ '_' + Convert.ToString(Y) + '_' + Convert.ToString(Z);
+			return Common.ToString(X)+ '_' + Common.ToString(Y) + '_' + Common.ToString(Z);
 		}
 
         //public static implicit operator string(Vec3 v)
         //{
-        //    return Convert.ToString(v.x) + ", " + Convert.ToString(v.y) + ", " + Convert.ToString(v.z);
+        //    return Common.ToString(v.x) + ", " + Common.ToString(v.y) + ", " + Common.ToString(v.z);
         //}
         public override string ToString()
         {
-            return "(" + Convert.ToString(X) + ", " + Convert.ToString(Y) + ", " + Convert.ToString(Z) + ")";
+            return "(" + Common.ToString(X) + ", " + Common.ToString(Y) + ", " + Common.ToString(Z) + ")";
         }
 
 		public int CompareTo(Vec3 other)
@@ -219,6 +240,17 @@ namespace VectorMath
 			hashCode = hashCode * -1521134295 + Y.GetHashCode();
 			hashCode = hashCode * -1521134295 + Z.GetHashCode();
 			return hashCode;
+		}
+
+		public static float GetChebyshevDistance(Vec3 a, Vec3 b)
+		{
+			return Math.Max(
+					Math.Max(
+						Math.Abs(a.X - b.X),
+						Math.Abs(a.Y - b.Y)
+						),
+					Math.Abs(a.Z - b.Z)
+				);
 		}
 	}
 
@@ -478,7 +510,7 @@ namespace VectorMath
 		{
 			get
 			{
-				return Convert.ToString(X) + '_' + Convert.ToString(Y) + '_' + Convert.ToString(Z);
+				return Common.ToString(X) + '_' + Common.ToString(Y) + '_' + Common.ToString(Z);
 			}
 		}
 
@@ -523,7 +555,7 @@ namespace VectorMath
 
 		public override string ToString()
 		{
-			return "(" + Convert.ToString(X) + ", " + Convert.ToString(Y) + ", " + Convert.ToString(Z) + ")";
+			return "(" + Common.ToString(X) + ", " + Common.ToString(Y) + ", " + Common.ToString(Z) + ")";
 		}
 
 		public void Export(int[] ar, int offset)

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -24,11 +25,22 @@ namespace Shard
 			}
 
 
-			public void Execute(EntityPool pool)
+			public int Execute(EntityPool pool)
 			{
 				T[] ar = bag.ToArray();
 				Array.Sort(ar);
-				Parallel.ForEach(ar, c => c.Execute(pool));
+				int numErrors = 0;
+				Parallel.ForEach(ar, c => { if (!c.Execute(pool)) Interlocked.Increment(ref numErrors); });
+				return numErrors;
+			}
+
+			public T FindOrigin(EntityID id)
+			{
+				T[] ar = bag.ToArray();
+				foreach (var c in ar)
+					if (c.Origin == id)
+						return c;
+				return null;
 			}
 		}
 
@@ -65,14 +77,16 @@ namespace Shard
 		/// Executes all local changes on the specified pool, and automatically dispatches queued pool events
 		/// </summary>
 		/// <param name="pool">Pool to execute changes on</param>
-		public void Execute(EntityPool pool)
+		public int Execute(EntityPool pool)
 		{
-			messages.Execute(pool);
-			motions.Execute(pool);
-			removals.Execute(pool);
-			instantiations.Execute(pool);
-			advertisements.Execute(pool);
+			int numErrors = 0;
+			numErrors += messages.Execute(pool);
+			numErrors += motions.Execute(pool);
+			numErrors += removals.Execute(pool);
+			numErrors += instantiations.Execute(pool);
+			numErrors += advertisements.Execute(pool);
 			pool.DispatchAll();
+			return numErrors;
 		}
 
 		internal void Load(EntityChangeSet localCS, SpaceCube cube)
@@ -172,7 +186,7 @@ namespace Shard
 			public Motion(EntityID origin, Vec3 targetLocation, EntityAppearance appearance, string logicID, byte[] logicState, bool isInconsistent) : base(origin, targetLocation, appearance, logicID, logicState)
 			{}
 
-			public Motion(Entity e, EntityLogic.State newState, Vec3 destination) : base(e.ID, destination, e.Appearance, newState.LogicID, newState.BinaryState)
+			public Motion(Entity e, EntityLogic.State newState, EntityAppearance newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState != null ? newState.LogicID : null, newState != null ? newState.BinaryState : null)
 			{
 				DirectState = newState;
 			}
@@ -230,6 +244,10 @@ namespace Shard
 			}
 		}
 
+		public StateAdvertisement FindAdvertisementFor(EntityID id)
+		{
+			return advertisements.FindOrigin(id);
+		}
 
 		public class Broadcast : Change
 		{

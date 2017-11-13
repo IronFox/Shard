@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -44,7 +45,7 @@ namespace Shard
 		private ConcurrentDictionary<EntityID, Container> fullMap = new ConcurrentDictionary<EntityID, Container>();
 		private ConcurrentDictionary<Guid, Container> guidMap = new ConcurrentDictionary<Guid, Container>();
 
-		public EntityPool(Entity[] entities)
+		public EntityPool(IEnumerable<Entity> entities)
 		{
 			if (entities != null)
 				foreach (var e in entities)
@@ -97,7 +98,7 @@ namespace Shard
 		{
 			foreach (var p in fullMap)
 			{
-				if (Simulation.GetDistance(c.ID.Position, p.Key.Position) <= Simulation.M)
+				if (p.Key.Guid != c.ID.Guid && Simulation.GetDistance(c.ID.Position, p.Key.Position) <= Simulation.SensorRange)
 				{
 					if (!p.Value.contacts.TryAdd(c.ID.Guid, c))
 					{
@@ -137,8 +138,45 @@ namespace Shard
 			}
 		}
 
+		/// <summary>
+		/// Evolves all local entities (in parallel), and stores changes in the specified change set
+		/// </summary>
+		/// <param name="set"></param>
+		public int Evolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber)
+		{
+			int numErrors = 0;
+			Parallel.ForEach(fullMap.Values, ctr =>
+			{
+				try
+				{
+					ctr.entity.Evolve(set, roundNumber);
+				}
+				catch (Exception ex)
+				{
+					Log.Error(ctr.entity+": "+ex);
 
-		public void DispatchAll()
+					ic.FlagInconsistent(Simulation.MySpace.Relativate(ctr.entity.ID.Position));
+
+					Interlocked.Increment(ref numErrors);
+				}
+			});
+			return numErrors;
+		}
+
+		public Entity[] ToArray()
+		{
+			var tmp = Helper.ToArray(fullMap.Values);
+			Entity[] rs = new Entity[tmp.Length];
+			for (int i = 0; i < tmp.Length; i++)
+				rs[i] = tmp[i].entity;
+			return rs;
+		}
+
+		/// <summary>
+		/// Sends all queued messages and contact events in parallel to the respective entities.
+		/// All entities are recreated (these attributes are readonly)
+		/// </summary>
+			public void DispatchAll()
 		{
 			Parallel.ForEach(fullMap.Values, ctr =>
 			{

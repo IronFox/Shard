@@ -128,7 +128,7 @@ namespace Shard
 			public override string LogicID => logic.ID;
 
 
-			public override Changes Evolve(Entity currentState)
+			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
 				throw new NotImplementedException();
 			}

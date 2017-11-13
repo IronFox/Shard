@@ -5,7 +5,7 @@ namespace Shard
 {
 	public class InconsistencyCoverage : BitCube
 	{
-		public static int CommonResolution { get; set; }
+		public static int CommonResolution { get; set; } = 8;
 
 
 		private InconsistencyCoverage(BitCube raw) : base(raw)
@@ -62,7 +62,25 @@ namespace Shard
 			return new InconsistencyCoverage(SubCube(offset,size));
 		}
 
+		public void FlagInconsistent(Vec3 relative)
+		{
+			Int3 pixel = (relative * CommonResolution).FloorInt3;
+			this[pixel] = true;
+		}
 
+		public static InconsistencyCoverage NewCommon()
+		{
+			return new InconsistencyCoverage(new Int3(CommonResolution));
+		}
 
+		public bool IsInconsistent(Vec3 relative)
+		{
+			if ((relative < Vec3.Zero).Any)
+				throw new ArgumentOutOfRangeException(relative+" partially less than zero");
+			if ((relative > Vec3.One).Any)
+				throw new ArgumentOutOfRangeException(relative + " partially greater or equal to one");
+			Int3 pixel = Int3.Min( (relative * CommonResolution).FloorInt3, CommonResolution-1);
+			return this[pixel];
+		}
 	}
 }

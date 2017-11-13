@@ -13,6 +13,14 @@ namespace Shard
 			return rs;
 		}
 
+		public static T[] ToArray<T>(IEnumerable<T> enumerable)
+		{
+			List<T> list = new List<T>();
+			foreach (var e in enumerable)
+				list.Add(e);
+			return list.ToArray();
+		}
+
 		[StructLayout(LayoutKind.Explicit)]
 		public struct FloatAndUIntUnion
 		{
@@ -88,13 +96,71 @@ namespace Shard
 
 			public Comparator Append(byte[] a, byte[] b)
 			{
-				throw new NotImplementedException();
+				if (state == 0)
+				{
+					if (a == null && b == null)
+						return this;
+					if (a == null && b != null)
+						state = -1;
+					else
+					if (a != null && b == null)
+						state = 1;
+					else
+					{
+						if (a.Length < b.Length)
+							state = -1;
+						else
+							if (a.Length > b.Length)
+							state = 1;
+						else
+						{
+							for (int i = 0; i < a.Length; i++)
+								if (a[i] < b[i])
+								{
+									state = -1;
+									break;
+								}
+							else
+								if (a[i] > b[i])
+								{
+									state = 1;
+									break;
+								}
+						}
+					}
+				}
+				return this;
 				//return this;
 			}
 
 			public int Finish()
 			{
 				return state;
+			}
+		}
+
+		internal class HashCombiner
+		{
+			int hashCode = 2035686911;
+
+			public HashCombiner()
+			{
+			}
+
+			public HashCombiner Add(int hashCode)
+			{
+				this.hashCode = this.hashCode * -1521134295 + hashCode;
+				return this;
+			}
+
+			public HashCombiner Add<T>(T obj)
+			{
+				return Add(obj.GetHashCode());
+			}
+
+			public override int GetHashCode()
+			{
+				return hashCode;
 			}
 		}
 	}

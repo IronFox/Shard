@@ -179,7 +179,15 @@ namespace Shard
 
 				Parallel.For(0, input.FinalEntities.Length, (i) =>
 				{
-					input.FinalEntities[i].Evolve(data.localChangeSet);
+					try
+					{
+						input.FinalEntities[i].Evolve(data.localChangeSet,generation);
+					}
+					catch (Exception ex)
+					{
+						ic.FlagInconsistent(Simulation.MySpace.Relativate(input.FinalEntities[i].ID.Position));
+						Log.Error(input.FinalEntities[i] + ": " + ex);
+					}
 				});
 				
 

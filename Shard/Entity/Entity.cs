@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -52,7 +53,7 @@ namespace Shard
 
 		public override string ToString()
 		{
-			return Guid + " "+Position;
+			return Guid.ToString().Substring(0,13) + " "+Position;
 		}
 
 		public int CompareTo(EntityID other)
@@ -69,39 +70,10 @@ namespace Shard
 		}
 	}
 
-
-	public struct EntityAppearance : IComparable<EntityAppearance>, IHashable
+	public abstract class EntityAppearance : IComparable<EntityAppearance>, IHashable
 	{
-		//placeholder
-
-
-		public void Hash(Hasher h)
-		{
-		}
-
-		public int CompareTo(EntityAppearance other)
-		{
-			return 0;
-		}
-
-		public override bool Equals(object obj)
-		{
-			if (!(obj is EntityAppearance))
-			{
-				return false;
-			}
-
-			var appearance = (EntityAppearance)obj;
-			return true;
-		}
-
-		public override int GetHashCode()
-		{
-			var hashCode = -1170177454;
-			hashCode = hashCode * -1521134295 + base.GetHashCode();
-			return hashCode;
-		}
-
+		public abstract int CompareTo(EntityAppearance other);
+		public abstract void Hash(Hasher h);
 	}
 
 	public struct EntityContact : IComparable<EntityContact>, IHashable
@@ -202,14 +174,14 @@ namespace Shard
 
 			public struct Changes
 			{
-				public Vec3 motionVector;
+				public Vec3? newPosition;
 				public byte[][] broadcasts;
 				public Message[] messages;
-
 				public State newState;
+				public EntityAppearance newAppearance;
 			}
 
-			public abstract Changes Evolve(Entity currentState);
+			public abstract Changes Evolve(Entity currentState, int generation, Random randomSource);
 			public abstract byte[] BinaryState { get; }
 			public abstract string LogicID { get; }
 
@@ -259,23 +231,66 @@ namespace Shard
 			}
 		}
 
-		public void Evolve(EntityChangeSet outChangeSet)
+		public int FindContact(EntityID id)
+		{
+			if (Contacts == null)
+				return -1;
+			for (int i = 0; i < Contacts.Length; i++)
+				if (Contacts[i].ID == id)
+					return i;
+			return -1;
+		}
+		public int FindContact(Guid id)
+		{
+			if (Contacts == null)
+				return -1;
+			for (int i = 0; i < Contacts.Length; i++)
+				if (Contacts[i].ID.Guid == id)
+					return i;
+			return -1;
+		}
+
+		public bool HasContact(EntityID id)
+		{
+			return FindContact(id) != -1;
+		}
+
+		public bool HasContact(Guid guid)
+		{
+			return FindContact(guid) != -1;
+		}
+
+		public override string ToString()
+		{
+			return "Entity " + ID;
+		}
+
+		public void Evolve(EntityChangeSet outChangeSet, int roundNumber)
 		{
 			if (LogicState != null)
 			{
-				EntityLogic.State.Changes changes = LogicState.Evolve(this);
+				try
+				{
+					Random randomSource = new Random(new Helper.HashCombiner().Add(roundNumber).Add(ID).GetHashCode());
+					EntityLogic.State.Changes changes = LogicState.Evolve(this, roundNumber, randomSource);
 
-				int oID = 0;
-				if (changes.broadcasts != null)
-					foreach (var b in changes.broadcasts)
-						outChangeSet.Add(new EntityChangeSet.Broadcast(ID, b, oID++));
-				if (changes.messages != null)
-					foreach (var m in changes.messages)
-						outChangeSet.Add(new EntityChangeSet.Message(ID, oID++, m.receiver, m.data));
+					int oID = 0;
+					if (changes.broadcasts != null)
+						foreach (var b in changes.broadcasts)
+							outChangeSet.Add(new EntityChangeSet.Broadcast(ID, b, oID++));
+					if (changes.messages != null)
+						foreach (var m in changes.messages)
+							outChangeSet.Add(new EntityChangeSet.Message(ID, oID++, m.receiver, m.data));
 
-				Vec3 dest = ID.Position + changes.motionVector;
-				outChangeSet.Add(new EntityChangeSet.Motion(this, changes.newState, dest));	//motion doubles as logic-state-update
-				outChangeSet.Add(new EntityChangeSet.StateAdvertisement(new EntityContact(ID.Relocate(dest), Appearance,changes.motionVector)));
+					Vec3 dest = changes.newPosition ?? this.ID.Position;
+					outChangeSet.Add(new EntityChangeSet.Motion(this, changes.newState, changes.newAppearance, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChangeSet.StateAdvertisement(new EntityContact(ID.Relocate(dest), changes.newAppearance, dest - ID.Position)));
+				}
+				catch
+				{
+					outChangeSet.Add(new EntityChangeSet.StateAdvertisement(new EntityContact(ID, Appearance, Vec3.Zero)));
+					throw;
+				}
 			}
 		}
 

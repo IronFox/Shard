@@ -24,6 +24,11 @@ namespace Shard
 			System.Diagnostics.Debug.WriteLine(ex.Message);
 			Console.Error.WriteLine(ex.ToString());
 		}
+		public static void Error(string msg)
+		{
+			System.Diagnostics.Debug.WriteLine(msg);
+			Console.Error.WriteLine(msg);
+		}
 
 	}
 }
