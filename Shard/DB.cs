@@ -221,6 +221,10 @@ namespace Shard
 
 		internal static void Put(RCS.Serial serial)
 		{
+			
+		}
+		internal static void Put(SDS.Serial serial)
+		{
 			throw new NotImplementedException();
 		}
 	}

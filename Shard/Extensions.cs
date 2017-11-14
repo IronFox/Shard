@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard
 {
@@ -35,26 +36,45 @@ namespace Shard
 			}
 		}
 
+		public static T GetLast<T>(this List<T> list)
+		{
+			return list[list.Count - 1];
+		}
+
 		public static T PickRandom<T>(this T[] array, Random random)
 		{
 			return array[random.Next(array.Length)];
+		}
+
+		public static bool NextBool(this Random random)
+		{
+			return random.Next(2) == 1;
+		}
+
+		public static Bool3 NextBool3(this Random random)
+		{
+			return new Bool3(random.NextBool(), random.NextBool(), random.NextBool());
 		}
 
 		public static float NextFloat(this Random random, float min, float max)
 		{
 			return (float)random.NextDouble() * (max - min) + min;
 		}
+		public static float NextFloat(this Random random, Box.Range range)
+		{
+			return random.NextFloat(range.Min,range.InclusiveMax);
+		}
 
 		public static VectorMath.Vec3 NextVec3(this Random random, float min, float max)
 		{
 			return new VectorMath.Vec3(random.NextFloat(min, max), random.NextFloat(min, max), random.NextFloat(min, max));
 		}
-		public static VectorMath.Vec3 NextVec3(this Random random, SpaceCube cube)
+		public static VectorMath.Vec3 NextVec3(this Random random, Box cube)
 		{
 			return new VectorMath.Vec3(
-				random.NextFloat(cube.Min.X, cube.Max.X),
-				random.NextFloat(cube.Min.Y, cube.Max.Y),
-				random.NextFloat(cube.Min.Z, cube.Max.Z));
+				random.NextFloat(cube.X),
+				random.NextFloat(cube.Y),
+				random.NextFloat(cube.Z));
 		}
 
 		public static T[] ToArray<T>(this ICollection<T> collection)

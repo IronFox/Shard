@@ -1,16 +1,18 @@
 ﻿using System;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 using VectorMath;
 
 namespace Shard
 {
-
+	[Serializable()]
 	public class RCS : EntityChangeSet
 	{
 		public new class Serial
 		{
 			public string _id, _rev;
 
-			public EntityChangeSet.Serial CS { get; set; }
+			public byte[] CS { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
 			public int[] NumericID { get; set; }
 			public int Generation { get; set; }
@@ -19,15 +21,15 @@ namespace Shard
 		public readonly string Revision;
 		public readonly InconsistencyCoverage IC;
 
-		public RCS(Serial rcs) : base(rcs.Generation)
+		public RCS(Serial rcs)
 		{
 			Revision = rcs._rev;
 			IC = new InconsistencyCoverage(rcs.IC);
 		}
 
-		public RCS(int generation, EntityChangeSet localCS, SpaceCube cube, InconsistencyCoverage ic) : base(generation)
+		public RCS(EntityChangeSet localCS, Box cube, InconsistencyCoverage ic)
 		{
-			base.Load(localCS, cube);
+			base.Include(localCS, cube);
 			IC = ic;
 		}
 
@@ -46,7 +48,7 @@ namespace Shard
 
 			public override string ToString()
 			{
-				return FromShard.Encoded + '-' + ToShard.Encoded;
+				return FromShard.Encoded + "->" + ToShard.Encoded;
 			}
 
 			public override int GetHashCode() => (FromShard.GetHashCode() * 31 + ToShard.GetHashCode());
@@ -128,14 +130,18 @@ namespace Shard
 			}
 		}
 
-		public Serial Export(ID myID)
+		public Serial Export(GenID genID)
 		{
-			var genID = new GenID(myID, Generation);
 			Serial rs = new Serial();
-			rs.Generation = Generation;
+			rs.Generation = genID.Generation;
 			rs.NumericID = genID.IntArray;
 			rs.IC = IC.Export();
-			rs.CS = base.Export();
+			using (var ms = new MemoryStream())
+			{
+				EntityChangeSet cs = this;
+				new BinaryFormatter().Serialize(ms, cs);
+				rs.CS = ms.ToArray();
+			}
 
 			rs._id = genID.ToString();
 			rs._rev = Revision;

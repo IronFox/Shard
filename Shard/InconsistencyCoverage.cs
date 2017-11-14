@@ -62,25 +62,44 @@ namespace Shard
 			return new InconsistencyCoverage(SubCube(offset,size));
 		}
 
-		public void FlagInconsistent(Vec3 relative)
+		public void FlagInconsistentR(Vec3 relative)
 		{
-			Int3 pixel = (relative * CommonResolution).FloorInt3;
-			this[pixel] = true;
+			this[ToPixelR(relative)] = true;
+		}
+		public void FlagInconsistentR(Vec3 relative, Int3 offset)
+		{
+			this[ToPixelR(relative) + offset] = true;
 		}
 
 		public static InconsistencyCoverage NewCommon()
 		{
 			return new InconsistencyCoverage(new Int3(CommonResolution));
 		}
+		public InconsistencyCoverage Clone()
+		{
+			var rs = new InconsistencyCoverage(Int3.Zero);
+			rs.LoadCopy(this);
+			return rs;
+		}
 
-		public bool IsInconsistent(Vec3 relative)
+
+		public static Int3 ToPixelR(Vec3 relative)
 		{
 			if ((relative < Vec3.Zero).Any)
-				throw new ArgumentOutOfRangeException(relative+" partially less than zero");
+				throw new ArgumentOutOfRangeException(relative + " partially less than zero");
 			if ((relative > Vec3.One).Any)
 				throw new ArgumentOutOfRangeException(relative + " partially greater or equal to one");
-			Int3 pixel = Int3.Min( (relative * CommonResolution).FloorInt3, CommonResolution-1);
-			return this[pixel];
+			return Int3.Min((relative * CommonResolution).FloorInt3, CommonResolution - 1);
+		}
+
+		/// <summary>
+		/// Checks whether or not a location in [0,1] is consistent according to the local IC
+		/// </summary>
+		/// <param name="relative"></param>
+		/// <returns></returns>
+		public bool IsInconsistentR(Vec3 relative)
+		{
+			return this[ToPixelR(relative)];
 		}
 	}
 }

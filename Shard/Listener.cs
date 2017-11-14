@@ -40,6 +40,8 @@ namespace Shard
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
 						Host host = new Host(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
 						Link link = linkLookup(host);
+						if (link == null)
+							throw new Exception("Unable to find link for "+host);
 							//Simulation.FindLink(host.ID);
 						link.SetPassiveClient(client);
 					}

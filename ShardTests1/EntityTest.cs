@@ -116,7 +116,7 @@ namespace ShardTests1
 				return new State();
 			}
 
-			public class State : EntityLogic.State
+			public new class State : EntityLogic.State
 			{
 				public override byte[] BinaryState => throw new NotImplementedException();
 
@@ -156,7 +156,7 @@ namespace ShardTests1
 			int any = -1;
 			for (int i = 0; i < 8; i++)
 			{
-				EntityChangeSet set = new EntityChangeSet(i);
+				EntityChangeSet set = new EntityChangeSet();
 				int numErrors = pool.Evolve(set,ic,i);
 				if (numErrors != 0)
 				{
@@ -196,7 +196,7 @@ namespace ShardTests1
 				bool doGrow = k % 2 != 0;
 				for (int i = 0; i < InconsistencyCoverage.CommonResolution; i++)	//no point going further than current resolution
 				{
-					EntityChangeSet set = new EntityChangeSet(i);
+					EntityChangeSet set = new EntityChangeSet();
 					int numErrors = pool.Evolve(set, ic, i);
 					Assert.AreEqual(0, set.Execute(pool));
 					//Assert.AreEqual(ic.OneCount, 1);
@@ -236,7 +236,7 @@ namespace ShardTests1
 							Assert.IsNotNull(e.Appearance);
 						}
 						bool consistent = LogicState.IsConsistent(e.Appearance);
-						bool icIsInc = ic.IsInconsistent(Simulation.MySpace.Relativate(e.ID.Position));
+						bool icIsInc = ic.IsInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
 						if (!consistent && !icIsInc)
 						{
@@ -259,13 +259,18 @@ namespace ShardTests1
 		}
 
 
+		public static EntityPool RandomDefaultPool(int numEntities)
+		{
+			return new EntityPool(EntityPoolTests.CreateEntities(100, random, new Logic()));
+		}
+
 		[TestMethod]
 		public void StateAdvertisementTest()
 		{
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, random, new Logic()));
+			EntityPool pool = RandomDefaultPool(100);
 			for (int i = 0; i < 100; i++)
 			{
-				EntityChangeSet set = new EntityChangeSet(i);
+				EntityChangeSet set = new EntityChangeSet();
 				pool.Evolve(set,null,i);
 				Assert.AreEqual(0, set.Execute(pool));
 
@@ -310,7 +315,7 @@ namespace ShardTests1
 			for (int i = 0; i < 100; i++)
 			{
 				var old = pool.ToArray();
-				EntityChangeSet set = new EntityChangeSet(i);
+				EntityChangeSet set = new EntityChangeSet();
 				pool.Evolve(set,null,i);
 				Assert.AreEqual(0, set.Execute(pool));
 				Entity e1;

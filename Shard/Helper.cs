@@ -29,6 +29,14 @@ namespace Shard
 			[FieldOffset(0)]
 			public float FloatValue;
 		}
+
+		public static float IntToFloat(int v)
+		{
+			FloatAndUIntUnion f2i = default(FloatAndUIntUnion);
+			f2i.Int32Bits = v; 
+			return f2i.FloatValue;
+		}
+
 		public static int FloatToInt2(float f)
 		{
 			FloatAndUIntUnion f2i = default(FloatAndUIntUnion);

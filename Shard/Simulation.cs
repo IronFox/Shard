@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Globalization;
+using System.Collections.Concurrent;
 
 namespace Shard
 {
@@ -15,13 +16,13 @@ namespace Shard
 		public static float R { get; private set; } = 1f / 8;
 		public static float M { get; private set; } = 1f / 16;
 
-		private static List<Link> neighbors = new List<Link>();
-		private static Link[] siblings;
+		private static Neighborhood neighbors,
+									siblings;
+
 		private static Listener listener;
 		private static DateTime startDate;
 
-
-		private static List<SDS> sdsList = new List<SDS>();
+		private static SDSStack stack = new SDSStack();
 
 
 		public static IEnumerable<Link> Neighbors { get { return neighbors; } }
@@ -29,47 +30,24 @@ namespace Shard
 
 
 
-		private static void Trim()
+
+		public static void AdvertiseOldestGeneration(int gen)
 		{
-			int newest = NewestConsistentSDSIndex;
-			if (newest == 0)
-				return;
-
-			sdsList.RemoveRange(0, newest);
-
-			AdvertiseOldestGeneration(OldestSDS.Generation);
-		}
-
-		private static void AdvertiseOldestGeneration(int gen)
-		{
-			var data = new OldestGeneration(OldestSDS.Generation);
-			foreach (var lnk in siblings)
-				lnk.Set("OldestGeneration", data);
-			foreach (var lnk in neighbors)
-				lnk.Set("OldestGeneration", data);
+			var data = new OldestGeneration(gen);
+			siblings.AdvertiseOldestGeneration(data);
+			neighbors.AdvertiseOldestGeneration(data);
 		}
 
 		public static Link FindLink(ShardID id)
 		{
 			if (id.XYZ == ID.XYZ)
-			{
-				foreach (var s in siblings)
-					if (s.ID == id)
-						return s;
-				throw new Exception("Unable to find sibling shard with ID " + id);
-			}
-			foreach (var n in neighbors)
-				if (n.ID == id)
-					return n;
-			throw new Exception("Unable to find neighbor shard with ID " + id);
+				return siblings.Find(id);
+			return neighbors.Find(id);
 		}
 
 		public static bool NeighborExists(Int3 coordinates)
 		{
-			foreach (var n in neighbors)
-				if (n.ID.XYZ == coordinates)
-					return true;
-			return false;
+			return neighbors.Find(coordinates) != null;
 		}
 
 
@@ -82,128 +60,27 @@ namespace Shard
 			}
 		}
 
-		public static SDS NewestSDS
+		public static SDSStack Stack
 		{
 			get
 			{
-				return sdsList[sdsList.Count - 1];
-			}
-		}
-
-		public static SDS OldestSDS
-		{
-			get
-			{
-				return sdsList[0];
+				return stack;
 			}
 		}
 
 
-		public static int NewestConsistentSDSIndex
-		{
-			get
-			{
-				for (int i = sdsList.Count - 1; i >= 0; i--)
-				{
-					if (sdsList[i].IsFullyConsistent)
-						return i;
-				}
-				return -1;
-			}
-		}
 
-		public static SDS AllocateGeneration(int gen)
-		{
-			if (gen < sdsList[0].Generation)
-				return null;
-			while (gen > NewestSDS.Generation)
-			{
-				int gen2 = NewestSDS.Generation + 1;
-				sdsList.Add(new SDS(gen2));
-			}
-			return sdsList[gen - sdsList[0].Generation];
-		}
-		public static SDS FindGeneration(int gen)
-		{
-			if (gen < OldestSDS.Generation || gen > NewestConsistentSDS.Generation)
-				return null;
-			return sdsList[gen - OldestSDS.Generation];
-		}
-
-		public static void Insert(SDS sds)
-		{
-			if (sds.Generation > NewestSDS.Generation)
-			{
-				while (sds.Generation+1 > NewestSDS.Generation)
-				{
-					int gen2 = NewestSDS.Generation + 1;
-					sdsList.Add(new SDS(gen2));
-				}
-				//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
-				sdsList.Add(sds);
-				Trim();
-			}
-			else
-			{
-				int at = sds.Generation - OldestSDS.Generation;
-				sdsList[at] = sds;
-			}
-			Trim();
-		}
-
-		public static SDS NewestConsistentSDS
-		{
-			get
-			{
-				return sdsList[NewestConsistentSDSIndex];
-			}
-		}
 
 		public static int NeighborCount { get { return neighbors.Count; } }
+
+
+		private static ConcurrentBag<Tuple<Link, object>> incoming = new ConcurrentBag<Tuple<Link, object>>();
+
 
 		public static void Init(ShardID addr)
 		{
 			//Host.Domain = ;
-
-			ID = addr;
-			ext = DB.Config.extent;
-			R = DB.Config.r;
-			M = DB.Config.m;
-
-
-			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling( 1f / R);
-
-
-			if (ext.ReplicaLevel > 1)
-			{
-				int at = 0;
-				siblings = new Link[ext.ReplicaLevel - 1];
-				for (int i = 0; i < ext.ReplicaLevel; i++)
-					if (i != addr.ReplicaLevel)
-					{
-						siblings[at] = new Link(new ShardID(addr.XYZ, i), i > addr.ReplicaLevel,at,true);
-						at++;
-					}
-			}
-
-			{
-				for (int x = addr.X - 1; x <= addr.X + 1; x++)
-					for (int y = addr.Y - 1; y <= addr.Y + 1; y++)
-						for (int z = addr.Z - 1; z <= addr.Z + 1; z++)
-						{
-							Int3 a = new Int3(x, y, z);
-							if (a == addr.XYZ)
-								continue;
-
-							if ((a >= Int3.Zero).All && (a < ext.XYZ).All)
-							{
-								int linear = neighbors.Count;
-								neighbors.Add(new Link(new ShardID(a, addr.ReplicaLevel), a.OrthographicCompare(addr.XYZ) > 0,linear,false));
-							}
-						}
-			}
-			MySpace = new SpaceCube(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
-
+			Configure(addr, DB.Config);
 			AdvertiseOldestGeneration(0);
 
 			listener = new Listener(h => Simulation.FindLink(h.ID));
@@ -220,12 +97,13 @@ namespace Shard
 					sds = new SDS(data);
 					break;
 				}
+				CheckIncoming();
 				Thread.Sleep(1000);
 				Console.Write('.');
 				Console.Out.Flush();
 			}
 			Console.WriteLine(" done");
-			sdsList.Add(sds);
+			stack.Append(sds);
 
 			startDate = DateTime.Parse(DB.Config.start,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal);
 			Console.WriteLine("Start Date="+startDate);
@@ -246,11 +124,14 @@ namespace Shard
 
 			Console.Write("Catching up...");
 			Console.Out.Flush();
-			while (NewestSDS.Generation < TimeStep)
+			while (stack.NewestSDSGeneration < TimeStep)
 			{
 				Console.Write(".");
 				Console.Out.Flush();
-				Insert(new SDS.Computation(NewestSDS.Generation + 1).Complete());
+				int nextGen = stack.NewestSDSGeneration + 1;
+				stack.Append(new SDS(nextGen));
+				stack.Insert(new SDS.Computation(nextGen).Complete());
+				CheckIncoming();
 			}
 			Console.WriteLine("done. Starting main loop...");
 
@@ -260,6 +141,8 @@ namespace Shard
 			SDS.Computation comp = null;
 			while (true)
 			{
+				CheckIncoming();
+
 				int timeStep = (int)((Clock.Now - startDate).TotalMilliseconds / DB.Config.msPerTimeStep);
 				Console.WriteLine("at " + timeStep);
 
@@ -269,22 +152,24 @@ namespace Shard
 				int msRemainingInSubStep = (recoveryIndex + 1) * msPerSubStep - msIntoStep;
 				int msRemainingUntilCompletion = (recoveryIndex + 1) * msPerSubStep - msCompletion - msIntoStep;
 
-				if (timeStep != NewestSDS.Generation)
+				if (timeStep != stack.NewestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
-					comp = new SDS.Computation(NewestSDS.Generation+1);
+					int nextGen = stack.NewestSDSGeneration + 1;
+					stack.Append(new SDS(nextGen));
+					comp = new SDS.Computation(nextGen+1);
 				}
 				else
 				{
 					//see if we can recover something
 
-					int at = NewestConsistentSDSIndex + 1;
-					if (at < sdsList.Count)
+					int at = stack.NewestConsistentSDSIndex + 1;
+					if (at < stack.Size)
 					{
-						int currentGen = sdsList[at].Generation;
-						for (; at < sdsList.Count; at++)
+						int currentGen = stack[at].Generation;
+						for (; at < stack.Size; at++)
 						{
-							SDS current = sdsList[at];
+							SDS current = stack[at];
 							if (current.SignificantInboundChange)
 								break;
 
@@ -293,14 +178,14 @@ namespace Shard
 							if (check.ShouldRecoverThis)
 								break;
 						}
-						if (at < sdsList.Count)
-							comp = new SDS.Computation(sdsList[at].Generation);
+						if (at < stack.Size)
+							comp = new SDS.Computation(stack[at].Generation);
 					}
 				}
 
 				if (msRemainingUntilCompletion <= 0 && comp != null)
 				{
-					Insert(comp.Complete());
+					stack.Insert(comp.Complete());
 					comp = null;
 				}
 
@@ -311,12 +196,29 @@ namespace Shard
 			}
 		}
 
+		public static void Configure(ShardID addr, DB.ConfigContainer config)
+		{
+			ID = addr;
+			ext = config.extent;
+			R = config.r;
+			M = config.m;
+
+			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / R);
+
+			if (ext.ReplicaLevel > 1)
+				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel);
+			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ);
+
+			MySpace = Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
+
+		}
+
 		public static bool Owns(Vec3 position)
 		{
 			return MySpace.Contains(position);
 		}
 
-		public static SpaceCube MySpace { get; private set; } = new SpaceCube(Vec3.Zero, Vec3.One, Bool3.True);
+		public static Box MySpace { get; private set; } = Box.OffsetSize(Vec3.Zero, Vec3.One, Bool3.True);
 		public static float SensorRange { get { return R - M; } }
 
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
@@ -338,96 +240,107 @@ namespace Shard
 
 		internal static void FetchIncoming(Link lnk, object obj)
 		{
-			if (obj is OldestGeneration)
+			incoming.Add(new Tuple<Link, object>(lnk, obj));
+		}
+
+		private static void CheckIncoming()
+		{
+			Tuple<Link, object> pair;
+			while (incoming.TryTake(out pair))
 			{
-				int gen = ((OldestGeneration)obj).Generation;
-				if (gen == lnk.OldestGeneration)
+				object obj = pair.Item2;
+				Link lnk = pair.Item1;
+
+				if (obj is OldestGeneration)
 				{
-					Console.Error.WriteLine("OldestGen update from sibling " + lnk + ": Warning: Already moved past generation " + gen);
-					return;
-				}
-				if (gen > lnk.OldestGeneration)
-				{
-					lnk.OldestGeneration = gen;
+					int gen = ((OldestGeneration)obj).Generation;
+					if (gen == lnk.OldestGeneration)
 					{
-						lnk.Filter((id, o) =>
-						{
-							SDS.Serial sds = o as SDS.Serial;
-							if (sds != null)
-								return sds.Generation >= gen;
-							RCS.Serial rcs = o as RCS.Serial;
-							if (rcs != null)
-								return rcs.Generation >= gen;
-							return true;
-						});
+						Console.Error.WriteLine("OldestGen update from sibling " + lnk + ": Warning: Already moved past generation " + gen);
+						return;
 					}
-				}
-				else
-				{
-					foreach (var sds in sdsList)
+					if (gen > lnk.OldestGeneration)
 					{
-						if (sds.Generation < gen)
-							continue;
-						if (lnk.IsSibling && sds.IsFullyConsistent)
-							lnk.Set(new SDS.ID(ID.XYZ, sds.Generation).P2PKey, sds.Export());
-						if (!lnk.IsSibling)
+						lnk.OldestGeneration = gen;
 						{
-							var rcs = sds.OutboundRCS[lnk.LinearIndex];
-							if (rcs != null)
+							lnk.Filter((id, o) =>
 							{
-								var id = lnk.OutboundRCS(rcs.Generation);
-								lnk.Set(id.ToString(), rcs.Export(id.ID));
+								SDS.Serial sds = o as SDS.Serial;
+								if (sds != null)
+									return sds.Generation >= gen;
+								RCS.Serial rcs = o as RCS.Serial;
+								if (rcs != null)
+									return rcs.Generation >= gen;
+								return true;
+							});
+						}
+					}
+					else
+					{
+						foreach (var sds in stack)
+						{
+							if (sds.Generation < gen)
+								continue;
+							if (lnk.IsSibling && sds.IsFullyConsistent)
+								lnk.Set(new SDS.ID(ID.XYZ, sds.Generation).P2PKey, sds.Export());
+							if (!lnk.IsSibling)
+							{
+								var rcs = sds.OutboundRCS[lnk.LinearIndex];
+								if (rcs != null)
+								{
+									var id = lnk.OutboundRCS(sds.Generation);
+									lnk.Set(id.ToString(), rcs.Export(id));
+								}
 							}
 						}
 					}
-				}
-				return;
-			}
-			if (obj is RCS.Serial)
-			{
-				RCS.Serial rcs = (RCS.Serial)obj;
-				if (rcs.Generation <= NewestConsistentSDS.Generation)
-				{
-					Console.Error.WriteLine("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
 					return;
 				}
-				AllocateGeneration(rcs.Generation).FetchNeighborUpdate(lnk, rcs);
-				return;
-			}
+				if (obj is RCS.Serial)
+				{
+					RCS.Serial rcs = (RCS.Serial)obj;
+					if (rcs.Generation <= stack.NewestConsistentSDSGeneration)
+					{
+						Console.Error.WriteLine("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
+						return;
+					}
+					stack.AllocateGeneration(rcs.Generation).FetchNeighborUpdate(lnk, rcs);
+					return;
+				}
 
-			if (obj is SDS.Serial)
-			{
-				Debug.Assert(HaveSibling(lnk));
-				SDS.Serial raw = (SDS.Serial)obj;
-				if (raw.Generation <= OldestSDS.Generation)
+				if (obj is SDS.Serial)
 				{
-					Console.Error.WriteLine("SDS update from sibling "+lnk+": Rejected. Already moved past generation "+raw.Generation);
+					Debug.Assert(HaveSibling(lnk));
+					SDS.Serial raw = (SDS.Serial)obj;
+					if (raw.Generation <= stack.OldestSDSGeneration)
+					{
+						Console.Error.WriteLine("SDS update from sibling " + lnk + ": Rejected. Already moved past generation " + raw.Generation);
+						return;
+					}
+					SDS existing = stack.FindGeneration(raw.Generation);
+					if (existing.IsFullyConsistent)
+					{
+						Console.Error.WriteLine("SDS update from sibling " + lnk + ": Rejected. Generation already consistent: " + raw.Generation);
+						return;
+					}
+					SDS sds = new SDS(raw);
+					if (sds.IsFullyConsistent)
+					{
+						Console.Out.WriteLine("SDS update from sibling " + lnk + ": Accepted generation " + raw.Generation);
+						stack.Insert(sds);
+						return;
+					}
+					SDS merged = existing.MergeWith(sds);
+					Console.Out.WriteLine("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
+					if (merged.Inconsistency < existing.Inconsistency)
+						stack.Insert(merged);
+					if (merged.Inconsistency < sds.Inconsistency)
+						lnk.Set(new SDS.ID(ID.XYZ, raw.Generation).P2PKey, merged.Export());
 					return;
 				}
-				SDS existing = FindGeneration(raw.Generation);
-				if (existing.IsFullyConsistent)
-				{
-					Console.Error.WriteLine("SDS update from sibling " + lnk + ": Rejected. Generation already consistent: " + raw.Generation);
-					return;
-				}
-				SDS sds = new SDS(raw);
-				if (sds.IsFullyConsistent)
-				{
-					Console.Out.WriteLine("SDS update from sibling " + lnk + ": Accepted generation "+raw.Generation);
-					Insert(sds);
-					return;
-				}
-				SDS merged = existing.MergeWith(sds);
-				Console.Out.WriteLine("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
-				if (merged.Inconsistency < existing.Inconsistency)
-					Insert(merged);
-				if (merged.Inconsistency < sds.Inconsistency)
-					lnk.Set(new SDS.ID(ID.XYZ,raw.Generation).P2PKey, merged.Export());
-				return;
+
+				Console.Error.WriteLine("Unsupported update from sibling " + lnk + ": " + obj.GetType());
 			}
-
-			Console.Error.WriteLine("Unsupported update from sibling " + lnk + ": "+obj.GetType());
-
 		}
 
 		public static float GetDistance(Vec3 a, Vec3 b)

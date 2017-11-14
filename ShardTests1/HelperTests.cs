@@ -22,7 +22,9 @@ namespace Shard.Tests
 			Assert.AreEqual(b0, b2);
 
 			float back = BitConverter.ToSingle(BitConverter.GetBytes(b2), 0);
+			float back2 = Helper.IntToFloat(b2);
 			Assert.AreEqual(f, back);
+			Assert.AreEqual(back2, back);
 		}
 
 		[TestMethod()]

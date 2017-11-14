@@ -7,9 +7,17 @@ namespace Shard
 	public class BitCube : IHashable
 	{
 		private uint[,,] grid;
-		public const int BitsPerEntry = 32;
+		public const int BytesPerEntry = 4;
+		public const int BitsPerEntry = BytesPerEntry*8;
 		public const uint HighestBit = (1u << (BitsPerEntry - 1));
 
+		/// <summary>
+		/// Number of cells (bits) that contain a 1. -1 if currently unknown
+		/// </summary>
+		private int oneCount = -1;
+		/// <summary>
+		/// Bit size of the local cube. Actually stored bits may exceed this value
+		/// </summary>
 		private Int3 size;
 		public Int3 Size
 		{
@@ -21,10 +29,13 @@ namespace Shard
 			{
 				if (size == value)
 					return;
-				UpdateSize(size);
+				UpdateSize(value);
 			}
 		}
 
+		/// <summary>
+		/// Determines the size of the actual grid
+		/// </summary>
 		private Int3 GridSize
 		{
 			get
@@ -33,6 +44,9 @@ namespace Shard
 			}
 		}
 
+		/// <summary>
+		/// Returns a linear enumerable of the local grid
+		/// </summary>
 		private IEnumerable<uint> Flat
 		{
 			get
@@ -65,22 +79,18 @@ namespace Shard
 			UpdateSize(size);
 		}
 
-		public static bool operator==(BitCube a, BitCube b)
-		{
-			return a.size == b.size && 
-				((a.grid == null && b.grid == null)
-				||
-				System.Linq.Enumerable.SequenceEqual(a.Flat, b.Flat));
-		}
-		public static bool operator !=(BitCube a, BitCube b)
-		{
-			return !(a == b);
-		}
 
 		public override bool Equals(object obj)
 		{
-			return obj is BitCube && ((BitCube)obj == this);
+			var other = obj as BitCube;
+			if (other == null)
+				return false;
+			return size == other.size && 
+				((grid == null && other.grid == null)
+				||
+				System.Linq.Enumerable.SequenceEqual(Flat, other.Flat));
 		}
+
 
 		public override int GetHashCode()
 		{
@@ -114,7 +124,50 @@ namespace Shard
 			oneCount = source.oneCount;
 		}
 
-		private int oneCount = -1;
+		public void LoadCopy(BitCube source)
+		{
+			UpdateSize(source.size);
+			Buffer.BlockCopy(source.grid, 0, grid, 0, GridSize.Product * BytesPerEntry);
+			oneCount = source.oneCount;
+		}
+
+		public void Include(BitCube other, Int3 offset)
+		{
+			if ((offset >= size).Any)
+				return;
+
+			Int3 sourceStart = Int3.Max(-offset,0);
+			Int3 sourceCount = other.Size - sourceStart;
+
+			Int3 destStart = Int3.Max(offset, 0);
+			sourceCount = Int3.Min(destStart + sourceCount, size) - destStart;
+
+			Int3 at = new Int3();
+			for (at.X = 0; at.X < sourceCount.X; at.X++)
+				for (at.Y = 0; at.Y < sourceCount.Y; at.Y++)
+					for (at.Z = 0; at.Z < sourceCount.Z; at.Z++)
+					{
+						this[at + destStart] |= other[at + sourceStart];
+					}
+		}
+
+		public void SetOne(Int3 offset, Int3 count)
+		{
+			Int3 sourceStart = Int3.Max(-offset, 0);
+			Int3 sourceCount = count - sourceStart;
+			Int3 destStart = Int3.Max(offset, 0);
+			sourceCount = Int3.Min(destStart + sourceCount, size) - destStart;
+
+			Int3 at = new Int3();
+			for (at.X = 0; at.X < sourceCount.X; at.X++)
+				for (at.Y = 0; at.Y < sourceCount.Y; at.Y++)
+					for (at.Z = 0; at.Z < sourceCount.Z; at.Z++)
+					{
+						this[at + destStart] = true;
+					}
+		}
+
+
 
 		public bool IsEmpty {
 			get
@@ -291,6 +344,21 @@ namespace Shard
 						grid[x, y, grid.GetLength(2) - 1] = edgeValue;
 				}
 			oneCount = Size.Product;
+		}
+
+		public int OneCountIn(Int3 offset, Int3 count)
+		{
+			Int3 count3 = count - Int3.Max(-offset, 0);
+			offset = Int3.Max(offset, 0);
+			count3 = Int3.Min(offset + count3, size) - offset;
+
+			Int3 at = new Int3();
+			int rs = 0;
+			for (at.X = 0; at.X < count3.X; at.X++)
+				for (at.Y = 0; at.Y < count3.Y; at.Y++)
+					for (at.Z = 0; at.Z < count3.Z; at.Z++)
+						rs += this[at + offset] ? 1 : 0;
+			return rs;
 		}
 
 		public bool this[int x, int y, int z]

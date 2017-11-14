@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,12 +11,12 @@ using VectorMath;
 namespace Shard
 {
 
-	public class EntityChangeSet
+	[Serializable()]
+	public class EntityChangeSet : ISerializable
 	{
-		public readonly int Generation;
 
-
-		private class Set<T> where T : Change
+		[Serializable]
+		private class Set<T> : ISerializable where T : Change
 		{
 			private ConcurrentBag<T> bag = new ConcurrentBag<T>();
 
@@ -24,6 +25,27 @@ namespace Shard
 				bag.Add(item);
 			}
 
+			public Set<T> Clone()
+			{
+				Set<T> rs = new Set<T>();
+				foreach (T el in bag)
+					rs.bag.Add(el);	// no need to clone: all readonly
+				if (rs.bag.Count != bag.Count)
+					throw new IntegrityViolation("Count mismatch: "+rs.bag.Count +" != "+bag.Count);
+				return rs;
+			}
+
+			public void Include(Set<T> other)
+			{
+				foreach (T el in other.bag)
+					bag.Add(el);
+			}
+			public void Include(Set<T> other, Box targetSpace)
+			{
+				foreach (T el in other.bag)
+					if (el.TargetIsLocatedIn(targetSpace))
+						Add(el);
+			}
 
 			public int Execute(EntityPool pool)
 			{
@@ -36,11 +58,24 @@ namespace Shard
 
 			public T FindOrigin(EntityID id)
 			{
-				T[] ar = bag.ToArray();
-				foreach (var c in ar)
+				foreach (var c in bag)
 					if (c.Origin == id)
 						return c;
 				return null;
+			}
+
+			public Set()
+			{ }
+			public Set(SerializationInfo info, StreamingContext context)
+			{
+				T[] ar = (T[])info.GetValue("Changes", typeof( T[] ));
+				foreach (var c in ar)
+					bag.Add(c);
+			}
+
+			public void GetObjectData(SerializationInfo info, StreamingContext context)
+			{
+				info.AddValue("Changes", bag.ToArray());
 			}
 		}
 
@@ -89,21 +124,23 @@ namespace Shard
 			return numErrors;
 		}
 
-		internal void Load(EntityChangeSet localCS, SpaceCube cube)
+		/// <summary>
+		/// Selectively adds all remote changes whose target lies within the given target space
+		/// </summary>
+		/// <param name="remote">Source of the changes to add</param>
+		/// <param name="targetSpace">Space to check for. Only changes whose target lies within this cube are added</param>
+		public void Include(EntityChangeSet remote, Box targetSpace)
 		{
-			throw new NotImplementedException();
+			messages.Include(remote.messages, targetSpace);
+			motions.Include(remote.motions, targetSpace);
+			removals.Include(remote.removals, targetSpace);
+			instantiations.Include(remote.instantiations, targetSpace);
+			advertisements.Include(remote.advertisements, targetSpace);
 		}
 
-		internal Serial Export()
-		{
-			throw new NotImplementedException();
-		}
 
-		public EntityChangeSet(int generation)
-		{
-			Generation = generation;
-		}
 
+		[Serializable()]
 		public abstract class Change : IComparable
 		{
 			public readonly EntityID Origin;
@@ -113,10 +150,13 @@ namespace Shard
 				Origin = origin;
 			}
 
+			public abstract bool TargetIsLocatedIn(Box cube);
+
 			public abstract int CompareTo(object other);
 			public abstract bool Execute(EntityPool pool);
 		}
 
+		[Serializable]
 		public class Removal : Change
 		{
 			public readonly EntityID Target;
@@ -141,8 +181,14 @@ namespace Shard
 			{
 				return pool.FindAndRemove(Target, e => Simulation.CheckDistance("Removal", Target.Position, e, Simulation.M));
 			}
+
+			public override bool TargetIsLocatedIn(Box cube)
+			{
+				return cube.Contains(Target.Position);
+			}
 		}
 
+		[Serializable]
 		public class Instantiation : Change
 		{
 			public readonly Vec3 TargetLocation;
@@ -178,11 +224,17 @@ namespace Shard
 					return false;
 				return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), LogicID, LogicState, Appearance, null, null));
 			}
+
+			public override bool TargetIsLocatedIn(Box cube)
+			{
+				return cube.Contains(TargetLocation);
+			}
 		}
 
+		[Serializable]
 		public class Motion : Instantiation
 		{
-			public readonly EntityLogic.State DirectState;
+			[NonSerialized()] public readonly EntityLogic.State DirectState;
 			public Motion(EntityID origin, Vec3 targetLocation, EntityAppearance appearance, string logicID, byte[] logicState, bool isInconsistent) : base(origin, targetLocation, appearance, logicID, logicState)
 			{}
 
@@ -249,6 +301,51 @@ namespace Shard
 			return advertisements.FindOrigin(id);
 		}
 
+		public EntityChangeSet Clone()
+		{
+			EntityChangeSet rs = new EntityChangeSet();
+			rs.advertisements = advertisements.Clone();
+			rs.instantiations = instantiations.Clone();
+			rs.messages = messages.Clone();
+			rs.motions = motions.Clone();
+			rs.removals = removals.Clone();
+			return rs;
+		}
+
+		public void Include(EntityChangeSet cs)
+		{
+			advertisements.Include(cs.advertisements);
+			instantiations.Include(cs.instantiations);
+			messages.Include(cs.messages);
+			motions.Include(cs.motions);
+			removals.Include(cs.removals);
+		}
+
+		public void GetObjectData(SerializationInfo info, StreamingContext context)
+		{
+			info.AddValue("advertisements", advertisements);
+			info.AddValue("instantiations", instantiations);
+			info.AddValue("messages", messages);
+			info.AddValue("motions", motions);
+			info.AddValue("removals", removals);
+		}
+
+		public EntityChangeSet() { }
+
+		private static void Get<T>(string name, ref Set<T> set, SerializationInfo info) where T : Change
+		{
+			set = (Set<T>)info.GetValue(name, typeof(Set<T>));
+		}
+		public EntityChangeSet(SerializationInfo info, StreamingContext context)
+		{
+			Get("advertisements", ref advertisements, info);
+			Get("instantiations", ref instantiations, info);
+			Get("messages", ref messages, info);
+			Get("motions", ref motions, info);
+			Get("removals", ref removals, info);
+		}
+
+		[Serializable]
 		public class Broadcast : Change
 		{
 			public readonly byte[] Payload;
@@ -291,8 +388,15 @@ namespace Shard
 				pool.BroadcastMessage(Origin.Position, Message);
 				return true;
 			}
+
+			public override bool TargetIsLocatedIn(Box cube)
+			{
+				float r = Simulation.R;
+				return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			}
 		}
 
+		[Serializable]
 		public class Message : Broadcast
 		{
 			public readonly Guid TargetEntityID;
@@ -319,6 +423,7 @@ namespace Shard
 		}
 
 
+		[Serializable]
 		public class StateAdvertisement : Change
 		{
 			public readonly EntityAppearance Appearance;
@@ -353,11 +458,13 @@ namespace Shard
 						.Finish();
 			}
 
+			public override bool TargetIsLocatedIn(Box cube)
+			{
+				float r = Simulation.SensorRange;
+				return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			}
 		}
 
-		public class Serial
-		{
-		}
 	}
 
 }

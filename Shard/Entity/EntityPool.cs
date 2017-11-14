@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +10,7 @@ using VectorMath;
 
 namespace Shard
 {
-	public class EntityPool : IHashable
+	public class EntityPool : IHashable, IEnumerable<Entity>
 	{
 		private class Container
 		{
@@ -124,7 +125,7 @@ namespace Shard
 			Container rs;
 			if (!guidMap.TryGetValue(receiver, out rs))
 				return false;
-			if (!Simulation.CheckDistance("Message", senderPosition, rs.entity, Simulation.M))
+			if (!Simulation.CheckDistance("Message", senderPosition, rs.entity, Simulation.R))
 				return false;
 			return rs.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 		}
@@ -133,7 +134,7 @@ namespace Shard
 		{
 			foreach (var p in fullMap)
 			{
-				if (Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.M)
+				if (Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
 					p.Value.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 			}
 		}
@@ -155,7 +156,7 @@ namespace Shard
 				{
 					Log.Error(ctr.entity+": "+ex);
 
-					ic.FlagInconsistent(Simulation.MySpace.Relativate(ctr.entity.ID.Position));
+					ic.FlagInconsistentR(Simulation.MySpace.Relativate(ctr.entity.ID.Position));
 
 					Interlocked.Increment(ref numErrors);
 				}
@@ -265,6 +266,14 @@ namespace Shard
 					throw new IntegrityViolation(p.Key + " is not contained in guidMap");
 		}
 
+		public EntityPool Clone()
+		{
+			EntityPool rs = new EntityPool();
+			foreach (var e in this)
+				rs.Insert(e);
+			return rs;
+		}
+
 		public void Hash(Hasher h)
 		{
 			var source = guidMap.Values.ToArray();
@@ -275,6 +284,45 @@ namespace Shard
 			Array.Sort(ar);
 			foreach (var e in ar)
 				h.Add(e);
+		}
+
+		private class ConverterEnumerator : IEnumerator<Entity>
+		{
+			IEnumerator<Container> other;
+
+			public ConverterEnumerator(IEnumerator<Container> o)
+			{
+				other = o;
+			}
+
+			public Entity Current => other.Current.entity;
+
+			object IEnumerator.Current => other.Current.entity;
+
+			public void Dispose()
+			{
+				other.Dispose();
+			}
+
+			public bool MoveNext()
+			{
+				return other.MoveNext();
+			}
+
+			public void Reset()
+			{
+				other.Reset();
+			}
+		}
+
+		public IEnumerator<Entity> GetEnumerator()
+		{
+			return new ConverterEnumerator(guidMap.Values.GetEnumerator());
+		}
+
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			return new ConverterEnumerator(guidMap.Values.GetEnumerator());
 		}
 	}
 

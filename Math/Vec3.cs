@@ -260,6 +260,7 @@ namespace VectorMath
 		public int X, Y, Z;
 
 		public static readonly Int3 Zero = new Int3(0);
+		public static readonly Int3 One = new Int3(1);
 		public static readonly Int3 XAxis = new Int3(1, 0, 0);
 		public static readonly Int3 YAxis = new Int3(0, 1, 0);
 		public static readonly Int3 ZAxis = new Int3(0, 0, 1);

@@ -68,11 +68,12 @@ namespace Shard
 			public EntityPool entities;
 			public Hasher.Hash inputHash;
 			public EntityChangeSet localChangeSet;
+			public InconsistencyCoverage ic;
+			public bool inputConsistent;
 		};
 
 		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
-		public readonly bool InputConsistent;
 		public readonly InconsistencyCoverage IC;
 		public readonly string Revision;
 		public readonly IntermediateData Intermediate;
@@ -109,9 +110,22 @@ namespace Shard
 			IC = new InconsistencyCoverage(dbSDS.IC);
 		}
 
+
 		public SDS(int generation)
 		{
 			Generation = generation;
+		}
+
+		public SDS(string rev, int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] outbound, RCS[] inbound)
+		{
+			Generation = generation;
+			Revision = rev;
+			FinalEntities = entities;
+			IC = ic;
+			if (outbound != null)
+				OutboundRCS = outbound;
+			if (inbound != null)
+				InboundRCS = inbound;
 		}
 
 		public bool IsFullyConsistent { get { return IC != null && !IC.AnySet; } }
@@ -120,34 +134,45 @@ namespace Shard
 
 		public int Inconsistency { get { return IC != null ? IC.OneCount : -1; } }
 
-
+		public Hasher.Hash HashDigest
+		{
+			get
+			{
+				using (Hasher hasher = new Hasher())
+				{
+					hasher.Add(IsFullyConsistent);
+					foreach (var e in FinalEntities)
+						e.Hash(hasher);
+					IC.Hash(hasher);
+					hasher.Add(Generation);
+					return hasher.Finish();
+				}
+			}
+		}
 
 		public class Computation
 		{
 			//private SDS output;
-			InconsistencyCoverage ic;
 			IntermediateData data;
 			RCS[] outbound;
+			int generation;
+			SDS old;
 
 			public Computation(int generation)
 			{
-				SDS input = Simulation.FindGeneration(generation - 1);
-				SDS old = Simulation.FindGeneration(generation);
+				SDSStack stack = Simulation.Stack;
+				this.generation = generation;
+				SDS input = stack.FindGeneration(generation - 1);
+				old = stack.FindGeneration(generation);
+				if (old == null)
+					throw new IntegrityViolation("Unable to locate original SDS at generation "+generation);
+				data.inputConsistent = input.IsFullyConsistent;
 				//output = new SDS(generation);
-				using (Hasher hasher = new Hasher())
-				{
-					hasher.Add(input.IsFullyConsistent);
-					foreach (var e in input.FinalEntities)
-						e.Hash(hasher);
-					input.IC.Hash(hasher);
-					hasher.Add(generation);
-					data.inputHash = hasher.Finish();
-				}
-				Debug.Assert(old == null || !old.IsFullyConsistent);
-				if (old != null && old.Intermediate.inputHash == data.inputHash)
+				data.inputHash = input.HashDigest;
+				
+				if (old.Intermediate.inputHash == data.inputHash)
 				{
 					data = old.Intermediate;
-					ic = input.IC.Grow(true);
 					outbound = old.OutboundRCS;
 					return;
 				}
@@ -173,9 +198,8 @@ namespace Shard
 				InconsistencyCoverage untrimmed = input.IC.Grow(false);
 				if (untrimmed.Size != InconsistencyCoverage.CommonResolution + 2)
 					throw new IntegrityViolation("IC of unsupported size: "+untrimmed.Size);
-				ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
 				data.entities = new EntityPool(input.FinalEntities);
-				data.localChangeSet = new EntityChangeSet(generation);
+				data.localChangeSet = new EntityChangeSet();
 
 				Parallel.For(0, input.FinalEntities.Length, (i) =>
 				{
@@ -185,11 +209,12 @@ namespace Shard
 					}
 					catch (Exception ex)
 					{
-						ic.FlagInconsistent(Simulation.MySpace.Relativate(input.FinalEntities[i].ID.Position));
+						untrimmed.FlagInconsistentR(Simulation.MySpace.Relativate(input.FinalEntities[i].ID.Position), Int3.One);
 						Log.Error(input.FinalEntities[i] + ": " + ex);
 					}
 				});
-				
+
+				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
 
 				foreach (var n in Simulation.Neighbors)
 				{
@@ -197,16 +222,47 @@ namespace Shard
 					Int3 offset = (delta* InconsistencyCoverage.CommonResolution + 1).Clamp(0,InconsistencyCoverage.CommonResolution+1);
 					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution-1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
 					var ic = untrimmed.Sub(offset, end - offset + 1);
-					RCS rcs = outbound[n.LinearIndex] = new RCS(generation, data.localChangeSet, n.WorldSpace,ic);
-		
+					RCS rcs = outbound[n.LinearIndex] = new RCS(data.localChangeSet, n.WorldSpace,ic);
+
+					n.Set(n.OutboundRCS(generation).ID.ToString(), rcs);
 					if (rcs.IsFullyConsistent)
-						DB.Put(rcs.Export(n.OutboundRCS(generation).ID));
+						DB.Put(rcs.Export(n.OutboundRCS(generation)));
 				}
 			}
 
 			public SDS Complete()
 			{
-				throw new NotImplementedException();
+				//Log.Message("Finalize SDS g" + generation); 
+
+				var cs = data.localChangeSet.Clone();
+				InconsistencyCoverage ic = data.ic.Clone();
+				foreach (var n in Simulation.Neighbors)
+				{
+					var delta = n.ID.XYZ - Simulation.ID.XYZ;
+					Int3 offset = (delta * InconsistencyCoverage.CommonResolution).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
+					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
+
+					var rcs = old.InboundRCS[n.LinearIndex];
+					if (rcs != null)
+					{
+						cs.Include(rcs);
+						ic.Include(rcs.IC, offset);
+					}
+					else
+					{
+						ic.SetOne(offset, end - offset + 1);
+					}
+				}
+				EntityPool p2 = data.entities.Clone();
+				cs.Execute(p2);
+
+				SDS rs = new SDS(old != null ? old.Revision : null, generation, p2.ToArray(), ic, data, outbound,old.InboundRCS);
+
+				if (!ic.AnySet)
+				{
+					DB.Put(rs.Export());
+				}
+				return rs;
 			}
 		}
 
@@ -244,12 +300,12 @@ namespace Shard
 		internal RecoveryCheck CheckMissingRCS()
 		{
 			RecoveryCheck rs = new RecoveryCheck();
-			rs.predecessorIsConsistent = InputConsistent;
+			rs.predecessorIsConsistent = Intermediate.inputConsistent;
 			rs.thisIsConsistent = IsFullyConsistent;
 
 			foreach (var other in Simulation.Neighbors)
 			{
-				if (InputConsistent && (!OutboundRCS[other.LinearIndex].IsFullyConsistent))
+				if (Intermediate.inputConsistent && (!OutboundRCS[other.LinearIndex].IsFullyConsistent))
 					rs.outRCSUpdatable++;
 				var inbound = InboundRCS[other.LinearIndex];
 				if (inbound != null && inbound.IsFullyConsistent)

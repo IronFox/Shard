@@ -13,6 +13,8 @@ namespace Shard.Tests
 	[TestClass()]
 	public class BitCubeTests
 	{
+		static Random random = new Random();
+
 		[TestMethod()]
 		public void BitCubeTest()
 		{
@@ -22,11 +24,10 @@ namespace Shard.Tests
 			Assert.AreEqual(cube.Size, new Int3(2));
 			Assert.AreEqual(cube.IsEmpty, true);
 
-			Random random = new Random(); ;
 			for (int i = 0; i < 1000; i++)
 			{
 				int set;
-				BitCube cube2 = MakeRandomCube(random, out set);
+				BitCube cube2 = MakeRandomCube(out set);
 				Assert.AreEqual(cube2.OneCount, set);
 				Assert.AreEqual(cube2.IsEmpty, set == 0);
 			}
@@ -53,24 +54,29 @@ namespace Shard.Tests
 			return numSet;
 		}
 
-		private static BitCube AllocateRandomCube(Random random)
+		private static BitCube AllocateRandomCube()
 		{
 			Int3 size = new Int3(random.Next(1, 64), random.Next(1, 64), random.Next(1, 64));
 			return new BitCube(size);
 		}
-		private static BitCube MakeRandomCube(Random random)
+		private static BitCube MakeRandomCube()
 		{
 			int set;
-			return MakeRandomCube(random, out set);
+			return MakeRandomCube(out set);
 		}
-		private static BitCube MakeRandomCube(Random random, out int numSet)
+		private static int RandomFillCube(BitCube cube)
 		{
-			BitCube rs = AllocateRandomCube(random);
-			numSet = FillCube(rs, (x, y, z) => (random.Next(2) == 1));
+			return FillCube(cube, (x, y, z) => (random.Next(2) == 1));
+		}
+
+		private static BitCube MakeRandomCube(out int numSet)
+		{
+			BitCube rs = AllocateRandomCube();
+			numSet = RandomFillCube(rs);
 			return rs;
 		}
 
-		private static Int3 RandomInt3(Random random, Int3 inclusiveMin, Int3 exclusiveMax)
+		private static Int3 RandomInt3(Int3 inclusiveMin, Int3 exclusiveMax)
 		{
 			return new Int3(random.Next(inclusiveMin.X, exclusiveMax.X), random.Next(inclusiveMin.Y, exclusiveMax.Y), random.Next(inclusiveMin.Z, exclusiveMax.Z));
 		}
@@ -78,16 +84,15 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void SubCubeTest()
 		{
-			Random random = new Random();
 			for (int i = 0; i < 100; i++)
 			{
-				BitCube cube = new BitCube(RandomInt3(random, new Int3(1), new Int3(32)) * 2);  //make sure divisible by 2
+				BitCube cube = new BitCube(RandomInt3(new Int3(1), new Int3(32)) * 2);  //make sure divisible by 2
 				int xThreadhold = cube.Size.X / 2;
 				FillCube(cube, (x, y, z) => x >= xThreadhold); //left half = 0, right half = 1
 				Assert.AreEqual(cube.Size.Product / 2, cube.OneCount);
 
-				Int3 size = RandomInt3(random, new Int3(1), cube.Size + 2);
-				Int3 offset = RandomInt3(random, -size + 1, cube.Size);
+				Int3 size = RandomInt3(new Int3(1), cube.Size + 2);
+				Int3 offset = RandomInt3(-size + 1, cube.Size);
 
 				int ones = 0, zeroes = 0;
 				if (offset.X >= xThreadhold)
@@ -114,10 +119,9 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void GrowOnesTest()
 		{
-			Random random = new Random();
 			for (int i = 0; i < 100; i++)
 			{
-				BitCube cube = new BitCube(RandomInt3(random, new Int3(1), new Int3(32)) * 2);  //make sure divisible by 2
+				BitCube cube = new BitCube(RandomInt3(new Int3(1), new Int3(32)) * 2);  //make sure divisible by 2
 				Int3 half = cube.Size / 2;
 				FillCube(cube, (coords) => (coords >= half / 2 & coords < half * 3 / 2).All); //left half = 0, right half = 1
 
@@ -145,12 +149,11 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void SetAllZeroTest()
 		{
-			Random random = new Random();
 			int numNonZero = 0;
 			for (int i = 0; i < 100 || numNonZero == 0; i++)
 			{
 				int set;
-				var cube = MakeRandomCube(random, out set);
+				var cube = MakeRandomCube(out set);
 				if (set != 0)
 					numNonZero++;
 				cube.SetAllZero();
@@ -162,12 +165,11 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void SetAllOneTest()
 		{
-			Random random = new Random();
 			int numNonOne = 0;
 			for (int i = 0; i < 100 || numNonOne == 0; i++)
 			{
 				int set;
-				var cube = MakeRandomCube(random, out set);
+				var cube = MakeRandomCube(out set);
 				//if (cube.OneCount != cube.Size.Product) ;
 				numNonOne++;
 				cube.SetAllOne();
@@ -244,7 +246,6 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void GrowAxisTest()
 		{
-			Random random = new Random();
 
 			{
 				BitCube cube = new BitCube(new Int3(4));  //make sure divisible by 2
@@ -256,7 +257,7 @@ namespace Shard.Tests
 			for (int a = 0; a < 3; a++)
 				for (int i = 0; i < 100; i++)
 				{
-					BitCube cube = new BitCube(RandomInt3(random, new Int3(1), new Int3(16)) * 4);  //make sure divisible by 4
+					BitCube cube = new BitCube(RandomInt3(new Int3(1), new Int3(16)) * 4);  //make sure divisible by 4
 					GrowAxisTest(cube, a);
 				}
 		}
@@ -264,14 +265,101 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void ToByteArrayTest()
 		{
-			Random random = new Random();
 
 			for (int i = 0; i < 100; i++)
 			{
-				BitCube cube = MakeRandomCube(random);
+				BitCube cube = MakeRandomCube();
 				BitCube decoded = new BitCube(cube.ToByteArray());
 				Assert.IsTrue(cube == decoded);
 			}
+		}
+
+		[TestMethod()]
+		public void LoadCopyTest()
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				BitCube cube0 = MakeRandomCube();
+				BitCube cube1 = new BitCube();
+				cube1.LoadCopy(cube0);
+				Assert.AreEqual(cube0.Size, cube1.Size);
+				int o0 = cube0.OneCount;
+				int o1 = cube0.OneCount;
+				Assert.AreEqual(o0, o1);
+				cube1.SetAllZero();
+				Assert.AreEqual(o0, cube0.OneCount);
+				Assert.AreEqual(0, cube1.OneCount);
+			}
+
+		}
+
+		[TestMethod()]
+		public void IncludeTest()
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				BitCube cube = new BitCube(new Int3(10));
+				BitCube inc = new BitCube(new Int3(5));
+				RandomFillCube(inc);
+
+				cube.Include(inc, new Int3(5));
+				Assert.AreEqual(cube.OneCount, inc.OneCount);
+
+				for (int x = 0; x < 2; x++)
+					for (int y = 0; y < 2; y++)
+						for (int z = 0; z < 2; z++)
+							if (x != 1 || y != 1 || z != 1)
+								Assert.AreEqual(cube.OneCountIn(new Int3(x, y, z) * 5, new Int3(5)), 0);
+				Assert.AreEqual(cube.OneCountIn(new Int3(5), new Int3(5)), inc.OneCount);
+			}
+
+
+			BitCube basis = new BitCube(new Int3(10));
+			BitCube inc1 = new BitCube(new Int3(10));
+			RandomFillCube(inc1);
+			for (int i = 0; i < 100; i++)
+			{
+				basis.Include(inc1, RandomInt3(new Int3(-10), new Int3(20)));   //mad monkey
+			}
+
+		}
+
+		[TestMethod()]
+		public void OneCountInTest()
+		{
+			BitCube basis = new BitCube(new Int3(10));
+			RandomFillCube(basis);
+			for (int i = 0; i < 100; i++)
+			{
+				basis.OneCountIn(RandomInt3(new Int3(-10), new Int3(20)), RandomInt3(new Int3(-1), new Int3(10)));   //mad monkey
+			}
+		}
+
+		[TestMethod()]
+		public void SetOneTest()
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				BitCube cube = new BitCube(new Int3(10));
+
+				cube.SetOne(new Int3(5), new Int3(5));
+				Assert.AreEqual(cube.OneCount, 5*5*5);
+
+				for (int x = 0; x < 2; x++)
+					for (int y = 0; y < 2; y++)
+						for (int z = 0; z < 2; z++)
+							if (x != 1 || y != 1 || z != 1)
+								Assert.AreEqual(cube.OneCountIn(new Int3(x, y, z) * 5, new Int3(5)), 0);
+				Assert.AreEqual(cube.OneCountIn(new Int3(5), new Int3(5)), 5*5*5);
+			}
+
+
+			BitCube basis = new BitCube(new Int3(10));
+			for (int i = 0; i < 100; i++)
+			{
+				basis.SetOne(RandomInt3(new Int3(-10), new Int3(20)), RandomInt3(new Int3(-10), new Int3(20)));   //mad monkey
+			}
+
 		}
 	}
 }

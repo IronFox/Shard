@@ -154,11 +154,13 @@ namespace Shard
 
 		public void Add(float f)
 		{
-			Add(BitConverter.GetBytes(f));
+			Add(Helper.FloatToInt(f));
 		}
 
 		public void Add(byte[] v)
 		{
+			if (v == null)
+				return;
 			Require(v.Length);
 			Buffer.BlockCopy(v, 0, data, 0, v.Length);
 			dataWritten += v.Length;
