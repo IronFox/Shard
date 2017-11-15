@@ -50,7 +50,7 @@ namespace Shard
 			public void Include(Set<T> other, Box targetSpace)
 			{
 				foreach (T el in other.bag)
-					if (el.TargetIsLocatedIn(targetSpace))
+					if (el.Affects(targetSpace))
 						Add(el);
 			}
 			public void FilterByTargetLocation(Box targetSpace)
@@ -58,7 +58,7 @@ namespace Shard
 				List<T> temp = new List<T>();
 				T el;
 				while (bag.TryTake(out el))
-					if (el.TargetIsLocatedIn(targetSpace))
+					if (el.Affects(targetSpace))
 						temp.Add(el);
 				foreach (var e in temp)
 					bag.Add(e);

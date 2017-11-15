@@ -220,6 +220,7 @@ namespace Shard
 		}
 
 		public static Action<RCS.Serial> OnPutRCS { get; set; } = null;
+		public static Action<SDS.Serial> OnPutSDS { get; set; } = null;
 
 		internal static void Put(RCS.Serial serial)
 		{
@@ -228,7 +229,8 @@ namespace Shard
 		}
 		internal static void Put(SDS.Serial serial)
 		{
-			throw new NotImplementedException();
+			if (OnPutSDS != null)
+				OnPutSDS(serial);
 		}
 	}
 }

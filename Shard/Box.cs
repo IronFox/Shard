@@ -44,6 +44,8 @@ namespace Shard
 				{
 					if (MaxIsInclusive)
 						return Max;
+					if (Max == 0)
+						return -float.Epsilon;
 					if (Max > 0)
 						return Helper.IntToFloat(Helper.FloatToInt(Max) - 1);
 					else

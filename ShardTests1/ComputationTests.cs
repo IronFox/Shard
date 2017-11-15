@@ -68,7 +68,7 @@ namespace Shard.Tests
 
 
 		[TestMethod()]
-		public void ComputationTest()
+		public void NestedComputationTest()
 		{
 			int numRCS = 0;
 
@@ -128,7 +128,7 @@ namespace Shard.Tests
 			intermediate.inputConsistent = true;
 			intermediate.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS(null, 0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
+			SDS root = new SDS( 0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
@@ -143,7 +143,7 @@ namespace Shard.Tests
 
 			foreach (var p in comp.Intermediate.localChangeSet.NamedSets)
 			{
-				int expected = p.Key == "motions" ? 2 : (p.Key == "advertisements" ? 3 : 0 );
+				int expected = p.Key == "motions" || p.Key == "advertisements" ? 3 : 0;
 				Assert.AreEqual(expected, p.Value.Size);
 			}
 
@@ -151,12 +151,97 @@ namespace Shard.Tests
 			Assert.AreEqual(Simulation.NeighborCount, numRCS);
 			//comp.
 
+
+			SDS sds = comp.Complete();
+
+			//check if all outer cells are 1 (no incoming RCSs):
+			var core = sds.IC.Sub(Int3.One, sds.IC.Size - 2);
+			Assert.AreEqual(sds.IC.OneCount , sds.IC.Size.Product - core.Size.Product);
+			Assert.IsTrue(sds.IC.OneCount > 0);
+			Assert.IsTrue(core.OneCount == 0);
+
+
+			Assert.AreEqual(sds.Generation, 1);
+			Assert.AreEqual(sds.FinalEntities.Length, 2);
+			Assert.IsFalse(sds.HasEntity(crosser.ID.Guid));
 		}
 
+
+
 		[TestMethod()]
-		public void CompleteTest()
+		public void IsolatedComputationTest()
 		{
-			Assert.Fail();
+			int numRCS = 0;
+
+
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config);
+			Vec3 outlierCoords = Simulation.MySpace.Min;
+
+			DB.OnPutRCS = rcs =>
+			{
+				Assert.Fail("This test generates no simulation neighbors. Should not generate RCSs");
+			};
+
+			DB.OnPutSDS = dbSDS =>
+			{
+				Assert.AreEqual(dbSDS.Entities.Length, 2);
+				Assert.AreEqual(dbSDS.Generation, 1);
+				Assert.AreEqual(new InconsistencyCoverage(dbSDS.IC).OneCount, 0);
+			};
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new ExceedingMovementLogic(),
+						//new EntityTest.FaultLogic.State(),
+						null,null,null),
+
+					new Entity(
+						new EntityID(Guid.NewGuid(), outlierCoords),
+						new StationaryLogic(),
+						//new EntityTest.FaultLogic.State(),
+						null,null,null),
+				}
+			);
+			//EntityTest.RandomDefaultPool(100);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+
+			SDS root = new SDS( 0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.Insert(root);
+			SDS temp = stack.AllocateGeneration(1);
+			Assert.AreEqual(temp.Generation, 1);
+			Assert.IsNotNull(stack.FindGeneration(1));
+			SDS.Computation comp = new SDS.Computation(1);
+			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
+			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
+			Assert.IsTrue(comp.Intermediate.inputConsistent);
+
+			foreach (var p in comp.Intermediate.localChangeSet.NamedSets)
+			{
+				int expected = p.Key == "motions" || p.Key == "advertisements" ? 2 : 0;
+				Assert.AreEqual(expected, p.Value.Size);
+			}
+
+			Assert.AreEqual(comp.Generation, 1);
+
+
+			SDS sds = comp.Complete();
+
+			Assert.IsTrue(sds.IsFullyConsistent);
+			Assert.IsTrue(sds.IC.OneCount == 0);
+			Assert.AreEqual(sds.Generation, 1);
+			Assert.AreEqual(sds.FinalEntities.Length, 2);
 		}
+
+
 	}
 }

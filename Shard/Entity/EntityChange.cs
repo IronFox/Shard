@@ -27,7 +27,7 @@ namespace Shard.EntityChange
 		}
 
 
-		public abstract bool TargetIsLocatedIn(Box cube);
+		public abstract bool Affects(Box cube);
 
 		public abstract int CompareTo(object other);
 		public abstract bool Execute(EntityPool pool);
@@ -70,7 +70,7 @@ namespace Shard.EntityChange
 			return pool.FindAndRemove(Target, e => Simulation.CheckDistance("Removal", Target.Position, e, Simulation.M));
 		}
 
-		public override bool TargetIsLocatedIn(Box cube)
+		public override bool Affects(Box cube)
 		{
 			return cube.Contains(Target.Position);
 		}
@@ -129,7 +129,7 @@ namespace Shard.EntityChange
 			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), LogicID, LogicState, Appearance, null, null));
 		}
 
-		public override bool TargetIsLocatedIn(Box cube)
+		public override bool Affects(Box cube)
 		{
 			return cube.Contains(TargetLocation);
 		}
@@ -189,6 +189,12 @@ namespace Shard.EntityChange
 			}
 
 		}
+
+		public override bool Affects(Box cube)
+		{
+			return cube.Contains(TargetLocation) || cube.Contains(Origin.Position);
+		}
+
 	}
 
 
@@ -248,7 +254,7 @@ namespace Shard.EntityChange
 			return true;
 		}
 
-		public override bool TargetIsLocatedIn(Box cube)
+		public override bool Affects(Box cube)
 		{
 			float r = Simulation.R;
 			return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));
@@ -339,7 +345,7 @@ namespace Shard.EntityChange
 		}
 
 
-		public override bool TargetIsLocatedIn(Box cube)
+		public override bool Affects(Box cube)
 		{
 			float r = Simulation.SensorRange;
 			return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));

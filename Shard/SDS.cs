@@ -12,7 +12,7 @@ namespace Shard
 	{
 		public class Serial
 		{
-			public string _id, _rev;
+			public string _id;
 			public int Generation { get; set; }
 			public Entity.Serial[] Entities { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
@@ -75,7 +75,6 @@ namespace Shard
 		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
 		public readonly InconsistencyCoverage IC;
-		public readonly string Revision;
 		public readonly IntermediateData Intermediate;
 
 		public bool SignificantInboundChange { get; private set; }
@@ -102,7 +101,6 @@ namespace Shard
 			foreach (var e in dbSDS.Entities)
 				e.BeginFetchLogic();
 
-			Revision = dbSDS._rev;
 			FinalEntities = Entity.Import(dbSDS.Entities);
 
 			Generation = dbSDS.Generation;
@@ -115,10 +113,9 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(string rev, int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound)
 		{
 			Generation = generation;
-			Revision = rev;
 			FinalEntities = entities;
 			IC = ic;
 			if (inbound != null)
@@ -256,7 +253,7 @@ namespace Shard
 				EntityPool p2 = data.entities.Clone();
 				cs.Execute(p2);
 
-				SDS rs = new SDS(old != null ? old.Revision : null, generation, p2.ToArray(), ic, data, old.InboundRCS);
+				SDS rs = new SDS(generation, p2.ToArray(), ic, data, old.InboundRCS);
 
 				if (!ic.AnySet)
 				{
@@ -264,6 +261,14 @@ namespace Shard
 				}
 				return rs;
 			}
+		}
+
+		public bool HasEntity(Guid guid)
+		{
+			foreach (var e in FinalEntities)
+				if (e.ID.Guid == guid)
+					return true;
+			return false;
 		}
 
 		public struct RecoveryCheck
@@ -335,7 +340,6 @@ namespace Shard
 			rs.Entities = Entity.Export(FinalEntities);
 			rs.Generation = Generation;
 			rs.IC = IC.Export();
-			rs._rev = Revision;
 			rs._id = Simulation.ID.XYZ.Encoded;
 			return rs;
 		}
