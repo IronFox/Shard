@@ -60,6 +60,7 @@
     <Compile Include="ByteBufferTests.cs" />
     <Compile Include="ComputationTests.cs" />
     <Compile Include="EntityPoolTests.cs" />
+    <Compile Include="Entity\EntityChangeSetTests.cs" />
     <Compile Include="HasherTests.cs" />
     <Compile Include="HelperTests.cs" />
     <Compile Include="LinkTests.cs" />

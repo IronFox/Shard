@@ -219,9 +219,12 @@ namespace Shard
 				BeginFetch(id);
 		}
 
+		public static Action<RCS.Serial> OnPutRCS { get; set; } = null;
+
 		internal static void Put(RCS.Serial serial)
 		{
-			
+			if (OnPutRCS != null)
+				OnPutRCS(serial);
 		}
 		internal static void Put(SDS.Serial serial)
 		{

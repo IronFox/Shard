@@ -25,7 +25,7 @@ namespace Shard
 		private static SDSStack stack = new SDSStack();
 
 
-		public static IEnumerable<Link> Neighbors { get { return neighbors; } }
+		public static Neighborhood Neighbors { get { return neighbors; } }
 
 
 
@@ -209,7 +209,6 @@ namespace Shard
 				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel);
 			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ);
 
-			MySpace = Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), new Bool3(NeighborExists(ID.XYZ + Int3.XAxis), NeighborExists(ID.XYZ + Int3.YAxis), NeighborExists(ID.XYZ + Int3.ZAxis)));
 
 		}
 
@@ -218,7 +217,22 @@ namespace Shard
 			return MySpace.Contains(position);
 		}
 
-		public static Box MySpace { get; private set; } = Box.OffsetSize(Vec3.Zero, Vec3.One, Bool3.True);
+		public static ShardID Extent
+		{
+			get
+			{
+				return ext;
+			}
+		}
+
+		public static Box MySpace
+		{
+			get
+			{
+				return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 < ext.XYZ);
+			}
+		}
+
 		public static float SensorRange { get { return R - M; } }
 
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
@@ -256,7 +270,7 @@ namespace Shard
 					int gen = ((OldestGeneration)obj).Generation;
 					if (gen == lnk.OldestGeneration)
 					{
-						Console.Error.WriteLine("OldestGen update from sibling " + lnk + ": Warning: Already moved past generation " + gen);
+						Console.Error.WriteLine("OldestGen update from sibling " + lnk + ": Warning: Already moved to generation " + gen);
 						return;
 					}
 					if (gen > lnk.OldestGeneration)
@@ -273,25 +287,6 @@ namespace Shard
 									return rcs.Generation >= gen;
 								return true;
 							});
-						}
-					}
-					else
-					{
-						foreach (var sds in stack)
-						{
-							if (sds.Generation < gen)
-								continue;
-							if (lnk.IsSibling && sds.IsFullyConsistent)
-								lnk.Set(new SDS.ID(ID.XYZ, sds.Generation).P2PKey, sds.Export());
-							if (!lnk.IsSibling)
-							{
-								var rcs = sds.OutboundRCS[lnk.LinearIndex];
-								if (rcs != null)
-								{
-									var id = lnk.OutboundRCS(sds.Generation);
-									lnk.Set(id.ToString(), rcs.Export(id));
-								}
-							}
 						}
 					}
 					return;

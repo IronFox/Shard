@@ -94,7 +94,7 @@ namespace ShardTests1
 				return new LogicState();
 			}
 		}
-		private class FaultLogic : EntityLogic
+		public class FaultLogic : EntityLogic
 		{
 			private EntityLogic followLogic;
 			private bool useFollowLogic;
@@ -118,7 +118,7 @@ namespace ShardTests1
 
 			public new class State : EntityLogic.State
 			{
-				public override byte[] BinaryState => throw new NotImplementedException();
+				public override byte[] BinaryState => null;
 
 				public override string LogicID => "Fault.Logic";
 
@@ -232,7 +232,7 @@ namespace ShardTests1
 								Assert.IsTrue(e.HasContact(faulty.ID));
 							}
 
-							EntityChangeSet.StateAdvertisement adv = set.FindAdvertisementFor(e.ID);
+							var adv = set.FindAdvertisementFor(e.ID);
 							Assert.IsNotNull(e.Appearance);
 						}
 						bool consistent = LogicState.IsConsistent(e.Appearance);

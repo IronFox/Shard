@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using VectorMath;
@@ -6,11 +7,11 @@ using VectorMath;
 namespace Shard
 {
 	[Serializable()]
-	public class RCS : EntityChangeSet
+	public class RCS
 	{
 		public new class Serial
 		{
-			public string _id, _rev;
+			public string _id;
 
 			public byte[] CS { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
@@ -18,18 +19,25 @@ namespace Shard
 			public int Generation { get; set; }
 		}
 
-		public readonly string Revision;
 		public readonly InconsistencyCoverage IC;
+
+		public readonly EntityChangeSet CS;
+
 
 		public RCS(Serial rcs)
 		{
-			Revision = rcs._rev;
 			IC = new InconsistencyCoverage(rcs.IC);
+
+			using (var ms = new MemoryStream(rcs.CS))
+			{
+				CS = (EntityChangeSet) new BinaryFormatter().Deserialize(ms);
+			}
 		}
 
 		public RCS(EntityChangeSet localCS, Box cube, InconsistencyCoverage ic)
 		{
-			base.Include(localCS, cube);
+			CS = new EntityChangeSet();
+			CS.Include(localCS, cube);
 			IC = ic;
 		}
 
@@ -44,6 +52,12 @@ namespace Shard
 			{
 				FromShard = fromShard;
 				ToShard = toShard;
+			}
+
+			public ID(int[] numericID, int offset)
+			{
+				FromShard = new Int3(numericID, offset);
+				ToShard = new Int3(numericID, offset + 3);
 			}
 
 			public override string ToString()
@@ -90,6 +104,12 @@ namespace Shard
 				Generation = generation;
 			}
 
+			public GenID(int[] numericID, int offset)
+			{
+				ID  = new ID(numericID,offset);
+				Generation = numericID[offset + ID.ExportInts];
+			}
+
 			public override string ToString()
 			{
 				return ID + "g" + Generation;
@@ -119,6 +139,7 @@ namespace Shard
 				ar[offset + ID.ExportInts] = Generation;
 			}
 
+
 			public int[] IntArray
 			{
 				get
@@ -138,15 +159,27 @@ namespace Shard
 			rs.IC = IC.Export();
 			using (var ms = new MemoryStream())
 			{
-				EntityChangeSet cs = this;
-				new BinaryFormatter().Serialize(ms, cs);
+				new BinaryFormatter().Serialize(ms, CS);
 				rs.CS = ms.ToArray();
 			}
 
 			rs._id = genID.ToString();
-			rs._rev = Revision;
 
 			return rs;
+		}
+
+
+		public override bool Equals(object obj)
+		{
+			if (obj == this)
+				return true;
+			var other = obj as RCS;
+			return other != null && base.Equals(obj) && IC.Equals(other.IC) && CS.Equals(other.CS);
+		}
+
+		public override int GetHashCode()
+		{
+			return new Helper.HashCombiner().Add(base.GetHashCode()).Add(IC).GetHashCode();
 		}
 	}
 }

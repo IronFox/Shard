@@ -14,6 +14,7 @@ namespace Shard
 
 	}
 
+	[Serializable]
 	public struct EntityID : IComparable<EntityID>, IHashable
 	{
 		public readonly Vec3 Position;
@@ -70,6 +71,7 @@ namespace Shard
 		}
 	}
 
+	[Serializable]
 	public abstract class EntityAppearance : IComparable<EntityAppearance>, IHashable
 	{
 		public abstract int CompareTo(EntityAppearance other);
@@ -277,18 +279,20 @@ namespace Shard
 					int oID = 0;
 					if (changes.broadcasts != null)
 						foreach (var b in changes.broadcasts)
-							outChangeSet.Add(new EntityChangeSet.Broadcast(ID, b, oID++));
+							outChangeSet.Add(new EntityChange.Broadcast(ID, b, oID++));
 					if (changes.messages != null)
 						foreach (var m in changes.messages)
-							outChangeSet.Add(new EntityChangeSet.Message(ID, oID++, m.receiver, m.data));
+							outChangeSet.Add(new EntityChange.Message(ID, oID++, m.receiver, m.data));
 
 					Vec3 dest = changes.newPosition ?? this.ID.Position;
-					outChangeSet.Add(new EntityChangeSet.Motion(this, changes.newState, changes.newAppearance, dest)); //motion doubles as logic-state-update
-					outChangeSet.Add(new EntityChangeSet.StateAdvertisement(new EntityContact(ID.Relocate(dest), changes.newAppearance, dest - ID.Position)));
+					if (!Simulation.CheckDistance("Motion", dest, this, Simulation.M))
+						dest = ID.Position;
+					outChangeSet.Add(new EntityChange.Motion(this, changes.newState, changes.newAppearance, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID.Relocate(dest), changes.newAppearance, dest - ID.Position)));
 				}
 				catch
 				{
-					outChangeSet.Add(new EntityChangeSet.StateAdvertisement(new EntityContact(ID, Appearance, Vec3.Zero)));
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID, Appearance, Vec3.Zero)));
 					throw;
 				}
 			}

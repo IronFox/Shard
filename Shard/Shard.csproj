@@ -132,6 +132,7 @@
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
     <Compile Include="Entity\Entity.cs" />
+    <Compile Include="Entity\EntityChange.cs" />
     <Compile Include="Entity\EntityChangeSet.cs" />
     <Compile Include="Entity\EntityPool.cs" />
     <Compile Include="Extensions.cs" />

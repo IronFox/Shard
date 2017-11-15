@@ -3,7 +3,8 @@
 
 namespace VectorMath
 {
-    public struct Vec3 : IComparable<Vec3>
+	[Serializable]
+	public struct Vec3 : IComparable<Vec3>
     {
         public readonly float X, Y, Z;
         public Vec2 xy { get { return new Vec2(X, Y); } }
@@ -254,7 +255,7 @@ namespace VectorMath
 		}
 	}
 
-
+	[Serializable]
 	public struct Int3
 	{
 		public int X, Y, Z;
@@ -264,7 +265,6 @@ namespace VectorMath
 		public static readonly Int3 XAxis = new Int3(1, 0, 0);
 		public static readonly Int3 YAxis = new Int3(0, 1, 0);
 		public static readonly Int3 ZAxis = new Int3(0, 0, 1);
-
 
 		public int this[int key]
 		{
@@ -301,6 +301,12 @@ namespace VectorMath
 		}
 
 
+		public Int3(int[] ar, int offset)
+		{
+			X = ar[offset];
+			Y = ar[offset + 1];
+			Z = ar[offset + 2];
+		}
 		public Int3(int x, int y, int z)
 		{
 			this.X = x;

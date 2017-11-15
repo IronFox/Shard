@@ -47,13 +47,35 @@ namespace Shard
 			return null;
 		}
 
-		public void Set(string key, object item)
+		/// <summary>
+		/// Inserts or updates an existing object in the outbound queue.
+		/// If an equal element is already contained, nothing happens.
+		/// Otherwise the element is rescheduled for transfer.
+		/// </summary>
+		/// <param name="key">Key to look for/insert as</param>
+		/// <param name="item">Item to insert</param>
+		/// <returns>true if the element was inserted or updated, false if a matching object was found with the same key</returns>
+		public bool Set(string key, object item)
 		{
 			if (disposed)
 				throw new ObjectDisposedException("Outbound");
-			Filter((k, obj) => k != key);
-			dispatch.Enqueue(new Tuple<string,object>(key,item));
+			bool enq = true;
+			Filter((k, obj) =>
+			{
+				if (k != key)
+					return true;	//keep (mismatching key)
+				if (obj.Equals(item))
+				{
+					enq = false;
+					return true;	//keep (is equal)
+				}
+				return false;
+			}
+			);
+			if (enq)
+				dispatch.Enqueue(new Tuple<string,object>(key,item));
 			sem.Release();
+			return enq;
 		}
 
 		SpinLock filterLock = new SpinLock();
@@ -135,12 +157,15 @@ namespace Shard
 		public readonly int LinearIndex;
 		public readonly bool IsSibling;
 
+
 		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
 
 
 		public readonly bool IsActive;
 		public Link(ShardID remoteAddr, bool isActive, int linearIndex, bool isSibling) : this(new Host(remoteAddr),isActive,linearIndex,isSibling)
-		{}
+		{
+			ID = remoteAddr;
+		}
 
 		public Link(Host remoteHost, bool isActive, int linearIndex, bool isSibling)
 		{
@@ -396,7 +421,13 @@ namespace Shard
 		public int OutboundSentCount { get { return outbound.SentCount; } }
 
 		public bool VerboseWriter { get; set; } = false;
-		public Box WorldSpace { get; internal set; }
+		public Box WorldSpace
+		{
+			get
+			{
+				return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 < Simulation.Extent.XYZ);
+			}
+		}
 
 		private void WriteMain()
 		{

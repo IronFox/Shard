@@ -85,6 +85,8 @@ namespace Shard
 			var other = obj as BitCube;
 			if (other == null)
 				return false;
+			if (other == this)
+				return true;
 			return size == other.size && 
 				((grid == null && other.grid == null)
 				||

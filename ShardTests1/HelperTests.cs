@@ -61,8 +61,8 @@ namespace Shard.Tests
 				bool equal = EqualityComparer<byte[]>.Default.Equals(a, b);
 				bool checkEqual = Helper.AreEqual(a,b);
 				Assert.AreEqual(equal, checkEqual);
-				Assert.IsTrue(Helper.AreEqual(a, a));
-				Assert.IsTrue(Helper.AreEqual(b, b));
+				Assert.IsTrue(Helper.AreEqual(a, a),i.ToString());
+				Assert.IsTrue(Helper.AreEqual(b, b),i.ToString());
 			}
 		}
 	}

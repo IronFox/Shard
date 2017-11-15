@@ -18,6 +18,11 @@ namespace Shard
 				MaxIsInclusive = maxIsInclusive;
 			}
 
+			public Range Grow(float r)
+			{
+				return new Range(Min - r, Max + r, MaxIsInclusive);
+			}
+
 			public override string ToString()
 			{
 				if (MaxIsInclusive)
@@ -84,6 +89,11 @@ namespace Shard
 			}
 		}
 
+		public Box Grow(float r)
+		{
+			return new Box(X.Grow(r), Y.Grow(r), Z.Grow(r));
+		}
+
 		public readonly Range X, Y, Z;
 
 		public Box(Range x, Range y, Range z)
@@ -95,6 +105,9 @@ namespace Shard
 
 		public Vec3 Size { get { return new Vec3(X.Size,Y.Size,Z.Size); } }
 
+		public Vec3 Center { get { return (Min + Max) * 0.5f; } }
+		public Vec3 Min { get { return new Vec3(X.Min, Y.Min, Z.Min); } }
+		public Vec3 Max { get { return new Vec3(X.Max, Y.Max, Z.Max); } }
 
 		public static Box OffsetSize(Vec3 min, Vec3 size, Bool3 maxIsInclusive)
 		{

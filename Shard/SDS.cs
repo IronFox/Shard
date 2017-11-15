@@ -79,7 +79,6 @@ namespace Shard
 		public readonly IntermediateData Intermediate;
 
 		public bool SignificantInboundChange { get; private set; }
-		public RCS[] OutboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
 
 
@@ -116,14 +115,12 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(string rev, int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] outbound, RCS[] inbound)
+		public SDS(string rev, int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound)
 		{
 			Generation = generation;
 			Revision = rev;
 			FinalEntities = entities;
 			IC = ic;
-			if (outbound != null)
-				OutboundRCS = outbound;
 			if (inbound != null)
 				InboundRCS = inbound;
 		}
@@ -154,9 +151,12 @@ namespace Shard
 		{
 			//private SDS output;
 			IntermediateData data;
-			RCS[] outbound;
 			int generation;
 			SDS old;
+
+			public IntermediateData Intermediate { get { return data; } }
+			public int Generation { get { return generation; } }
+
 
 			public Computation(int generation)
 			{
@@ -173,10 +173,8 @@ namespace Shard
 				if (old.Intermediate.inputHash == data.inputHash)
 				{
 					data = old.Intermediate;
-					outbound = old.OutboundRCS;
 					return;
 				}
-				outbound = new RCS[Simulation.NeighborCount];
 				//			rs.processed = input->entities;
 
 
@@ -222,12 +220,14 @@ namespace Shard
 					Int3 offset = (delta* InconsistencyCoverage.CommonResolution + 1).Clamp(0,InconsistencyCoverage.CommonResolution+1);
 					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution-1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
 					var ic = untrimmed.Sub(offset, end - offset + 1);
-					RCS rcs = outbound[n.LinearIndex] = new RCS(data.localChangeSet, n.WorldSpace,ic);
-
-					n.Set(n.OutboundRCS(generation).ID.ToString(), rcs);
+					RCS rcs = new RCS(data.localChangeSet, n.WorldSpace,ic);
+					var oID = n.OutboundRCS(generation);
+					if (generation >= n.OldestGeneration)
+						n.Set(oID.ID.ToString(), rcs);
 					if (rcs.IsFullyConsistent)
-						DB.Put(rcs.Export(n.OutboundRCS(generation)));
+						DB.Put(rcs.Export(oID));
 				}
+				data.localChangeSet.FilterByTargetLocation(Simulation.MySpace);
 			}
 
 			public SDS Complete()
@@ -245,7 +245,7 @@ namespace Shard
 					var rcs = old.InboundRCS[n.LinearIndex];
 					if (rcs != null)
 					{
-						cs.Include(rcs);
+						cs.Include(rcs.CS);
 						ic.Include(rcs.IC, offset);
 					}
 					else
@@ -256,7 +256,7 @@ namespace Shard
 				EntityPool p2 = data.entities.Clone();
 				cs.Execute(p2);
 
-				SDS rs = new SDS(old != null ? old.Revision : null, generation, p2.ToArray(), ic, data, outbound,old.InboundRCS);
+				SDS rs = new SDS(old != null ? old.Revision : null, generation, p2.ToArray(), ic, data, old.InboundRCS);
 
 				if (!ic.AnySet)
 				{
@@ -270,7 +270,6 @@ namespace Shard
 		{
 			public int		missingRCS,
 							rcsAvailableFromNeighbor,
-							outRCSUpdatable,
 							rcsRestoredFromDB;
 			public bool		predecessorIsConsistent,
 							thisIsConsistent;
@@ -289,7 +288,6 @@ namespace Shard
 							(
 								AnyAvailableFromNeighbors
 								|| rcsRestoredFromDB > 0
-								|| outRCSUpdatable > 0
 								|| (missingRCS == 0 && predecessorIsConsistent)
 								|| rcsRestoredFromDB > 0
 							);
@@ -305,8 +303,6 @@ namespace Shard
 
 			foreach (var other in Simulation.Neighbors)
 			{
-				if (Intermediate.inputConsistent && (!OutboundRCS[other.LinearIndex].IsFullyConsistent))
-					rs.outRCSUpdatable++;
 				var inbound = InboundRCS[other.LinearIndex];
 				if (inbound != null && inbound.IsFullyConsistent)
 					continue;

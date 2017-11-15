@@ -51,6 +51,11 @@ namespace Shard
 			return random.Next(2) == 1;
 		}
 
+		public static bool NextBool(this Random random, float p)
+		{
+			return random.NextDouble() <= p;
+		}
+
 		public static Bool3 NextBool3(this Random random)
 		{
 			return new Bool3(random.NextBool(), random.NextBool(), random.NextBool());
@@ -75,6 +80,28 @@ namespace Shard
 				random.NextFloat(cube.X),
 				random.NextFloat(cube.Y),
 				random.NextFloat(cube.Z));
+		}
+
+		public static char NextChar(this Random random, string alphabet)
+		{
+			return alphabet[random.Next(alphabet.Length)];
+		}
+
+		public static byte[] NextBytes(this Random random, int minLength, int maxLength)
+		{
+			int length = random.Next(minLength, maxLength + 1);
+			byte[] rs = new byte[length];
+			random.NextBytes(rs);
+			return rs;
+		}
+
+		public static string NextString(this Random random, string alphabet, int minLength = 3, int maxLength = 16)
+		{
+			int length = random.Next(minLength, maxLength + 1);
+			char[] field = new char[length];
+			for (int i = 0; i < length; i++)
+				field[i] = random.NextChar(alphabet);
+			return new string(field);
 		}
 
 		public static T[] ToArray<T>(this ICollection<T> collection)
