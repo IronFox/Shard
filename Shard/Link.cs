@@ -442,6 +442,16 @@ namespace Shard
 				return IntBox.MinAndMax(offset, end, Bool3.True);
 			}
 		}
+		public IntBox ICImportRegion
+		{
+			get
+			{
+				var delta = ID.XYZ - Simulation.ID.XYZ;
+				Int3 offset = (delta * InconsistencyCoverage.CommonResolution).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
+				Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
+				return IntBox.MinAndMax(offset, end, Bool3.True);
+			}
+		}
 
 		private void WriteMain()
 		{

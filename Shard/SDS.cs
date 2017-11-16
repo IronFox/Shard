@@ -249,19 +249,17 @@ namespace Shard
 				InconsistencyCoverage ic = data.ic.Clone();
 				foreach (var n in Simulation.Neighbors)
 				{
-					var delta = n.ID.XYZ - Simulation.ID.XYZ;
-					Int3 offset = (delta * InconsistencyCoverage.CommonResolution).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
-					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
+					IntBox box = n.ICImportRegion;
 
 					var rcs = old.InboundRCS[n.LinearIndex];
 					if (rcs != null)
 					{
 						cs.Include(rcs.CS);
-						ic.Include(rcs.IC, offset);
+						ic.Include(rcs.IC, box.Min);
 					}
 					else
 					{
-						ic.SetOne(offset, end - offset + 1);
+						ic.SetOne(box);
 					}
 				}
 				EntityPool p2 = data.entities.Clone();
