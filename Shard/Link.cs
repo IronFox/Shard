@@ -429,6 +429,20 @@ namespace Shard
 			}
 		}
 
+		/// <summary>
+		/// Calculates the sub section of a local IC (of size CommonResolution) that should be exported to the local neighbor
+		/// </summary>
+		public IntBox ICExportRegion
+		{
+			get
+			{
+				var delta = ID.XYZ - Simulation.ID.XYZ;
+				Int3 offset = (delta * InconsistencyCoverage.CommonResolution + 1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
+				Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
+				return IntBox.MinAndMax(offset, end, Bool3.True);
+			}
+		}
+
 		private void WriteMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();

@@ -74,7 +74,7 @@ namespace Shard.Tests
 
 
 			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(3), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.One, 0), config);
+			Simulation.Configure(new ShardID(Int3.One, 0), config,true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			var crossingLogic = new MovingLogic(new Vec3(-1, 0, 0));
@@ -151,12 +151,20 @@ namespace Shard.Tests
 			Assert.AreEqual(Simulation.NeighborCount, numRCS);
 			//comp.
 
+			{
+				Link inbound = Simulation.Neighbors.Find(new Int3(0,1,1));
+				RCS inRCS = new RCS(new EntityChangeSet(), new InconsistencyCoverage(inbound.ICExportRegion.Size));
+				temp.FetchNeighborUpdate(inbound, inRCS.Export(inbound.InboundRCS(1)));
+			}
 
 			SDS sds = comp.Complete();
 
-			//check if all outer cells are 1 (no incoming RCSs):
+			Assert.IsTrue(sds.Intermediate == comp.Intermediate);
+
+			//check if most outer cells are 1 (one full-edge incoming RCS):
 			var core = sds.IC.Sub(Int3.One, sds.IC.Size - 2);
-			Assert.AreEqual(sds.IC.OneCount , sds.IC.Size.Product - core.Size.Product);
+			int edgeSize = InconsistencyCoverage.CommonResolution - 2;
+			Assert.AreEqual(sds.IC.OneCount , sds.IC.Size.Product - core.Size.Product - edgeSize * edgeSize,edgeSize.ToString());
 			Assert.IsTrue(sds.IC.OneCount > 0);
 			Assert.IsTrue(core.OneCount == 0);
 
@@ -164,6 +172,16 @@ namespace Shard.Tests
 			Assert.AreEqual(sds.Generation, 1);
 			Assert.AreEqual(sds.FinalEntities.Length, 2);
 			Assert.IsFalse(sds.HasEntity(crosser.ID.Guid));
+
+			var check = sds.CheckMissingRCS();
+			Assert.IsFalse(check.AllThere);
+			Assert.IsFalse(check.AnyAvailableFromNeighbors);
+			Assert.AreEqual(check.missingRCS, numRCS-1);
+			Assert.IsTrue(check.predecessorIsConsistent);
+			Assert.AreEqual(check.rcsAvailableFromNeighbor, 0);
+			Assert.AreEqual(check.rcsRestoredFromDB, 0);
+
+
 		}
 
 
@@ -171,11 +189,9 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void IsolatedComputationTest()
 		{
-			int numRCS = 0;
-
 
 			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config);
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config,true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			DB.OnPutRCS = rcs =>
@@ -235,6 +251,7 @@ namespace Shard.Tests
 
 
 			SDS sds = comp.Complete();
+			Assert.IsTrue(sds.Intermediate == comp.Intermediate);
 
 			Assert.IsTrue(sds.IsFullyConsistent);
 			Assert.IsTrue(sds.IC.OneCount == 0);

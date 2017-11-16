@@ -167,6 +167,8 @@ namespace Shard
 		{
 			if (rcsRequests.ContainsKey(id))
 				return;
+			if (rcsStore == null)
+				return;
 			ContinuousPoller<RCS.Serial> poller = new ContinuousPoller<RCS.Serial>();
 			if (!rcsRequests.TryAdd(id, poller))
 				return;
@@ -178,6 +180,8 @@ namespace Shard
 			ContinuousPoller<RCS.Serial> poller;
 			if (rcsRequests.TryGetValue(id,out poller))
 				return poller.TryGet();
+			if (rcsStore == null)
+				return null;
 			BeginFetch(id);
 			return TryGet(id); ;
 		}

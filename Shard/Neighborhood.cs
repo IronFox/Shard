@@ -60,20 +60,20 @@ namespace Shard
 			this.links = Helper.ToArray(links);
 		}
 
-		public static Neighborhood NewSiblingList(ShardID myAddr, int replicaLevel)
+		public static Neighborhood NewSiblingList(ShardID myAddr, int replicaLevel, bool forceAllLinksPassive)
 		{
 			int at = 0;
 			Neighborhood n = new Neighborhood(replicaLevel - 1);
 			for (int i = 0; i < replicaLevel; i++)
 				if (i != myAddr.ReplicaLevel)
 				{
-					n.links[at] = new Link(new ShardID(myAddr.XYZ, i), i > myAddr.ReplicaLevel, at, true);
+					n.links[at] = new Link(new ShardID(myAddr.XYZ, i), i > myAddr.ReplicaLevel && !forceAllLinksPassive, at, true);
 					at++;
 				}
 			return n;
 		}
 
-		public static Neighborhood NewNeighborList(ShardID myAddr, Int3 extent)
+		public static Neighborhood NewNeighborList(ShardID myAddr, Int3 extent, bool forceAllLinksPassive)
 		{
 			List<Link> neighbors = new List<Link>();
 			Int3 at = Int3.Zero;
@@ -87,7 +87,7 @@ namespace Shard
 						if ((at >= Int3.Zero).All && (at < extent).All)
 						{
 							int linear = neighbors.Count;
-							neighbors.Add(new Link(new ShardID(at, myAddr.ReplicaLevel), at.OrthographicCompare(myAddr.XYZ) > 0, linear, false));
+							neighbors.Add(new Link(new ShardID(at, myAddr.ReplicaLevel), at.OrthographicCompare(myAddr.XYZ) > 0 && !forceAllLinksPassive, linear, false));
 						}
 					}
 			return new Neighborhood(neighbors);

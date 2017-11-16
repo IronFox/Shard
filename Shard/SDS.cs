@@ -70,6 +70,21 @@ namespace Shard
 			public EntityChangeSet localChangeSet;
 			public InconsistencyCoverage ic;
 			public bool inputConsistent;
+
+
+			public static bool operator==(IntermediateData a, IntermediateData b)
+			{
+				return a.entities == b.entities 
+					&& a.inputHash == b.inputHash 
+					&& a.localChangeSet == b.localChangeSet 
+					&& a.ic == b.ic 
+					&& a.inputConsistent == b.inputConsistent;
+			}
+
+			public static bool operator!=(IntermediateData a, IntermediateData b)
+			{
+				return !(a == b);
+			}
 		};
 
 		public readonly Entity[] FinalEntities;
@@ -115,6 +130,7 @@ namespace Shard
 
 		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound)
 		{
+			Intermediate = intermediate;
 			Generation = generation;
 			FinalEntities = entities;
 			IC = ic;
@@ -213,11 +229,9 @@ namespace Shard
 
 				foreach (var n in Simulation.Neighbors)
 				{
-					var delta = n.ID.XYZ - Simulation.ID.XYZ;
-					Int3 offset = (delta* InconsistencyCoverage.CommonResolution + 1).Clamp(0,InconsistencyCoverage.CommonResolution+1);
-					Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution-1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
-					var ic = untrimmed.Sub(offset, end - offset + 1);
-					RCS rcs = new RCS(data.localChangeSet, n.WorldSpace,ic);
+					IntBox remoteBox = n.ICExportRegion;
+					var ic = untrimmed.Sub(remoteBox);
+					RCS rcs = new RCS(new EntityChangeSet(data.localChangeSet, n.WorldSpace),ic);
 					var oID = n.OutboundRCS(generation);
 					if (generation >= n.OldestGeneration)
 						n.Set(oID.ID.ToString(), rcs);
@@ -300,7 +314,7 @@ namespace Shard
 			}
 		}
 
-		internal RecoveryCheck CheckMissingRCS()
+		public RecoveryCheck CheckMissingRCS()
 		{
 			RecoveryCheck rs = new RecoveryCheck();
 			rs.predecessorIsConsistent = Intermediate.inputConsistent;

@@ -101,5 +101,10 @@ namespace Shard
 		{
 			return this[ToPixelR(relative)];
 		}
+
+		internal InconsistencyCoverage Sub(IntBox box)
+		{
+			return Sub(box.Min, box.Size);
+		}
 	}
 }

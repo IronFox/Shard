@@ -177,19 +177,7 @@ namespace Shard
 			return numErrors;
 		}
 
-		/// <summary>
-		/// Selectively adds all remote changes whose target lies within the given target space
-		/// </summary>
-		/// <param name="remote">Source of the changes to add</param>
-		/// <param name="targetSpace">Space to check for. Only changes whose target lies within this cube are added</param>
-		public void Include(EntityChangeSet remote, Box targetSpace)
-		{
-			messages.Include(remote.messages, targetSpace);
-			motions.Include(remote.motions, targetSpace);
-			removals.Include(remote.removals, targetSpace);
-			instantiations.Include(remote.instantiations, targetSpace);
-			advertisements.Include(remote.advertisements, targetSpace);
-		}
+
 
 
 		public EntityChange.StateAdvertisement FindAdvertisementFor(EntityID id)
@@ -254,6 +242,20 @@ namespace Shard
 
 
 		public EntityChangeSet() { }
+
+		/// <summary>
+		/// Duplicates all changes in the specified source affecting the specified target space
+		/// </summary>
+		/// <param name="source"></param>
+		/// <param name="targetSpace"></param>
+		public EntityChangeSet(EntityChangeSet source, Box targetSpace)
+		{
+			messages.Include(source.messages, targetSpace);
+			motions.Include(source.motions, targetSpace);
+			removals.Include(source.removals, targetSpace);
+			instantiations.Include(source.instantiations, targetSpace);
+			advertisements.Include(source.advertisements, targetSpace);
+		}
 
 		private static void Get<T>(string name, ref Set<T> set, SerializationInfo info) where T : EntityChange.Abstract
 		{

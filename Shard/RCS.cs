@@ -34,12 +34,13 @@ namespace Shard
 			}
 		}
 
-		public RCS(EntityChangeSet localCS, Box cube, InconsistencyCoverage ic)
+		public RCS(EntityChangeSet cs, InconsistencyCoverage ic)
 		{
-			CS = new EntityChangeSet();
-			CS.Include(localCS, cube);
+			CS = cs;
 			IC = ic;
 		}
+
+		
 
 		public bool IsFullyConsistent { get { return !IC.AnySet; } }
 

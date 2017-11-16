@@ -80,7 +80,7 @@ namespace Shard
 		public static void Init(ShardID addr)
 		{
 			//Host.Domain = ;
-			Configure(addr, DB.Config);
+			Configure(addr, DB.Config,false);
 			AdvertiseOldestGeneration(0);
 
 			listener = new Listener(h => Simulation.FindLink(h.ID));
@@ -196,7 +196,7 @@ namespace Shard
 			}
 		}
 
-		public static void Configure(ShardID addr, DB.ConfigContainer config)
+		public static void Configure(ShardID addr, DB.ConfigContainer config, bool forceAllLinksPassive)
 		{
 			ID = addr;
 			ext = config.extent;
@@ -206,8 +206,8 @@ namespace Shard
 			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / R);
 
 			if (ext.ReplicaLevel > 1)
-				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel);
-			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ);
+				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel, forceAllLinksPassive);
+			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ, forceAllLinksPassive);
 
 
 		}

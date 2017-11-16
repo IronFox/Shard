@@ -308,7 +308,7 @@ namespace ShardTests1
 		}
 
 		[TestMethod]
-		public void EntityEvolveTest()
+		public void EntityMotionTest()
 		{
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100,random,new Logic()));
 

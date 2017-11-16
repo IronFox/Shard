@@ -47,7 +47,7 @@ namespace Shard.Tests
 		}
 
 		[TestMethod()]
-		public void AreEqualTest()
+		public void ByteArraysAreEqualTest()
 		{
 			Random random = new Random();
 			for (int i = 0; i < 1000; i++)
