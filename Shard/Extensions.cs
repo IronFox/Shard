@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -17,6 +18,41 @@ namespace Shard
 
 	public static class Extensions
 	{
+
+		public static void Enter(this SpinLock lck)
+		{
+			bool amIn = false;
+			for (int i = 0; i < 10; i++)
+			{
+				lck.Enter(ref amIn);
+				if (amIn)
+					return;
+				Thread.Sleep(10);
+			}
+			throw new IntegrityViolation("Could not enter spinlock after 100 ms");
+		}
+
+		public static void DoLocked(this SpinLock lck, Action action)
+		{
+			lck.Enter();    //if fails, throws exception, not locked, all good
+			try
+			{
+				action();
+				lck.Exit();
+			}
+			catch
+			{
+				lck.Exit();
+				throw;
+			}
+		}
+
+
+
+
+
+
+
 		/// <summary>
 		/// https://stackoverflow.com/questions/273313/randomize-a-listt
 		/// </summary>

@@ -6,25 +6,138 @@ using VectorMath;
 
 namespace Shard
 {
+	public class SerialRCSStack : DB.Entity
+	{
+		public int[] NumericID;
+		public RCS.SerialData[] Entries { get; set; }
+
+		public struct Destination
+		{
+			public int OldestGeneration { get; set; }
+			public int LastUpdateTimeStep { get; set; }
+		}
+
+		public Destination[] Destinations { get; set; }
+
+
+		public static int GetNewestTimeStep(Destination[] fld)
+		{
+			int newest = 0;
+			if (fld != null)
+				foreach (var dest in fld)
+					newest = Math.Max(newest, dest.LastUpdateTimeStep);
+			return newest;
+		}
+		public int GetNewestTimeStep()
+		{
+			return GetNewestTimeStep(Destinations);
+		}
+
+		public static int GetOldestGeneration(Destination[] fld)
+		{
+			if (fld == null || fld.Length == 0)
+				return 0;
+			int newest = GetNewestTimeStep(fld);
+			int oldest = int.MaxValue;
+			foreach (var dest in fld)
+				if (dest.LastUpdateTimeStep >= newest - 5)
+					oldest = Math.Min(oldest, dest.OldestGeneration);
+			return oldest;
+		}
+
+		public RCS.SerialData? FindGeneration(int generation)
+		{
+			int at = generation - GetOldestGeneration();
+			return at < Count(Entries) ? (RCS.SerialData?)Entries[at] : null;
+		}
+		public int GetOldestGeneration()
+		{
+			return GetOldestGeneration(Destinations);
+		}
+
+		private static int Count<T>(T[] array)
+		{
+			return array != null ? array.Length : 0;
+		}
+
+		private int GetDestCount()
+		{
+			return Count(Destinations);
+		}
+
+		public void IncludeNewerVersion(SerialRCSStack other)
+		{
+			int myOldest = GetOldestGeneration();
+			int otherOldest = other.GetOldestGeneration();
+
+			int mc = GetDestCount();
+			int oc = other.GetDestCount();
+			int len = Math.Max(mc, oc);
+			Destination[] newDest = new Destination[len];
+			int merge = Math.Min(mc, oc);
+			for (int i = 0; i < merge; i++)
+				newDest[i] = Destinations[i].LastUpdateTimeStep > other.Destinations[i].LastUpdateTimeStep ? Destinations[i] : other.Destinations[i];
+			for (int i = merge; i < len; i++)
+				newDest[i] = i < mc ? Destinations[i] : other.Destinations[i];
+
+			int newOldest = GetOldestGeneration(newDest);
+
+
+			int mh = myOldest + Count(Entries) - newOldest;
+			int oh = otherOldest + Count(other.Entries) - newOldest;
+			int h = Math.Max(mh, oh);
+			var newEntries = new RCS.SerialData[h];
+
+			for (int i = 0; i < newEntries.Length; i++)
+			{
+				int mi = (i + newOldest) - myOldest;
+				if (mi >= 0 && mi < mc)
+					newEntries[i] = Entries[mi];
+				else
+				{
+					int oi = (i + newOldest) - otherOldest;
+					if (oi >= 0 && oi < oc)
+						newEntries[i] = other.Entries[oi];
+				}
+			}
+
+			Entries = newEntries;
+			Destinations = newDest;
+			_rev = other._rev;
+		}
+	}
+
+
+
 	[Serializable()]
 	public class RCS
 	{
-		public new class Serial
-		{
-			public string _id;
-
-			public byte[] CS { get; set; }
-			public InconsistencyCoverage.Serial IC { get; set; }
-			public int[] NumericID { get; set; }
-			public int Generation { get; set; }
-		}
 
 		public readonly InconsistencyCoverage IC;
 
 		public readonly EntityChangeSet CS;
 
+		public struct SerialData
+		{
+			public byte[] CS { get; set; }
+			public InconsistencyCoverage.Serial IC { get; set; }
+		}
 
-		public RCS(Serial rcs)
+		public class Serial
+		{
+			public readonly SerialData Data;
+			public readonly int Generation;
+
+			public Serial(RCS rcs, int generation)
+			{
+				Generation = generation;
+				Data = rcs.Export();
+			}
+		}
+
+
+
+		public RCS(SerialData rcs)
 		{
 			IC = new InconsistencyCoverage(rcs.IC);
 
@@ -87,85 +200,15 @@ namespace Shard
 			}
 		}
 
-		public struct GenID
+		public SerialData Export()
 		{
-			public readonly ID ID;
-			public readonly int Generation;
-			public const int ExportInts = ID.ExportInts + 1;
-
-			public GenID(Int3 fromShard, Int3 toShard, int generation)
-			{
-				ID = new ID(fromShard, toShard);
-				Generation = generation;
-			}
-
-			public GenID(ID myID, int generation)
-			{
-				ID = myID;
-				Generation = generation;
-			}
-
-			public GenID(int[] numericID, int offset)
-			{
-				ID  = new ID(numericID,offset);
-				Generation = numericID[offset + ID.ExportInts];
-			}
-
-			public override string ToString()
-			{
-				return ID + "g" + Generation;
-			}
-			public override int GetHashCode()
-			{
-				return ID.GetHashCode() * 31 +  Generation.GetHashCode();
-			}
-
-			public static bool operator ==(GenID a, GenID b)
-			{
-				return a.ID == b.ID && a.Generation == b.Generation;
-			}
-			public static bool operator !=(GenID a, GenID b)
-			{
-				return !(a == b);
-			}
-
-			public override bool Equals(object obj)
-			{
-				return (obj is GenID) && ((GenID)obj) == (this);
-			}
-
-			public void Export(int[] ar, int offset)
-			{
-				ID.Export(ar, offset);
-				ar[offset + ID.ExportInts] = Generation;
-			}
-
-
-			public int[] IntArray
-			{
-				get
-				{
-					int[] rs = new int[ExportInts];
-					Export(rs, 0);
-					return rs;
-				}
-			}
-		}
-
-		public Serial Export(GenID genID)
-		{
-			Serial rs = new Serial();
-			rs.Generation = genID.Generation;
-			rs.NumericID = genID.IntArray;
+			var rs = new SerialData();
 			rs.IC = IC.Export();
 			using (var ms = new MemoryStream())
 			{
 				new BinaryFormatter().Serialize(ms, CS);
 				rs.CS = ms.ToArray();
 			}
-
-			rs._id = genID.ToString();
-
 			return rs;
 		}
 

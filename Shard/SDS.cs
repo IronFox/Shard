@@ -10,10 +10,9 @@ namespace Shard
 
 	public class SDS
 	{
-		public class Serial
+
+		public class Serial : SerialGenerationObject
 		{
-			public string _id;
-			public int Generation { get; set; }
 			public Entity.Serial[] Entities { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
 		}
@@ -85,6 +84,22 @@ namespace Shard
 			{
 				return !(a == b);
 			}
+
+			public override bool Equals(object obj)
+			{
+				return obj is IntermediateData && ((IntermediateData)obj) == this;
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner()
+					.Add(entities)
+					.Add(inputHash)
+					.Add(localChangeSet)
+					.Add(ic)
+					.Add(inputConsistent)
+					.GetHashCode();
+			}
 		};
 
 		public readonly Entity[] FinalEntities;
@@ -96,14 +111,14 @@ namespace Shard
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
 
 
-		public void FetchNeighborUpdate(Link neighbor, RCS.Serial entry)
+		public void FetchNeighborUpdate(Link neighbor, RCS.SerialData data)
 		{
-			var candidate = new RCS(entry);
+			var candidate = new RCS(data);
 			var existing = InboundRCS[neighbor.LinearIndex];
 			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
 			if (existing!= null && candidate.IC.OneCount > existing.IC.OneCount)
 			{
-				Console.Error.WriteLine("Unable to incorportate RCS from "+neighbor+": RCS at generation "+entry.Generation+" is worse than known");
+				Console.Error.WriteLine("Unable to incorportate RCS from "+neighbor+": RCS at generation "+Generation+" is worse than known");
 				return;
 			}
 			InboundRCS[neighbor.LinearIndex] = candidate;
@@ -232,11 +247,11 @@ namespace Shard
 					IntBox remoteBox = n.ICExportRegion;
 					var ic = untrimmed.Sub(remoteBox);
 					RCS rcs = new RCS(new EntityChangeSet(data.localChangeSet, n.WorldSpace),ic);
-					var oID = n.OutboundRCS(generation);
+					var oID = n.OutboundRCS;
 					if (generation >= n.OldestGeneration)
-						n.Set(oID.ID.ToString(), rcs);
+						n.Set(oID.ToString(), rcs);
 					if (rcs.IsFullyConsistent)
-						DB.Put(rcs.Export(oID));
+						n.OutStack.Put(generation,rcs);
 				}
 				data.localChangeSet.FilterByTargetLocation(Simulation.MySpace);
 			}
@@ -324,10 +339,11 @@ namespace Shard
 				if (inbound != null && inbound.IsFullyConsistent)
 					continue;
 				//try get from database:
-				RCS.Serial rcs = DB.TryGet(other.InboundRCS(Generation));
-				if (rcs != null)
+				SerialRCSStack rcsStack = DB.TryGet(other.InboundRCS);
+				var rcs = rcsStack?.FindGeneration(Generation);
+				if (rcs.HasValue)
 				{
-					InboundRCS[other.LinearIndex] = new RCS(rcs);
+					InboundRCS[other.LinearIndex] = new RCS(rcs.Value);
 					rs.rcsRestoredFromDB++;
 					continue;
 				}

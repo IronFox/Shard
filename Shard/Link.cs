@@ -156,7 +156,7 @@ namespace Shard
 		private NetworkStream stream;
 		public readonly int LinearIndex;
 		public readonly bool IsSibling;
-
+		public readonly DB.RCSStack OutStack;
 
 		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
 
@@ -165,6 +165,7 @@ namespace Shard
 		public Link(ShardID remoteAddr, bool isActive, int linearIndex, bool isSibling) : this(new Host(remoteAddr),isActive,linearIndex,isSibling)
 		{
 			ID = remoteAddr;
+			OutStack = new DB.RCSStack(OutboundRCS);
 		}
 
 		public Link(Host remoteHost, bool isActive, int linearIndex, bool isSibling)
@@ -192,14 +193,20 @@ namespace Shard
 			connectThread.Start();
 		}
 
-		public RCS.GenID InboundRCS(int generation)
+		public RCS.ID InboundRCS
 		{
-			return new RCS.GenID(ID.XYZ, Simulation.ID.XYZ, generation);
+			get
+			{
+				return new RCS.ID(ID.XYZ, Simulation.ID.XYZ);
+			}
 		}
 
-		public RCS.GenID OutboundRCS(int generation)
+		public RCS.ID OutboundRCS
 		{
-			return new RCS.GenID(Simulation.ID.XYZ, ID.XYZ, generation);
+			get
+			{
+				return new RCS.ID(Simulation.ID.XYZ, ID.XYZ);
+			}
 		}
 
 		private bool dispose = false;

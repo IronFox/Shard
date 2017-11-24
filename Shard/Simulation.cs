@@ -112,14 +112,8 @@ namespace Shard
 				int timeStep = TimeStep;
 				Console.WriteLine("Starting at " + timeStep);
 
-				List<RCS.GenID> queryRCS = new List<RCS.GenID>();
 				foreach (var link in neighbors)
-					for (int i = sds.Generation + 1; i < timeStep; i++)
-					{
-						queryRCS.Add(new RCS.GenID(link.ID.XYZ, addr.XYZ, i));
-					}
-				Console.WriteLine("Querying " + queryRCS.Count + " RCS's");
-				DB.BeginFetch(queryRCS);
+					DB.BeginFetch(link.InboundRCS);
 			}
 
 			Console.Write("Catching up...");
@@ -299,7 +293,7 @@ namespace Shard
 						Console.Error.WriteLine("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
 						return;
 					}
-					stack.AllocateGeneration(rcs.Generation).FetchNeighborUpdate(lnk, rcs);
+					stack.AllocateGeneration(rcs.Generation).FetchNeighborUpdate(lnk, rcs.Data);
 					return;
 				}
 

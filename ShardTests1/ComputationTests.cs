@@ -81,29 +81,29 @@ namespace Shard.Tests
 			Entity crosser = new Entity(new EntityID(Guid.NewGuid(), Simulation.MySpace.Min), crossingLogic, null, null, null);
 			Vec3 crossingTarget = crosser.ID.Position + crossingLogic.Motion;
 
-			DB.OnPutRCS = rcs =>
-			{
-				numRCS++;
+			foreach (var n in Simulation.Neighbors)
+				n.OutStack.OnPutRCS = (rcs,gen) =>
+				{
+					numRCS++;
 
-				Assert.AreEqual(rcs.Generation, 1);
+					Assert.AreEqual(gen, 1);
 
 
-				RCS decoded = new RCS(rcs);
+					RCS decoded = new RCS(rcs);
 
-				Assert.IsTrue(decoded.IsFullyConsistent);
-				Assert.IsNotNull(rcs.NumericID);
-				RCS.GenID id = new RCS.GenID(rcs.NumericID,0);
-				Link lnk = Simulation.Neighbors.Find(id.ID.ToShard);
-				Assert.IsNotNull(lnk);
+					Assert.IsTrue(decoded.IsFullyConsistent);
+					//RCS.GenID id = new RCS.GenID(rcs.NumericID,0);
+					//Link lnk = Simulation.Neighbors.Find(id.ID.ToShard);
+					//Assert.IsNotNull(lnk);
 
-				if (lnk.WorldSpace.Grow(Simulation.SensorRange).Contains(outlierCoords))
-					Assert.IsFalse(decoded.CS.IsEmpty);
-				else
-					Assert.IsTrue(decoded.CS.IsEmpty);
+					if (n.WorldSpace.Grow(Simulation.SensorRange).Contains(outlierCoords))
+						Assert.IsFalse(decoded.CS.IsEmpty);
+					else
+						Assert.IsTrue(decoded.CS.IsEmpty);
 
-				if (lnk.WorldSpace.Contains(crossingTarget))
-					Assert.IsNotNull(decoded.CS.FindMotionOf(crosser.ID.Guid));
-			};
+					if (n.WorldSpace.Contains(crossingTarget))
+						Assert.IsNotNull(decoded.CS.FindMotionOf(crosser.ID.Guid));
+				};
 
 			SDS.IntermediateData intermediate = new SDS.IntermediateData();
 			intermediate.entities = new EntityPool(
@@ -154,7 +154,7 @@ namespace Shard.Tests
 			{
 				Link inbound = Simulation.Neighbors.Find(new Int3(0,1,1));
 				RCS inRCS = new RCS(new EntityChangeSet(), new InconsistencyCoverage(inbound.ICExportRegion.Size));
-				temp.FetchNeighborUpdate(inbound, inRCS.Export(inbound.InboundRCS(1)));
+				temp.FetchNeighborUpdate(inbound, inRCS.Export());
 			}
 
 			SDS sds = comp.Complete();
@@ -194,10 +194,11 @@ namespace Shard.Tests
 			Simulation.Configure(new ShardID(Int3.Zero, 0), config,true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
-			DB.OnPutRCS = rcs =>
-			{
-				Assert.Fail("This test generates no simulation neighbors. Should not generate RCSs");
-			};
+			foreach (var n in Simulation.Neighbors)
+				n.OutStack.OnPutRCS = (rcs, gen) =>
+				{
+					Assert.Fail("This test generates no simulation neighbors. Should not generate RCSs");
+				};
 
 			DB.OnPutSDS = dbSDS =>
 			{

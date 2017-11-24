@@ -1,4 +1,5 @@
 ﻿using MyCouch;
+using MyCouch.Requests;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -15,10 +16,8 @@ namespace Shard
 
 		private static string url;
 
-		public class ConfigContainer
+		public class ConfigContainer : Entity
 		{
-			public string _id;  //"current"
-			public string _rev;
 			public ShardID extent;
 			public float r, m;
 			public int msPerTimeStep,   //total milliseconds per timestep
@@ -58,53 +57,80 @@ namespace Shard
 			}
 		}
 
-
-		class ContinuousPoller<T> where T : class
+		public class Entity
 		{
-			public Task<T> Task { get; private set; }
-			private Thread pollThread;
+			public string _id, _rev;
+		}
+
+		class ContinuousPoller<T> where T : Entity
+		{
 			private MyCouchStore store;
 			private string id;
+			T lastValue;
+			private Action<T> onChange;
+			SpinLock sl = new SpinLock();
+			CancellationTokenSource cancellation;
 
 			public ContinuousPoller()
 			{
 			}
 
-			public Task<T> Start(MyCouchStore store, string id)
-			{
-				this.store = store;
-				this.id = id;
-				Task = store.GetByIdAsync<T>(id);
-				if (Task.IsCompleted)
-					return Task;
 
-				pollThread = new Thread(new ThreadStart(ThreadedPoll));
-				return Task;
-			}
-
-			private void ThreadedPoll()
+			public T Latest
 			{
-				while (true)
+				get
 				{
-					try
-					{
-						if (Task.Result != null)
-							return;
-					}
-					catch (Exception ex)
-					{
-						Console.Error.WriteLine(ex);
-						Thread.Sleep(1000);
-						Task = store.GetByIdAsync<T>(id);
-					}
+					return lastValue;
 				}
 			}
 
-			public T TryGet()
+			public void Start(MyCouchStore store, string id, Action<T> onChange)
 			{
-				if (Task == null || !Task.IsCompleted)
-					return null;
-				return Task.Result;
+				this.onChange = onChange;
+				this.store = store;
+				this.id = id;
+
+				PollAsync();
+
+				var getChangesRequest = new GetChangesRequest
+				{
+					Feed = ChangesFeed.Continuous,
+					Heartbeat = 3000 //Optional: LET COUCHDB SEND A I AM ALIVE BLANK ROW EACH ms
+				};
+
+
+				var serial = store.Client.Entities.Serializer;
+				cancellation = new CancellationTokenSource();
+				store.Client.Changes.GetAsync(
+					getChangesRequest,
+					data =>
+					{
+						var d = serial.Deserialize<T>(data);
+						sl.DoLocked(() =>
+						{
+							if (d._id == id && d._rev != lastValue._rev)
+							{
+								lastValue = d;
+								onChange?.Invoke(d);
+							}
+						});
+					},
+					cancellation.Token);
+
+			}
+
+			private async void PollAsync()
+			{
+				var header = await store.GetHeaderAsync(id);
+				if (header.Rev != lastValue._rev)
+				{
+					var data = await store.GetByIdAsync<T>(id);
+					sl.DoLocked(()=>
+					{
+						lastValue = data;
+						onChange?.Invoke(data);
+					});
+				}
 			}
 		}
 
@@ -128,7 +154,7 @@ namespace Shard
 			public override string LogicID => logic.ID;
 
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
+			public override Changes Evolve(Shard.Entity currentState, int generation, Random randomSource)
 			{
 				throw new NotImplementedException();
 			}
@@ -136,10 +162,8 @@ namespace Shard
 
 		private class MyLogic : EntityLogic
 		{
-			public class Serial
+			public class Serial : Entity
 			{
-				public string _id;  //"current"
-				public string _rev;
 			}
 
 			public readonly string ID;
@@ -158,32 +182,32 @@ namespace Shard
 
 
 
-		private static ConcurrentDictionary<RCS.GenID, ContinuousPoller<RCS.Serial>> rcsRequests = new ConcurrentDictionary<RCS.GenID, ContinuousPoller<RCS.Serial>>();
+		private static ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>> rcsRequests = new ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>>();
 		private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
 		private static ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>> logicRequests = new ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>>();
 		private static ConcurrentDictionary<string, MyLogic> loadedLogics = new ConcurrentDictionary<string, MyLogic>();
 
-		public static void BeginFetch(RCS.GenID id)
+		public static void BeginFetch(RCS.ID id)
 		{
 			if (rcsRequests.ContainsKey(id))
 				return;
 			if (rcsStore == null)
 				return;
-			ContinuousPoller<RCS.Serial> poller = new ContinuousPoller<RCS.Serial>();
+			ContinuousPoller<SerialRCSStack> poller = new ContinuousPoller<SerialRCSStack>();
 			if (!rcsRequests.TryAdd(id, poller))
 				return;
-			poller.Start(rcsStore, id.ToString());
+			poller.Start(rcsStore, id.ToString(),null);
 		}
 
-		public static RCS.Serial TryGet(RCS.GenID id)
+		public static SerialRCSStack TryGet(RCS.ID id)
 		{
-			ContinuousPoller<RCS.Serial> poller;
+			ContinuousPoller<SerialRCSStack> poller;
 			if (rcsRequests.TryGetValue(id,out poller))
-				return poller.TryGet();
+				return poller.Latest;
 			if (rcsStore == null)
 				return null;
 			BeginFetch(id);
-			return TryGet(id); ;
+			return TryGet(id);
 		}
 
 
@@ -194,7 +218,7 @@ namespace Shard
 			ContinuousPoller<MyLogic.Serial> poller = new ContinuousPoller<MyLogic.Serial>();
 			if (!logicRequests.TryAdd(id, poller))
 				return;
-			poller.Start(rcsStore, id);
+			poller.Start(rcsStore, id,null);
 		}
 
 		public static EntityLogic TryGetLogic(string id)
@@ -208,7 +232,7 @@ namespace Shard
 				BeginFetchLogic(id);
 				return TryGetLogic(id);
 			}
-			MyLogic.Serial serial = poller.TryGet();
+			MyLogic.Serial serial = poller.Latest;
 			if (serial == null)
 				return null;
 			rs = new MyLogic(serial);
@@ -217,20 +241,118 @@ namespace Shard
 			return rs;
 		}
 
-		public static void BeginFetch(IEnumerable<RCS.GenID> ids)
+		public static void BeginFetch(IEnumerable<RCS.ID> ids)
 		{
 			foreach (var id in ids)
 				BeginFetch(id);
 		}
 
-		public static Action<RCS.Serial> OnPutRCS { get; set; } = null;
 		public static Action<SDS.Serial> OnPutSDS { get; set; } = null;
 
-		internal static void Put(RCS.Serial serial)
+
+
+		public class RCSStack
 		{
-			if (OnPutRCS != null)
-				OnPutRCS(serial);
+			SerialRCSStack last;
+			Task rcsPutTask;
+			readonly RCS.ID myID;
+
+			public Action<RCS.SerialData, int> OnPutRCS { get; set; } = null;
+
+
+			public RCSStack(RCS.ID id)
+			{
+				last = new SerialRCSStack();
+				last._id = id.ToString();
+				last.NumericID = id.IntArray;
+				myID = id;
+			}
+
+			public void SignalOldestGenerationUpdate(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
+			{
+				int oldGen = last.GetOldestGeneration();
+				if (last.Destinations == null || last.Destinations.Length <= replicationIndex)
+				{
+					var nd = new SerialRCSStack.Destination[replicationIndex + 1];
+					if (last.Destinations != null)
+						for (int i = 0; i < last.Destinations.Length; i++)
+							nd[i] = last.Destinations[i];
+					last.Destinations = nd;
+				}
+				last.Destinations[replicationIndex].LastUpdateTimeStep = simulationTopGeneration;
+				last.Destinations[replicationIndex].OldestGeneration = oldestGeneration;
+
+				int newGen = last.GetOldestGeneration();
+				if (oldGen > newGen)
+					throw new IntegrityViolation("Local generation offset changed backwards");
+				if (newGen > oldGen && last.Entries != null)
+				{
+					int offset = (newGen - oldGen);
+					int remaining = last.Entries.Length - offset;
+					if (remaining <= 0)
+					{
+						last.Entries = null;
+					}
+					else
+					{
+						var entries = new RCS.SerialData[remaining];
+						for (int i = 0; i < remaining; i++)
+							entries[i] = last.Entries[i + offset];
+						last.Entries = entries;
+					}
+				}
+			}
+
+			public void Put(int generation, RCS data)
+			{
+				if (!data.IsFullyConsistent)
+					throw new IntegrityViolation("Trying to upload inconsistent RCS " + myID + " at generation " + generation);
+				if (rcsPutTask != null)
+					rcsPutTask.Wait();
+				rcsPutTask = PutAsync(generation, data.Export());
+			}
+
+			public async Task PutAsync(int generation, RCS.SerialData data)
+			{
+				int at = generation - last.GetOldestGeneration();
+				if (last.Entries == null || last.Entries.Length <= at)
+				{
+					var entries = new RCS.SerialData[at + 1];
+					if (last.Entries != null)
+						for (int i = 0; i < last.Entries.Length; i++)
+							entries[i] = last.Entries[i];
+					entries[at] = data;
+					last.Entries = entries;
+				}
+
+				OnPutRCS?.Invoke(last.Entries[at], generation);
+
+				int cnt = 0;
+				while (!await PutAsync())
+				{
+					cnt++;
+					if (cnt > 10)
+						throw new Exception("Failed to update local RCS "+cnt+" times");
+				};
+			}
+			private async Task<bool> PutAsync()
+			{
+				try
+				{
+					last = await rcsStore.StoreAsync(last);
+					return true;
+				}
+				catch (MyCouchResponseException ex)
+				{
+					Log.Error(ex);
+					var existing = await rcsStore.GetByIdAsync<SerialRCSStack>(last._id);
+					last.IncludeNewerVersion(existing);
+					return false;
+				}
+			}
 		}
+
+
 		internal static void Put(SDS.Serial serial)
 		{
 			if (OnPutSDS != null)
