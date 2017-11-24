@@ -271,16 +271,7 @@ namespace Shard
 			public void SignalOldestGenerationUpdate(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
 			{
 				int oldGen = last.GetOldestGeneration();
-				if (last.Destinations == null || last.Destinations.Length <= replicationIndex)
-				{
-					var nd = new SerialRCSStack.Destination[replicationIndex + 1];
-					if (last.Destinations != null)
-						for (int i = 0; i < last.Destinations.Length; i++)
-							nd[i] = last.Destinations[i];
-					last.Destinations = nd;
-				}
-				last.Destinations[replicationIndex].LastUpdateTimeStep = simulationTopGeneration;
-				last.Destinations[replicationIndex].OldestGeneration = oldestGeneration;
+				last.Destinations.Set(replicationIndex, simulationTopGeneration, oldestGeneration);
 
 				int newGen = last.GetOldestGeneration();
 				if (oldGen > newGen)

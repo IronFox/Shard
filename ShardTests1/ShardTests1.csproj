@@ -67,6 +67,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="EntityTest.cs" />
     <Compile Include="BoxTest.cs" />
+    <Compile Include="SerialRCSStackTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
