@@ -6,6 +6,15 @@ namespace Shard
 {
 	public static class Helper
 	{
+		public static float Max(float a, float b, float c)
+		{
+			return Math.Max(Math.Max(a, b), c);
+		}
+		public static int Max(int a, int b, int c)
+		{
+			return Math.Max(Math.Max(a, b), c);
+		}
+
 		public static T[] ToArray<T>(ICollection<T> collection)
 		{
 			T[] rs = new T[collection.Count];
