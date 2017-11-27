@@ -140,6 +140,11 @@ namespace Shard
 			return new string(field);
 		}
 
+		public static string NextString(this Random random, int minLength = 3, int maxLength = 16)
+		{
+			return random.NextString("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _",minLength,maxLength);
+		}
+
 		public static T[] ToArray<T>(this ICollection<T> collection)
 		{
 			T[] rs = new T[collection.Count];

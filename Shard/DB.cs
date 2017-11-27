@@ -141,42 +141,26 @@ namespace Shard
 			return sdsStore.GetByIdAsync<SDS.Serial>(myID.Encoded).Result;
 		}
 
-		private class MyLogicState : EntityLogic.State
+		private class MyLogicState : EntityLogic
 		{
-			readonly MyLogic logic;
-			public MyLogicState(MyLogic logic, byte[] binaryState)
+			public MyLogicState()
 			{
-				this.logic = logic;
 			}
 
-			public override byte[] BinaryState => throw new NotImplementedException();
-
-			public override string LogicID => logic.ID;
-
+			public override int CompareTo(EntityLogic other)
+			{
+				return 0;
+			}
 
 			public override Changes Evolve(Shard.Entity currentState, int generation, Random randomSource)
 			{
-				throw new NotImplementedException();
-			}
-		}
-
-		private class MyLogic : EntityLogic
-		{
-			public class Serial : Entity
-			{
+				Changes rs = new Changes();
+				rs.newState = this;
+				return rs;
 			}
 
-			public readonly string ID;
-
-			public MyLogic(Serial serial)
+			public override void Hash(Hasher h)
 			{
-				ID = serial._id;
-				throw new NotImplementedException();
-			}
-
-			public override State Instantiate(byte[] binaryState)
-			{
-				return new MyLogicState(this,binaryState);
 			}
 		}
 
@@ -184,8 +168,6 @@ namespace Shard
 
 		private static ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>> rcsRequests = new ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>>();
 		private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
-		private static ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>> logicRequests = new ConcurrentDictionary<string, ContinuousPoller<MyLogic.Serial>>();
-		private static ConcurrentDictionary<string, MyLogic> loadedLogics = new ConcurrentDictionary<string, MyLogic>();
 
 		public static void BeginFetch(RCS.ID id)
 		{
@@ -210,36 +192,7 @@ namespace Shard
 			return TryGet(id);
 		}
 
-
-		public static void BeginFetchLogic(string id)
-		{
-			if (logicRequests.ContainsKey(id))
-				return;
-			ContinuousPoller<MyLogic.Serial> poller = new ContinuousPoller<MyLogic.Serial>();
-			if (!logicRequests.TryAdd(id, poller))
-				return;
-			poller.Start(rcsStore, id,null);
-		}
-
-		public static EntityLogic TryGetLogic(string id)
-		{
-			MyLogic rs;
-			if (loadedLogics.TryGetValue(id, out rs))
-				return rs;
-			ContinuousPoller<MyLogic.Serial> poller;
-			if (!logicRequests.TryGetValue(id, out poller))
-			{
-				BeginFetchLogic(id);
-				return TryGetLogic(id);
-			}
-			MyLogic.Serial serial = poller.Latest;
-			if (serial == null)
-				return null;
-			rs = new MyLogic(serial);
-			if (!loadedLogics.TryAdd(id, rs))
-				return TryGetLogic(id);
-			return rs;
-		}
+		
 
 		public static void BeginFetch(IEnumerable<RCS.ID> ids)
 		{
@@ -349,5 +302,6 @@ namespace Shard
 			if (OnPutSDS != null)
 				OnPutSDS(serial);
 		}
+
 	}
 }

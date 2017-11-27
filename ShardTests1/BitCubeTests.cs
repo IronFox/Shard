@@ -64,7 +64,7 @@ namespace Shard.Tests
 			int set;
 			return MakeRandomCube(out set);
 		}
-		private static int RandomFillCube(BitCube cube)
+		public static int RandomFillCube(BitCube cube)
 		{
 			return FillCube(cube, (x, y, z) => (random.Next(2) == 1));
 		}
@@ -74,6 +74,13 @@ namespace Shard.Tests
 			BitCube rs = AllocateRandomCube();
 			numSet = RandomFillCube(rs);
 			return rs;
+		}
+
+		public static InconsistencyCoverage RandomIC()
+		{
+			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
+			RandomFillCube(ic);
+			return ic;
 		}
 
 		private static Int3 RandomInt3(Int3 inclusiveMin, Int3 exclusiveMax)

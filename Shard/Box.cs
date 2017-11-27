@@ -91,6 +91,15 @@ namespace Shard
 			}
 		}
 
+		public static Box Centered(Vec3 center, float r)
+		{
+			return new Box(
+				new Range(center.X - r, center.X + r, true),
+				new Range(center.Y - r, center.Y + r, true),
+				new Range(center.Z - r, center.Z + r, true)
+				);
+		}
+
 		public Box Grow(float r)
 		{
 			return new Box(X.Grow(r), Y.Grow(r), Z.Grow(r));

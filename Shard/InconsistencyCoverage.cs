@@ -26,10 +26,28 @@ namespace Shard
 			{
 				Data = cube.ToByteArray();
 			}
+			public Serial()
+			{ }
 
 			public BitCube Export()
 			{
 				return new BitCube(Data);
+			}
+
+			public override string ToString()
+			{
+				return "IC[" + Helper.Length(Data) + " byte(s)]";
+			}
+
+			public override bool Equals(object obj)
+			{
+				Serial other = obj as Serial;
+				return Helper.AreEqual(Data, other.Data);
+			}
+
+			public override int GetHashCode()
+			{
+				return Data.GetHashCode();
 			}
 		}
 

@@ -13,8 +13,26 @@ namespace Shard
 
 		public class Serial : SerialGenerationObject
 		{
-			public Entity.Serial[] Entities { get; set; }
+			public byte[] SerialEntities { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
+
+			public override bool Equals(object obj)
+			{
+				var other = obj as Serial;
+				if (other == null)
+					return false;
+				return Helper.AreEqual(SerialEntities,other.SerialEntities) && IC.Equals(other.IC);
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner().Add(SerialEntities).Add(IC).GetHashCode();
+			}
+
+			public override string ToString()
+			{
+				return "Serial SDS ["+Helper.Length(SerialEntities) +" byte(s)] IC="+IC;
+			}
 		}
 
 
@@ -128,10 +146,7 @@ namespace Shard
 
 		public SDS(Serial dbSDS)
 		{
-			foreach (var e in dbSDS.Entities)
-				e.BeginFetchLogic();
-
-			FinalEntities = Entity.Import(dbSDS.Entities);
+			FinalEntities = Entity.Import(dbSDS.SerialEntities);
 
 			Generation = dbSDS.Generation;
 			IC = new InconsistencyCoverage(dbSDS.IC);
@@ -365,7 +380,7 @@ namespace Shard
 		public Serial Export()
 		{
 			Serial rs = new Serial();
-			rs.Entities = Entity.Export(FinalEntities);
+			rs.SerialEntities = Entity.Export(FinalEntities);
 			rs.Generation = Generation;
 			rs.IC = IC.Export();
 			rs._id = Simulation.ID.XYZ.Encoded;

@@ -7,8 +7,8 @@ namespace VectorMath
 	public struct Vec3 : IComparable<Vec3>
     {
         public readonly float X, Y, Z;
-        public Vec2 xy { get { return new Vec2(X, Y); } }
-        public Vec2 yz { get { return new Vec2(Y, Z); } }
+        public Vec2 XY { get { return new Vec2(X, Y); } }
+        public Vec2 ZY { get { return new Vec2(Y, Z); } }
 
         public static readonly Vec3 Zero = new Vec3(0);
 		public static readonly Vec3 One = new Vec3(1);

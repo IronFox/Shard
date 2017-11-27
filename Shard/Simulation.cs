@@ -71,7 +71,7 @@ namespace Shard
 
 
 
-		public static int NeighborCount { get { return neighbors.Count; } }
+		public static int NeighborCount { get { return neighbors != null ? neighbors.Count : 0; } }
 
 
 		private static ConcurrentBag<Tuple<Link, object>> incoming = new ConcurrentBag<Tuple<Link, object>>();
@@ -228,6 +228,14 @@ namespace Shard
 		}
 
 		public static float SensorRange { get { return R - M; } }
+
+		public static Box FullSimulationSpace
+		{
+			get
+			{
+				return Box.CreateUsingMax(Vec3.Zero, new Vec3(ext.XYZ), Bool3.True);
+			}
+		}
 
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
 		{

@@ -58,6 +58,12 @@ namespace Shard
 			}
 		}
 
+		public void Add(Type type)
+		{
+			buffer.Add(type.AssemblyQualifiedName);
+			Check();
+		}
+
 		ByteBuffer buffer = new ByteBuffer();
 
 		private void Check()
@@ -86,6 +92,12 @@ namespace Shard
 			Check();
 		}
 
+		public void Add(Vec3 v)
+		{
+			buffer.Add(v);
+			Check();
+		}
+
 		public void Add(bool b)
 		{
 			buffer.Add(b);
@@ -98,18 +110,10 @@ namespace Shard
 			Check();
 		}
 
-
-
 		public Hash Finish()
 		{
 			Flush();
 			return new Hash(base.HashFinal());
-		}
-
-		internal void Add(Vec3 position)
-		{
-			buffer.Add(position);
-			Check();
 		}
 
 		public void Add(Guid guid)

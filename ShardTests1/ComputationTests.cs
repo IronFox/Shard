@@ -14,12 +14,14 @@ namespace Shard.Tests
 	{
 		static Random random = new Random();
 
-
-		class ExceedingMovementLogic : EntityLogic.State
+		[Serializable]
+		class ExceedingMovementLogic : EntityLogic
 		{
-			public override byte[] BinaryState => null;
 
-			public override string LogicID => "ExceedingMovement.Logic";
+			public override int CompareTo(EntityLogic other)
+			{
+				return 0;
+			}
 
 			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
@@ -28,12 +30,16 @@ namespace Shard.Tests
 				rs.newState = this;
 				return rs;
 			}
+
+			public override void Hash(Hasher h)
+			{
+				h.Add(GetType());
+			}
 		}
-
-		class MovingLogic : EntityLogic.State
+		
+		[Serializable]
+		class MovingLogic : EntityLogic
 		{
-			public override byte[] BinaryState => null;
-
 			public readonly Vec3 Motion;
 			
 			public MovingLogic(Vec3 direction)
@@ -41,7 +47,6 @@ namespace Shard.Tests
 				Motion = direction / direction.Length * Simulation.M;
 				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
-			public override string LogicID => "Moving.Logic";
 
 			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
@@ -50,19 +55,41 @@ namespace Shard.Tests
 				rs.newState = this;
 				return rs;
 			}
+
+			public override void Hash(Hasher h)
+			{
+				h.Add(GetType());
+				h.Add(Motion);
+			}
+
+			public override int CompareTo(EntityLogic cmp)
+			{
+				MovingLogic other = cmp as MovingLogic;
+				if (other == null)
+					return -1;
+				return Motion.CompareTo(other.Motion);
+			}
 		}
 
-		class StationaryLogic : EntityLogic.State
+		[Serializable]
+		class StationaryLogic : EntityLogic
 		{
-			public override byte[] BinaryState => null;
 
-			public override string LogicID => "Stationary.Logic";
+			public override int CompareTo(EntityLogic other)
+			{
+				return 0;
+			}
 
 			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
 				Changes rs = new Changes();
 				rs.newState = this;
 				return rs;
+			}
+
+			public override void Hash(Hasher h)
+			{
+				h.Add(GetType());
 			}
 		}
 
@@ -202,7 +229,7 @@ namespace Shard.Tests
 
 			DB.OnPutSDS = dbSDS =>
 			{
-				Assert.AreEqual(dbSDS.Entities.Length, 2);
+				Assert.AreEqual(Entity.Import( dbSDS.SerialEntities).Length, 2);
 				Assert.AreEqual(dbSDS.Generation, 1);
 				Assert.AreEqual(new InconsistencyCoverage(dbSDS.IC).OneCount, 0);
 			};

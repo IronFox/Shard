@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace Shard
@@ -59,6 +60,18 @@ namespace Shard
 			return f.GetHashCode();
 		}
 
+		public static bool AreEqual<T>(T[] a0, T[] a1)
+		{
+			int len0 = Length(a0);
+			int len1 = Length(a1);
+			if (len0 != len1)
+				return false;
+			for (int i = 0; i < len0; i++)
+				if (!a0[i].Equals(a1[i]))
+					return false;
+			return true;
+		}
+
 
 		public static unsafe bool AreEqual(byte[] a1, byte[] a2)
 		{
@@ -103,6 +116,58 @@ namespace Shard
 				}
 				return this;
 			}
+			public Comparator Append<T>(T[] a, T[] b) where T : IComparable<T>
+			{
+				if (state == 0)
+				{
+					if (a == null && b == null)
+						return this;
+					if (a == null && b != null)
+						state = -1;
+					else
+						if (a != null && b == null)
+						state = 1;
+					else
+					{
+						if (a.Length < a.Length)
+							state = -1;
+						else
+							if (a.Length > b.Length)
+								state = 1;
+							else
+								for (int i = 0; i < a.Length && state == 0; i++)
+									Append(a[i], b[i]);
+					}
+				}
+				return this;
+			}
+
+			public Comparator Append<T>(IList<T> a, IList<T> b) where T : IComparable<T>
+			{
+				if (state == 0)
+				{
+					if (a == null && b == null)
+						return this;
+					if (a == null && b != null)
+						state = -1;
+					else
+						if (a != null && b == null)
+						state = 1;
+					else
+					{
+						if (a.Count < a.Count)
+							state = -1;
+						else
+							if (a.Count > b.Count)
+							state = 1;
+						else
+							for (int i = 0; i < a.Count && state == 0; i++)
+								Append(a[i], b[i]);
+					}
+				}
+				return this;
+			}
+
 
 			public Comparator Append(int comparisonResult)
 			{
@@ -179,6 +244,49 @@ namespace Shard
 			{
 				return hashCode;
 			}
+		}
+
+		public class MyCouchSerializer
+		{
+			MyCouch.Serialization.ISerializer serializer;
+
+			public MyCouchSerializer()
+			{
+//				serializer = new MyCouch.Serialization.DefaultSerializer(new MyCouch.Serialization.SerializationConfiguration();
+				serializer = new MyCouch.MyCouchClient("https://127.0.0.1","none").Entities.Serializer;
+				Console.WriteLine(serializer.GetType());
+			}
+
+			public T Deserialize<T>(string data)
+			{
+				return serializer.Deserialize<T>(data);
+			}
+
+			public T Deserialize<T>(Stream data)
+			{
+				return serializer.Deserialize<T>(data);
+			}
+
+			public void Populate<T>(T item, Stream data) where T : class
+			{
+				serializer.Populate(item, data);
+			}
+
+			public void Populate<T>(T item, string json) where T : class
+			{
+				serializer.Populate(item, json);
+			}
+
+			public string Serialize<T>(T item) where T : class
+			{
+				return serializer.Serialize(item);
+			}
+
+		}
+
+		public static int Length<T>(T[] array)
+		{
+			return array != null ? array.Length : 0;
 		}
 	}
 }

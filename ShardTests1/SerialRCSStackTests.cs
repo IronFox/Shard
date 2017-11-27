@@ -12,17 +12,17 @@ namespace Shard.Tests
 	public class SerialRCSStackTests
 	{
 
-		Random random = new Random();
+		static Random random = new Random();
 
 
-		SerialRCSStack RandomStack()
+		public static SerialRCSStack RandomStack()
 		{
 			int numDestinations = random.Next(3) + 1;
 			int numEntries = random.Next(16);
 			return RandomStack(numDestinations, numEntries);
 		}
 
-		SerialRCSStack.DestinationTable RandomDestinations(int numDestinations)
+		public static SerialRCSStack.DestinationTable RandomDestinations(int numDestinations)
 		{
 			if (numDestinations == 0)
 				return new SerialRCSStack.DestinationTable();
@@ -37,7 +37,7 @@ namespace Shard.Tests
 			return new SerialRCSStack.DestinationTable() { All = field };
 		}
 
-		RCS.SerialData[] RandomEntries(int numEntries)
+		public static RCS.SerialData[] RandomEntries(int numEntries)
 		{
 			var rs = numEntries > 0 ? new RCS.SerialData[numEntries] : null;
 
@@ -48,7 +48,7 @@ namespace Shard.Tests
 			return rs;
 		}
 
-		SerialRCSStack RandomStack(int numDestinations, int numEntries)
+		public static SerialRCSStack RandomStack(int numDestinations, int numEntries)
 		{
 			SerialRCSStack rs = new SerialRCSStack();
 			rs.Destinations = RandomDestinations(numDestinations);
@@ -56,12 +56,11 @@ namespace Shard.Tests
 			return rs;
 		}
 
-		RCS RandomRCS()
+		public static RCS RandomRCS()
 		{
 			EntityChangeSet cs = new EntityChangeSet();
-			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 
-			return new RCS(cs, ic);
+			return new RCS(cs, BitCubeTests.RandomIC());
 		}
 
 
@@ -109,6 +108,7 @@ namespace Shard.Tests
 			}
 		}
 
+	
 		[TestMethod()]
 		public void GetOldestGenerationTest()
 		{

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 using VectorMath;
 
 namespace Shard
@@ -27,6 +28,31 @@ namespace Shard
 				if (a.LastUpdateTimeStep == b.LastUpdateTimeStep)
 					return a.OldestGeneration > b.OldestGeneration ? a : b;
 				return a.LastUpdateTimeStep > b.LastUpdateTimeStep ? a : b;
+			}
+
+			public static bool operator ==(Destination a, Destination b)
+			{
+				return a.OldestGeneration == b.OldestGeneration && a.LastUpdateTimeStep == b.LastUpdateTimeStep;
+			}
+			public static bool operator !=(Destination a, Destination b)
+			{
+				return !(a == b);
+			}
+
+
+			public override bool Equals(object obj)
+			{
+				return obj is Destination && ((Destination)obj) == this;
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner().Add(OldestGeneration).Add(LastUpdateTimeStep).GetHashCode();
+			}
+
+			public override string ToString()
+			{
+				return "old="+OldestGeneration+",up="+LastUpdateTimeStep;
 			}
 		}
 
@@ -102,6 +128,55 @@ namespace Shard
 				}
 				All[replicationIndex].LastUpdateTimeStep = simulationTopGeneration;
 				All[replicationIndex].OldestGeneration = oldestGeneration;
+			}
+
+			internal void AppendTo(StringBuilder builder)
+			{
+				for (int i = 0; i < Count(); i++)
+				{
+					if (i != 0)
+						builder.Append(',');
+					builder.Append(All[i]);
+				}
+			}
+
+			public override bool Equals(object obj)
+			{
+				if (!(obj is DestinationTable))
+					return false;
+				DestinationTable t = (DestinationTable)obj;
+				return t == this;
+			}
+
+			public static bool operator==(DestinationTable a, DestinationTable b)
+			{
+				if (a.Count() != b.Count())
+					return false;
+				for (int i = 0; i < a.Count(); i++)
+					if (a.All[i] != b.All[i])
+						return false;
+				return true;
+			}
+			public static bool operator !=(DestinationTable a, DestinationTable b)
+			{
+				return !(a == b);
+			}
+
+
+
+			public override int GetHashCode()
+			{
+				var h = new Helper.HashCombiner();
+				for (int i = 0; i < Count(); i++)
+					h.Add(All[i]);
+				return h.GetHashCode();
+			}
+
+			public override string ToString()
+			{
+				StringBuilder builder = new StringBuilder();
+				AppendTo(builder);
+				return builder.ToString();
 			}
 		}
 
@@ -198,6 +273,48 @@ namespace Shard
 			Load(Merge(this, other));
 			_rev = other._rev;
 		}
+
+		public override string ToString()
+		{
+			StringBuilder builder = new StringBuilder();
+			builder.Append("Stack [");
+			Destinations.AppendTo(builder);
+			builder.Append("] {");
+			for (int i = 0; i < CountEntries(); i++)
+			{
+				if (i > 0)
+					builder.Append(",");
+				builder.Append(Entries[i]);
+			}
+			builder.Append("}");
+			return builder.ToString();
+
+		}
+
+		public override bool Equals(object obj)
+		{
+			SerialRCSStack other = obj as SerialRCSStack;
+			if (other == null)
+				return false;
+
+			if (!Destinations.Equals(other.Destinations))
+				return false;
+			if (CountEntries() != other.CountEntries())
+				return false;
+			for (int i = 0; i < CountEntries(); i++)
+				if (!Entries[i].Equals(other.Entries[i]))
+					return false;
+			return true;
+		}
+
+		public override int GetHashCode()
+		{
+			var h = new Helper.HashCombiner();
+			h.Add(Destinations);
+			for (int i = 0; i < CountEntries(); i++)
+				h.Add(Entries[i]);
+			return h.GetHashCode();
+		}
 	}
 
 
@@ -214,6 +331,24 @@ namespace Shard
 		{
 			public byte[] CS { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
+
+			public override bool Equals(object obj)
+			{
+				if (!(obj is SerialData))
+					return false;
+				var other = (SerialData)obj;
+				return Helper.AreEqual(CS, other.CS) && IC.Equals(other.IC);
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner().Add(CS).Add(IC).GetHashCode();
+			}
+
+			public override string ToString()
+			{
+				return "CS["+Helper.Length(CS)+"], IC="+IC;
+			}
 		}
 
 		public class Serial
@@ -225,6 +360,24 @@ namespace Shard
 			{
 				Generation = generation;
 				Data = rcs.Export();
+			}
+
+			public override bool Equals(object obj)
+			{
+				Serial other = obj as Serial;
+				if (other == null)
+					return false;
+				return Generation == other.Generation && Data.Equals(other.Data);
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner().Add(Data).Add(Generation).GetHashCode();
+			}
+
+			public override string ToString()
+			{
+				return "g"+Generation+":"+Data;
 			}
 		}
 

@@ -10,6 +10,7 @@ using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Xml;
 using System.Xml.Serialization;
+using VectorMath;
 
 namespace Shard.Tests
 {
@@ -20,20 +21,17 @@ namespace Shard.Tests
 		static Random random = new Random();
 
 
-		static EntityID RandomID()
+		public static EntityID RandomID()
 		{
-			return new EntityID(Guid.NewGuid(), random.NextVec3(0, 1));
+			return new EntityID(Guid.NewGuid(), random.NextVec3(Simulation.MySpace));
 		}
 
-		static EntityAppearance RandomAppearance()
+		public static EntityAppearanceCollection RandomAppearance()
 		{
 			return null;    //later
 		}
 
-		static string RandomString()
-		{
-			return random.NextString("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _");
-		}
+
 
 		static byte[] RandomByteArray(bool mayBeNull = false)
 		{
@@ -43,35 +41,49 @@ namespace Shard.Tests
 		}
 
 
-		static Instantiation RandomInstantiation()
+		public static Instantiation RandomInstantiation()
 		{
-			bool noLogic = random.NextBool(0.1f);
-			return new Instantiation(RandomID(), random.NextVec3(0, 1), RandomAppearance(), noLogic ? null : RandomString(), noLogic ? null : RandomByteArray());
+			var id = RandomID();
+			var inst = ClampedDestination(id.Position);
+			return new Instantiation(id, inst, RandomAppearance(), RandomLogic());
 		}
 
-		static Removal RandomRemoval()
+		private static EntityLogic RandomLogic()
 		{
-			return new Removal(RandomID(), RandomID());
+			return null;	//for now
 		}
 
-		static Motion RandomMotion()
+		public static Removal RandomRemoval()
 		{
-			bool noLogic = random.NextBool(0.1f);
-			return new Motion(RandomID(), random.NextVec3(0, 1), RandomAppearance(), noLogic ? null : RandomString(), noLogic ? null : RandomByteArray());
+			var id = RandomID();
+			var id2 = new EntityID(Guid.NewGuid(), ClampedDestination(id.Position));
+			return new Removal(id, id2);
 		}
 
-		static Broadcast RandomBroadcast()
+		public static Vec3 ClampedDestination(Vec3 origin)
+		{
+			return Simulation.FullSimulationSpace.Clamp(random.NextVec3(Box.Centered(origin, Simulation.M)));
+		}
+
+		public static Motion RandomMotion()
+		{
+			var id = RandomID();
+			var to = ClampedDestination(id.Position);
+			return new Motion(id, to, RandomAppearance(), RandomLogic());
+		}
+
+		public static Broadcast RandomBroadcast()
 		{
 			return new Broadcast(RandomID(), RandomByteArray(true), random.Next(16));
 		}
 
-		static Message RandomMessage()
+		public static Message RandomMessage()
 		{
 			return new Message(RandomID(), random.Next(16), Guid.NewGuid(), RandomByteArray());
 		}
 
 
-		static EntityChangeSet RandomSet()
+		public static EntityChangeSet RandomSet()
 		{
 			EntityChangeSet rs = new EntityChangeSet();
 			int numInserts = random.Next(0, 3);

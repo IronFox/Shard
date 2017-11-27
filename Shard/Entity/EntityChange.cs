@@ -82,16 +82,14 @@ namespace Shard.EntityChange
 	public class Instantiation : Abstract
 	{
 		public readonly Vec3 TargetLocation;
-		public readonly EntityAppearance Appearance;
-		public readonly byte[] LogicState;
-		public readonly string LogicID;
+		public readonly EntityAppearanceCollection Appearances;
+		public readonly EntityLogic Logic;
 
-		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearance appearance, string logicID, byte[] logicState) : base(origin)
+		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic) : base(origin)
 		{
 			TargetLocation = targetLocation;
-			LogicState = logicState;
-			LogicID = logicID;
-			Appearance = appearance;
+			Logic = logic;
+			Appearances = appearance;
 		}
 
 		public override int GetHashCode()
@@ -99,9 +97,8 @@ namespace Shard.EntityChange
 			return new Helper.HashCombiner()
 				.Add(Origin)
 				.Add(TargetLocation)
-				.Add(Appearance)
-				.Add(LogicState)
-				.Add(LogicID)
+				.Add(Appearances)
+				.Add(Logic)
 				.GetHashCode();
 		}
 
@@ -116,9 +113,8 @@ namespace Shard.EntityChange
 			return new Helper.Comparator()
 					.Append(Origin, other.Origin)
 					.Append(TargetLocation, other.TargetLocation)
-					.Append(Appearance, other.Appearance)
-					.Append(LogicID, other.LogicID)
-					.Append(LogicState, other.LogicState)
+					.Append(Appearances, other.Appearances)
+					.Append(Logic, other.Logic)
 					.Finish();
 		}
 
@@ -126,7 +122,7 @@ namespace Shard.EntityChange
 		{
 			if (!Simulation.CheckDistance("Insert", Origin.Position, TargetLocation, Simulation.M))
 				return false;
-			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), LogicID, LogicState, Appearance, null, null));
+			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Logic, Appearances, null, null));
 		}
 
 		public override bool Affects(Box cube)
@@ -138,23 +134,18 @@ namespace Shard.EntityChange
 	[Serializable]
 	public class Motion : Instantiation
 	{
-		[NonSerialized()] public readonly EntityLogic.State DirectState;
-		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearance appearance, string logicID, byte[] logicState) : base(origin, targetLocation, appearance, logicID, logicState)
+		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic) : base(origin, targetLocation, appearance, logic)
 		{ }
 
-		public Motion(Entity e, EntityLogic.State newState, EntityAppearance newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState != null ? newState.LogicID : null, newState != null ? newState.BinaryState : null)
-		{
-			DirectState = newState;
-		}
+		public Motion(Entity e, EntityLogic newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
+		{ }
 
 
 		protected Entity Entity
 		{
 			get
 			{
-				if (DirectState != null)
-					return new Entity(Origin.Relocate(TargetLocation), DirectState, Appearance, null, null);
-				return new Entity(Origin.Relocate(TargetLocation), LogicID, LogicState, Appearance, null, null);
+				return new Entity(Origin.Relocate(TargetLocation), Logic, Appearances, null, null);
 			}
 		}
 
@@ -302,24 +293,24 @@ namespace Shard.EntityChange
 	[Serializable]
 	public class StateAdvertisement : Abstract
 	{
-		public readonly EntityAppearance Appearance;
+		public readonly EntityAppearanceCollection Appearances;
 		public readonly Vec3 Velocity;
 
-		public StateAdvertisement(EntityID id, EntityAppearance fullAppearance, Vec3 velocity) : base(id)
+		public StateAdvertisement(EntityID id, EntityAppearanceCollection fullAppearance, Vec3 velocity) : base(id)
 		{
-			Appearance = fullAppearance;
+			Appearances = fullAppearance;
 			Velocity = velocity;
 		}
 
 		public StateAdvertisement(EntityContact entityContact) : base(entityContact.ID)
 		{
-			Appearance = entityContact.Appearance;
+			Appearances = entityContact.Appearances;
 			Velocity = entityContact.Velocity;
 		}
 
 		public override bool Execute(EntityPool pool)
 		{
-			pool.AddContact(new EntityContact(Origin, Appearance, Velocity));
+			pool.AddContact(new EntityContact(Origin, Appearances, Velocity));
 			return true;
 		}
 
@@ -332,7 +323,7 @@ namespace Shard.EntityChange
 				return 0;
 			return new Helper.Comparator()
 					.Append(Origin, other.Origin)
-					.Append(Appearance, other.Appearance)
+					.Append(Appearances, other.Appearances)
 					.Finish();
 		}
 
@@ -340,7 +331,7 @@ namespace Shard.EntityChange
 		{
 			return new Helper.HashCombiner()
 					.Add(Origin)
-					.Add(Appearance)
+					.Add(Appearances)
 					.GetHashCode();
 		}
 

@@ -12,40 +12,44 @@ namespace ShardTests1
 		static Random random = new Random();
 
 
-		private class Appearance<T> : EntityAppearance where T: IComparable<T>
+		private class ConsistencyAppearance : EntityAppearance
 		{
-			public Appearance(T value)
+			public ConsistencyAppearance(bool isConsistent)
 			{
-				Value = value;
+				IsConsistent = isConsistent;
 			}
 
-			public T Value { get; set; }
+			public bool IsConsistent { get; set; }
 
 			public override int CompareTo(EntityAppearance other)
 			{
-				Appearance<T> that = other as Appearance<T>;
-				return other != null ? Value.CompareTo(that.Value) : -1;
+				ConsistencyAppearance that = other as ConsistencyAppearance;
+				return other != null ? IsConsistent.CompareTo(that.IsConsistent) : -1;
 			}
 
 			public override void Hash(Hasher h)
 			{
-				h.Add(Value.GetHashCode());
+				h.Add(GetType());
+				h.Add(IsConsistent.GetHashCode());
 			}
 		}
 
 
 
-		private class LogicState : EntityLogic.State
+		private class ConsistentAppearance : EntityLogic
 		{
-			public static bool IsConsistent(EntityAppearance app)
+			public static bool IsConsistent(EntityAppearanceCollection app)
 			{
-				var a = app as Appearance<bool>;
-				return a != null && a.Value;
+				if (app == null)
+					return false;
+				var a = app.Get<ConsistencyAppearance>();
+				return a != null && a.IsConsistent;
 			}
 
-			public override byte[] BinaryState => null;
-
-			public override string LogicID => "EntityTest.Logic";
+			public override int CompareTo(EntityLogic other)
+			{
+				return 0;
+			}
 
 			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
@@ -55,9 +59,10 @@ namespace ShardTests1
 
 				bool isConsistent = true;
 
-				if (currentState.Appearance is Appearance<bool>)
+				var old = currentState.GetAppearance<ConsistencyAppearance>();
+				if (old != null)
 				{
-					isConsistent = ((Appearance<bool>)currentState.Appearance).Value;
+					isConsistent = old.IsConsistent;
 				}
 				
 
@@ -65,7 +70,7 @@ namespace ShardTests1
 				{
 					foreach (var c in currentState.Contacts)
 					{
-						if (!IsConsistent(c.Appearance))
+						if (!IsConsistent(c.Appearances))
 						{
 							isConsistent = false;
 							break;
@@ -73,9 +78,7 @@ namespace ShardTests1
 					}
 
 				}
-
-				ch.newAppearance = new Appearance<bool>(isConsistent);	//is consistent?
-
+				ch.Add(new ConsistencyAppearance(isConsistent));	//is consistent?
 
 				float M = Simulation.M;
 				do
@@ -85,63 +88,45 @@ namespace ShardTests1
 				while (ch.newPosition == currentState.ID.Position);
 				return ch;
 			}
-		}
 
-		private class Logic : EntityLogic
-		{
-			public override State Instantiate(byte[] binaryState)
+			public override void Hash(Hasher h)
 			{
-				return new LogicState();
+				h.Add(GetType());
 			}
 		}
+
 		public class FaultLogic : EntityLogic
 		{
-			private EntityLogic followLogic;
-			private bool useFollowLogic;
-
-			public FaultLogic(EntityLogic logic)
+			public override int CompareTo(EntityLogic other)
 			{
-				followLogic = logic;
-				useFollowLogic = false;
-			}
-			public FaultLogic()
-			{ }
-
-			public override EntityLogic.State Instantiate(byte[] binaryState)
-			{
-				if (useFollowLogic)
-					return followLogic.Instantiate(binaryState);
-				if (followLogic != null)
-					useFollowLogic = true;
-				return new State();
+				return 0;
 			}
 
-			public new class State : EntityLogic.State
+			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
 			{
-				public override byte[] BinaryState => null;
-
-				public override string LogicID => "Fault.Logic";
-
-				public override Changes Evolve(Entity currentState, int generation, Random randomSource)
-				{
-					throw new NotImplementedException();
-				}
+				throw new NotImplementedException();
 			}
 
+			public override void Hash(Hasher h)
+			{
+				h.Add(GetType());
+			}
 		}
+		
 
-		private class RandomLogic : EntityLogic
+		private class RandomLogic
 		{
-			private EntityLogic[] logics;
+			private Type[] logics;
 
-			public RandomLogic(IEnumerable<EntityLogic> logics)
+			public RandomLogic(IEnumerable<Type> logics)
 			{
 				this.logics = Helper.ToArray(logics);
 			}
 
-			public override State Instantiate(byte[] binaryState)
+			public EntityLogic Instantiate(int i)
 			{
-				return logics.PickRandom(random).Instantiate(binaryState);
+				Type t = logics.PickRandom(random);
+				return (EntityLogic)t.GetConstructor(Type.EmptyTypes).Invoke(null);
 			}
 		}
 
@@ -149,8 +134,8 @@ namespace ShardTests1
 		[TestMethod]
 		public void SimpleEntityFaultTest()
 		{
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, random,
-				new RandomLogic(new EntityLogic[] { new Logic(), new FaultLogic() })));
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, 
+				new RandomLogic(new Type[] { typeof(ConsistentAppearance), typeof(FaultLogic) }).Instantiate));
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 			int any = -1;
@@ -180,13 +165,12 @@ namespace ShardTests1
 			{
 				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 
-				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, random,
-					new FaultLogic(new Logic())));  //should be one with fault logic, 99 with other logic
+				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentAppearance() : (EntityLogic)(new FaultLogic())));
 
 				int faultyCount = 0;
 				Entity faulty = new Entity();
 				foreach (var e in pool.ToArray())
-					if (e.LogicState is FaultLogic.State)
+					if (e.LogicState is FaultLogic)
 					{
 						faultyCount++;
 						faulty = e;
@@ -211,7 +195,7 @@ namespace ShardTests1
 					bool hasFaulty = false;
 					foreach (var e in entities)
 					{
-						bool isFaultOrigin = (e.LogicState is FaultLogic.State);
+						bool isFaultOrigin = (e.LogicState is FaultLogic);
 						if (isFaultOrigin)
 						{
 							faulty = e;
@@ -223,7 +207,7 @@ namespace ShardTests1
 
 					foreach (var e in entities)
 					{
-						bool isFaultOrigin = (e.LogicState is FaultLogic.State);
+						bool isFaultOrigin = (e.LogicState is FaultLogic);
 						if (!isFaultOrigin)
 						{
 							if (Simulation.GetDistance(e.ID.Position, faulty.ID.Position) <= Simulation.SensorRange)
@@ -233,9 +217,9 @@ namespace ShardTests1
 							}
 
 							var adv = set.FindAdvertisementFor(e.ID);
-							Assert.IsNotNull(e.Appearance);
+							Assert.IsNotNull(e.Appearances);
 						}
-						bool consistent = LogicState.IsConsistent(e.Appearance);
+						bool consistent = ConsistentAppearance.IsConsistent(e.Appearances);
 						bool icIsInc = ic.IsInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
 						if (!consistent && !icIsInc)
@@ -261,7 +245,7 @@ namespace ShardTests1
 
 		public static EntityPool RandomDefaultPool(int numEntities)
 		{
-			return new EntityPool(EntityPoolTests.CreateEntities(100, random, new Logic()));
+			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentAppearance()));
 		}
 
 		[TestMethod]
@@ -295,14 +279,14 @@ namespace ShardTests1
 						Assert.IsTrue(env.Contains(c.ID.Guid));
 					}
 
-					var app = e.Appearance as Appearance<bool>;
+					var app = e.Appearances.Get<ConsistencyAppearance>();
 					if (i > 0)
 					{
-						Assert.IsNotNull(e.Appearance);
+						Assert.IsNotNull(e.Appearances);
 						Assert.IsNotNull(app);
 					}
 					if (app != null)
-						Assert.IsTrue(app.Value);
+						Assert.IsTrue(app.IsConsistent);
 				}
 			}
 		}
@@ -310,7 +294,7 @@ namespace ShardTests1
 		[TestMethod]
 		public void EntityMotionTest()
 		{
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100,random,new Logic()));
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100,i => new ConsistentAppearance()));
 
 			for (int i = 0; i < 100; i++)
 			{
