@@ -64,7 +64,8 @@ namespace Shard.Tests
 				string json = serial.Serialize(s);
 				var reverse = serial.Deserialize<SDS.Serial>(json);
 				Assert.AreEqual(s, reverse);
-
+				SDS rev2 = new SDS(reverse);
+				Assert.IsTrue(sds.ICAndEntitiesAreEqual(rev2));
 			}
 		}
 		

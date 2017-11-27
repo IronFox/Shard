@@ -148,7 +148,7 @@ namespace Shard.Tests
 		}
 
 		[TestMethod()]
-		public void SerializationTest()
+		public void CSSerializationTest()
 		{
 			var f = new BinaryFormatter();
 			for (int i = 0; i < 100; i++)

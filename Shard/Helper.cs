@@ -125,24 +125,15 @@ namespace Shard
 			{
 				if (state == 0)
 				{
-					if (a == null && b == null)
-						return this;
-					if (a == null && b != null)
+					int lenA = Length(a);
+					int lenB = Length(b);
+					if (lenA < lenB)
 						state = -1;
-					else
-						if (a != null && b == null)
+					else if (lenA > lenB)
 						state = 1;
 					else
-					{
-						if (a.Length < a.Length)
-							state = -1;
-						else
-							if (a.Length > b.Length)
-								state = 1;
-							else
-								for (int i = 0; i < a.Length && state == 0; i++)
-									Append(a[i], b[i]);
-					}
+						for (int i = 0; i < lenA && state == 0; i++)
+							Append(a[i], b[i]);
 				}
 				return this;
 			}
@@ -151,24 +142,15 @@ namespace Shard
 			{
 				if (state == 0)
 				{
-					if (a == null && b == null)
-						return this;
-					if (a == null && b != null)
+					int lenA = Length(a);
+					int lenB = Length(b);
+					if (lenA < lenB)
 						state = -1;
-					else
-						if (a != null && b == null)
+					else if (lenA > lenB)
 						state = 1;
 					else
-					{
-						if (a.Count < a.Count)
-							state = -1;
-						else
-							if (a.Count > b.Count)
-							state = 1;
-						else
-							for (int i = 0; i < a.Count && state == 0; i++)
-								Append(a[i], b[i]);
-					}
+						for (int i = 0; i < lenA && state == 0; i++)
+							Append(a[i], b[i]);
 				}
 				return this;
 			}
@@ -292,6 +274,10 @@ namespace Shard
 		public static int Length<T>(T[] array)
 		{
 			return array != null ? array.Length : 0;
+		}
+		public static int Length<T>(IList<T>list)
+		{
+			return list != null ? list.Count : 0;
 		}
 	}
 }

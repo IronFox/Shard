@@ -386,5 +386,12 @@ namespace Shard
 			rs._id = Simulation.ID.XYZ.Encoded;
 			return rs;
 		}
+
+
+		public bool ICAndEntitiesAreEqual(SDS other)
+		{
+			return IC.Equals(other.IC) && Helper.AreEqual(FinalEntities, other.FinalEntities);
+		}
+
 	}
 }

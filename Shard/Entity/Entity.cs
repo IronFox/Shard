@@ -478,6 +478,21 @@ namespace Shard
 				return ms.ToArray();
 			}
 		}
+
+		public override bool Equals(object obj)
+		{
+			if (!(obj is Entity))
+			{
+				return false;
+			}
+
+			var other = (Entity)obj;
+			return ID == other.ID &&
+				   Equals(Appearances, other.Appearances) &&
+				   Equals(LogicState, other.LogicState) &&
+				   Helper.AreEqual(InboundMessages, other.InboundMessages) &&
+				   Helper.AreEqual(Contacts, other.Contacts);
+		}
 	}
 
 
