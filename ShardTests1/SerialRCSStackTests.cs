@@ -58,8 +58,7 @@ namespace Shard.Tests
 
 		public static RCS RandomRCS()
 		{
-			EntityChangeSet cs = new EntityChangeSet();
-
+			EntityChangeSet cs = EntityChangeSetTests.RandomSet();
 			return new RCS(cs, BitCubeTests.RandomIC());
 		}
 
@@ -101,10 +100,6 @@ namespace Shard.Tests
 					Assert.AreEqual(merged.CountEntries(), remaining);
 					Assert.AreEqual(merged.CountEntries(), Math.Max(aRemaining, bRemaining));
 				}
-			}
-
-			for (int i = 0; i < 100; i++)
-			{
 			}
 		}
 
