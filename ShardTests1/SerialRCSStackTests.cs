@@ -75,26 +75,37 @@ namespace Shard.Tests
 				SerialRCSStack b = new SerialRCSStack();
 				b.Destinations = new SerialRCSStack.DestinationTable(2);
 
+				//upper edge
+				for (int i = 0; i < 100; i++)
+				{
+					a.Entries = RandomEntries(random.Next(16));
+					b.Entries = RandomEntries(random.Next(16));
+
+					var merged = SerialRCSStack.Merge(a, b);
+					Assert.AreEqual(merged.CountEntries(), Math.Max(a.CountEntries(), b.CountEntries()));
+				}
+
+				//lower edge
+				a.Entries = RandomEntries(random.Next(16));
+				b.Entries = a.Entries;
 				for (int i = 0; i < 100; i++)
 				{
 					a.Destinations.All[0] = new SerialRCSStack.Destination() { LastUpdateTimeStep = 1, OldestGeneration = random.Next(16) };
 					b.Destinations.All[1] = new SerialRCSStack.Destination() { LastUpdateTimeStep = 1, OldestGeneration = random.Next(16) };
 
-					a.Entries = RandomEntries(random.Next(16));
-					b.Entries = RandomEntries(random.Next(16));
+					int aRemaining = Math.Max(0,a.CountEntries() - a.Destinations.All[0].OldestGeneration);
+					int bRemaining = Math.Max(0, b.CountEntries() - b.Destinations.All[1].OldestGeneration);
+
+					int remaining = Math.Max(0, a.CountEntries() - SerialRCSStack.DestinationTable.Merge(a.Destinations, b.Destinations).GetOldestGeneration());
 
 					var merged = SerialRCSStack.Merge(a, b);
-					Assert.AreEqual(merged.CountEntries(), Math.Max(a.GetNewestGeneration(), b.GetNewestGeneration())-Math.Min(a.GetOldestGeneration(),b.GetOldestGeneration()));
+					Assert.AreEqual(merged.CountEntries(), remaining);
+					Assert.AreEqual(merged.CountEntries(), Math.Max(aRemaining, bRemaining));
 				}
 			}
 
-
 			for (int i = 0; i < 100; i++)
 			{
-				SerialRCSStack a = RandomStack(),
-					b = RandomStack();
-				a.IncludeNewerVersion(b);
-
 			}
 		}
 
