@@ -159,7 +159,7 @@ namespace Shard
 
 			int historyA = oldestA + Count(a.Entries) - newOldest;
 			int historyB = oldestB + Count(b.Entries) - newOldest;
-			int history = Math.Max(historyA, historyB);
+			int history = Helper.Max(historyA, historyB,0);
 
 			if (history > 100)
 				throw new Exception("History too long for oldest=" + newOldest + ": " + history + ", max of oldestA=" + oldestA + ", oldestB=" + oldestB);
