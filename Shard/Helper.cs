@@ -72,6 +72,11 @@ namespace Shard
 			return true;
 		}
 
+		public static string ToString(byte[] a)
+		{
+			string hex = BitConverter.ToString(a);
+			return '['+ hex.Replace("-", "")+']';
+		}
 
 		public static unsafe bool AreEqual(byte[] a1, byte[] a2)
 		{

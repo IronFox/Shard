@@ -8,8 +8,6 @@ using System.Threading.Tasks;
 using Shard.EntityChange;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Xml;
-using System.Xml.Serialization;
 using VectorMath;
 
 namespace Shard.Tests

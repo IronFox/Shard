@@ -11,6 +11,7 @@ namespace Shard.Tests
 	[TestClass()]
 	public class HelperTests
 	{
+		static Random random = new Random();
 
 		private void TestFloat(float f)
 		{
@@ -30,7 +31,6 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void FloatToIntTest()
 		{
-			Random random = new Random();
 			TestFloat(0);
 			TestFloat(1);
 			TestFloat(-1);
@@ -46,23 +46,35 @@ namespace Shard.Tests
 			}
 		}
 
+
+		static void TestByteArrays(int sizeA, int sizeB)
+		{
+			byte[] a = new byte[sizeA];
+			byte[] b = new byte[sizeB];
+			random.NextBytes(a);
+			random.NextBytes(b);
+
+			bool equal1 = a.SequenceEqual(b);
+			//bool equal = EqualityComparer<byte[]>.Default.Equals(a, b);	//don't work on empty arrays
+			bool checkEqual = Helper.AreEqual(a, b);
+			//Assert.AreEqual(equal, equal1, Helper.ToString(a)+"=="+ Helper.ToString(b));
+			Assert.AreEqual(equal1, checkEqual, Helper.ToString(a)+"=="+ Helper.ToString(b));
+			Assert.IsTrue(Helper.AreEqual(a, a), Helper.ToString(a));
+			Assert.IsTrue(Helper.AreEqual(b, b), Helper.ToString(b));
+		}
+		static void TestByteArrays(int size)
+		{
+			TestByteArrays(size, size);
+		}
+
 		[TestMethod()]
 		public void ByteArraysAreEqualTest()
 		{
-			Random random = new Random();
+			TestByteArrays(0);
 			for (int i = 0; i < 1000; i++)
 			{
-				byte[] a = new byte[random.Next(100)];
-				byte[] b = new byte[random.Next(100)];
-				random.NextBytes(a);
-				random.NextBytes(b);
-
-
-				bool equal = EqualityComparer<byte[]>.Default.Equals(a, b);
-				bool checkEqual = Helper.AreEqual(a,b);
-				Assert.AreEqual(equal, checkEqual);
-				Assert.IsTrue(Helper.AreEqual(a, a),i.ToString());
-				Assert.IsTrue(Helper.AreEqual(b, b),i.ToString());
+				TestByteArrays(random.Next(32));
+				TestByteArrays(random.Next(32), random.Next(32));
 			}
 		}
 	}
