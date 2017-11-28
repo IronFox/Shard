@@ -32,6 +32,35 @@ namespace Shard
 			throw new IntegrityViolation("Could not enter spinlock after 100 ms");
 		}
 
+		public static async Task DoLockedAsync(this SemaphoreSlim sem, Func<Task> action)
+		{
+			await sem.WaitAsync();
+			try
+			{
+				await action();
+				sem.Release();
+			}
+			catch
+			{
+				sem.Release();
+				throw;
+			}
+		}
+		public static async Task DoLockedAsync(this SemaphoreSlim sem, Action action)
+		{
+			await sem.WaitAsync();
+			try
+			{
+				action();
+				sem.Release();
+			}
+			catch
+			{
+				sem.Release();
+				throw;
+			}
+		}
+
 		public static void DoLocked(this SpinLock lck, Action action)
 		{
 			Enter(ref lck);    //if fails, throws exception, not locked, all good

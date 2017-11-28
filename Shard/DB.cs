@@ -18,11 +18,11 @@ namespace Shard
 
 		public class ConfigContainer : Entity
 		{
-			public ShardID extent;
-			public float r, m;
-			public int msPerTimeStep,   //total milliseconds per timestep
-						recoverySteps;  //number of sub-steps per timestep (effectively splitting msPerTimeStep)
-			public string start;
+			public ShardID extent = new ShardID(Int3.One,1);
+			public float r = 0.5f, m=0.25f;
+			public int msPerTimeStep = 1000,   //total milliseconds per timestep
+						recoverySteps = 2;  //number of sub-steps per timestep (effectively splitting msPerTimeStep)
+			public string start = DateTime.Now.ToString();
 		}
 
 		public static ConfigContainer Config { get; private set; }
@@ -199,11 +199,55 @@ namespace Shard
 
 		public static Action<SDS.Serial> OnPutSDS { get; set; } = null;
 
+		public class AsyncRCSStack
+		{
+			SerialRCSStack state = new SerialRCSStack();  //protected by stateLock
+			SemaphoreSlim stateLock = new SemaphoreSlim(1); //protects lastKnownState
 
+
+			public AsyncRCSStack(RCS.ID id)
+			{
+				state._id = id.ToString();
+				state.NumericID = id.IntArray;
+			}
+
+			public async Task ChangeAsync(Func<SerialRCSStack, Task> op)
+			{
+				await stateLock.DoLockedAsync(async () =>
+				{
+					await op(state);
+				});
+			}
+
+			public async Task ChangeAsync(Action<SerialRCSStack> op)
+			{
+				await stateLock.DoLockedAsync(() =>
+				{
+					op(state);
+				});
+			}
+
+			public async Task ReplaceAsync(Func<SerialRCSStack, Task<SerialRCSStack>> op)
+			{
+				await stateLock.DoLockedAsync(async () =>
+				{
+					state = await op(state);
+				});
+			}
+
+			public async Task ReplaceAsync(Func<SerialRCSStack, SerialRCSStack> op)
+			{
+				await stateLock.DoLockedAsync(() =>
+				{
+					state = op(state);
+				});
+			}
+
+		}
 
 		public class RCSStack
 		{
-			SerialRCSStack last;
+			AsyncRCSStack lastKnownState;
 			Task rcsPutTask;
 			readonly RCS.ID myID;
 
@@ -212,36 +256,39 @@ namespace Shard
 
 			public RCSStack(RCS.ID id)
 			{
-				last = new SerialRCSStack();
-				last._id = id.ToString();
-				last.NumericID = id.IntArray;
+				lastKnownState = new AsyncRCSStack(id);
 				myID = id;
 			}
 
-			public void SignalOldestGenerationUpdate(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
+			public async Task SignalOldestGenerationUpdateAsync(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
 			{
-				int oldGen = last.GetOldestGeneration();
-				last.Destinations.Set(replicationIndex, simulationTopGeneration, oldestGeneration);
-
-				int newGen = last.GetOldestGeneration();
-				if (oldGen > newGen)
-					throw new IntegrityViolation("Local generation offset changed backwards");
-				if (newGen > oldGen && last.Entries != null)
+				await lastKnownState.ChangeAsync((stack) =>
 				{
-					int offset = (newGen - oldGen);
-					int remaining = last.Entries.Length - offset;
-					if (remaining <= 0)
+					int oldGen = stack.GetOldestGeneration();
+					stack.Destinations.Set(replicationIndex, simulationTopGeneration, oldestGeneration);
+
+					int newGen = stack.GetOldestGeneration();
+					if (oldGen > newGen)
 					{
-						last.Entries = null;
+						throw new IntegrityViolation("Local generation offset changed backwards");
 					}
-					else
+					if (newGen > oldGen && stack.Entries != null)
 					{
-						var entries = new RCS.SerialData[remaining];
-						for (int i = 0; i < remaining; i++)
-							entries[i] = last.Entries[i + offset];
-						last.Entries = entries;
+						int offset = (newGen - oldGen);
+						int remaining = stack.Entries.Length - offset;
+						if (remaining <= 0)
+						{
+							stack.Entries = null;
+						}
+						else
+						{
+							var entries = new RCS.SerialData[remaining];
+							for (int i = 0; i < remaining; i++)
+								entries[i] = stack.Entries[i + offset];
+							stack.Entries = entries;
+						}
 					}
-				}
+				});
 			}
 
 			public void Put(int generation, RCS data)
@@ -255,42 +302,45 @@ namespace Shard
 
 			public async Task PutAsync(int generation, RCS.SerialData data)
 			{
-				int at = generation - last.GetOldestGeneration();
-				if (last.Entries == null || last.Entries.Length <= at)
+				await lastKnownState.ReplaceAsync(async (stack) =>
 				{
-					var entries = new RCS.SerialData[at + 1];
-					if (last.Entries != null)
-						for (int i = 0; i < last.Entries.Length; i++)
-							entries[i] = last.Entries[i];
-					entries[at] = data;
-					last.Entries = entries;
-				}
+					int at = generation - stack.GetOldestGeneration();
+					if (stack.Entries == null || stack.Entries.Length <= at)
+					{
+						var entries = new RCS.SerialData[at + 1];
+						if (stack.Entries != null)
+							for (int i = 0; i < stack.Entries.Length; i++)
+								entries[i] = stack.Entries[i];
+						entries[at] = data;
+						stack.Entries = entries;
+					}
 
-				OnPutRCS?.Invoke(last.Entries[at], generation);
+					OnPutRCS?.Invoke(stack.Entries[at], generation);
 
-				int cnt = 0;
-				while (!await PutAsync())
-				{
-					cnt++;
-					if (cnt > 10)
-						throw new Exception("Failed to update local RCS "+cnt+" times");
-				};
+					for (int i = 0; i < 10; i++)
+					{
+						try
+						{
+							/* Tests (and ONLY tests) may trigger this:
+							 * If rcsStore is null (DB was not initialized), the following line triggers a null-
+							 * reference exception that fails the whole method.
+							 * The stack (by reference) will still have changed, but ReplaceAsync will fail, not
+							 * replacing the reference. The resulting null-reference exception is stored for
+							 * rcsPutTask.Wait() to collect (if ever).
+							 */
+							return await rcsStore.StoreAsync(stack);	
+						}
+						catch (MyCouchResponseException ex)
+						{
+							Log.Error(ex);
+							var existing = await rcsStore.GetByIdAsync<SerialRCSStack>(stack._id);
+							stack.IncludeNewerVersion(existing);
+						}
+					};
+					throw new Exception("Failed to update local RCS 10 times");
+				});
 			}
-			private async Task<bool> PutAsync()
-			{
-				try
-				{
-					last = await rcsStore.StoreAsync(last);
-					return true;
-				}
-				catch (MyCouchResponseException ex)
-				{
-					Log.Error(ex);
-					var existing = await rcsStore.GetByIdAsync<SerialRCSStack>(last._id);
-					last.IncludeNewerVersion(existing);
-					return false;
-				}
-			}
+			
 		}
 
 

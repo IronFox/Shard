@@ -352,10 +352,12 @@ namespace Shard
 
 		public async Task<NewState> EvolveAsync(Entity currentState, int generation, Random randomSource)
 		{
-			EntityLogic.NewState newState = new EntityLogic.NewState();
-			newState.newAppearances = currentState.Appearances;
-			newState.newPosition = currentState.ID.Position;
-			newState.newState = currentState.LogicState;
+			NewState newState = new NewState
+			{
+				newAppearances = currentState.Appearances,
+				newPosition = currentState.ID.Position,
+				newState = currentState.LogicState
+			};
 			await Task.Run( () => Evolve(ref newState, currentState, generation, randomSource));
 			return newState;
 		}
