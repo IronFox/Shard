@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
@@ -348,6 +349,48 @@ namespace Shard
 		{
 			if (OnPutSDS != null)
 				OnPutSDS(serial);
+		}
+
+
+		public class Serializer
+		{
+			MyCouch.Serialization.ISerializer serializer;
+
+			public Serializer()
+			{
+				//				serializer = new MyCouch.Serialization.DefaultSerializer(new MyCouch.Serialization.SerializationConfiguration();
+				using (var cl = new MyCouch.MyCouchClient("https://127.0.0.1", "none"))
+				{
+					serializer = cl.Entities.Serializer;
+				}
+				Console.WriteLine(serializer.GetType());
+			}
+
+			public T Deserialize<T>(string data)
+			{
+				return serializer.Deserialize<T>(data);
+			}
+
+			public T Deserialize<T>(Stream data)
+			{
+				return serializer.Deserialize<T>(data);
+			}
+
+			public void Populate<T>(T item, Stream data) where T : class
+			{
+				serializer.Populate(item, data);
+			}
+
+			public void Populate<T>(T item, string json) where T : class
+			{
+				serializer.Populate(item, json);
+			}
+
+			public string Serialize<T>(T item) where T : class
+			{
+				return serializer.Serialize(item);
+			}
+
 		}
 
 	}

@@ -15,11 +15,11 @@ namespace Shard.Tests
 		static Random random = new Random();
 
 
-		public static SerialRCSStack RandomStack()
+		public static SerialRCSStack RandomStack(out RCS[] outRCSs)
 		{
 			int numDestinations = random.Next(3) + 1;
 			int numEntries = random.Next(16);
-			return RandomStack(numDestinations, numEntries);
+			return RandomStack(numDestinations, numEntries, out outRCSs);
 		}
 
 		public static SerialRCSStack.DestinationTable RandomDestinations(int numDestinations)
@@ -37,22 +37,33 @@ namespace Shard.Tests
 			return new SerialRCSStack.DestinationTable() { All = field };
 		}
 
+		public static RCS.SerialData[] RandomEntries(int numEntries, out RCS[] outRCSs)
+		{
+			var rs = numEntries > 0 ? new RCS.SerialData[numEntries] : null;
+			outRCSs = new RCS[numEntries];
+			for (int j = 0; j < numEntries; j++)
+			{
+				outRCSs[j] = RandomRCS();
+				rs[j] = outRCSs[j].Export();
+			}
+			return rs;
+		}
 		public static RCS.SerialData[] RandomEntries(int numEntries)
 		{
 			var rs = numEntries > 0 ? new RCS.SerialData[numEntries] : null;
-
 			for (int j = 0; j < numEntries; j++)
 			{
-				rs[j] = RandomRCS().Export();
+				var r = RandomRCS();
+				rs[j] = r.Export();
 			}
 			return rs;
 		}
 
-		public static SerialRCSStack RandomStack(int numDestinations, int numEntries)
+		public static SerialRCSStack RandomStack(int numDestinations, int numEntries, out RCS[] outRCSs)
 		{
 			SerialRCSStack rs = new SerialRCSStack();
 			rs.Destinations = RandomDestinations(numDestinations);
-			rs.Entries = RandomEntries(numEntries);
+			rs.Entries = RandomEntries(numEntries, out outRCSs);
 			return rs;
 		}
 

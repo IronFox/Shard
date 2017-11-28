@@ -146,6 +146,10 @@ namespace Shard
 				random.NextFloat(cube.Y),
 				random.NextFloat(cube.Z));
 		}
+		public static Int3 NextInt3(this Random random, int min, int exclusiveMax)
+		{
+			return new Int3(random.Next(min, exclusiveMax), random.Next(min, exclusiveMax), random.Next(min, exclusiveMax));
+		}
 
 		public static char NextChar(this Random random, string alphabet)
 		{

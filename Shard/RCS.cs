@@ -464,7 +464,11 @@ namespace Shard
 			if (obj == this)
 				return true;
 			var other = obj as RCS;
-			return other != null && base.Equals(obj) && IC.Equals(other.IC) && CS.Equals(other.CS);
+			if (other == null)
+				return false;
+			if (!IC.Equals(other.IC))
+				return false;
+			return CS.Equals(other.CS);
 		}
 
 		public override int GetHashCode()
