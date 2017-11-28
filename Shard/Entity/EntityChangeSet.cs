@@ -216,6 +216,14 @@ namespace Shard
 				info.AddValue(p.Key, p.Value);
 		}
 
+		public AbstractSet FindNamedSet(string name)
+		{
+			foreach (var pair in NamedSets)
+				if (pair.Key == name)
+					return pair.Value;
+			return null;
+		}
+
 		public IEnumerable<KeyValuePair<string,AbstractSet>> NamedSets
 		{
 			get
@@ -255,6 +263,36 @@ namespace Shard
 			removals.Include(source.removals, targetSpace);
 			instantiations.Include(source.instantiations, targetSpace);
 			advertisements.Include(source.advertisements, targetSpace);
+		}
+
+		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, int timeoutMS = 100)
+		{
+			int numErrors = 0;
+
+			List<Task> tasks = new List<Task>();
+
+			foreach (var e in entities)
+				tasks.Add(e.EvolveAsync(this, roundNumber));
+			int at = 0;
+			foreach (var e in entities)
+			{
+				try
+				{
+					if (!tasks[at].Wait(timeoutMS))
+						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+timeoutMS+" ms");
+				}
+				catch (Exception ex)
+				{
+					Log.Error(e + ": " + ex);
+
+					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
+
+					Interlocked.Increment(ref numErrors);
+				}
+				at++;
+			}
+			return numErrors;
+
 		}
 
 		private static void Get<T>(string name, ref Set<T> set, SerializationInfo info) where T : EntityChange.Abstract

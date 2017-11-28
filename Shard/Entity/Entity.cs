@@ -97,6 +97,26 @@ namespace Shard
 				throw new IntegrityViolation("This appearance already exists in this collection");
 			members.Add(t, app);
 		}
+		public void AddOrReplace(EntityAppearance app)
+		{
+			members[app.GetType()] = app;
+		}
+
+		public bool Remove(Type t)
+		{
+			return members.Remove(t);
+		}
+
+		public bool Remove<T>()
+		{
+			return members.Remove(typeof(T));
+		}
+
+		public void Clear()
+		{
+			members.Clear();
+		}
+
 
 		public int CompareTo(EntityAppearanceCollection other)
 		{
@@ -187,6 +207,7 @@ namespace Shard
 		{
 			return members.Values.GetEnumerator();
 		}
+
 	}
 
 	[Serializable]
@@ -305,9 +326,9 @@ namespace Shard
 			public Guid receiver;
 		}
 
-		public struct Changes
+		public struct NewState
 		{
-			public Vec3? newPosition;
+			public Vec3 newPosition;
 			public byte[][] broadcasts;
 			public Message[] messages;
 			public EntityLogic newState;
@@ -320,9 +341,25 @@ namespace Shard
 					newAppearances = new EntityAppearanceCollection();
 				newAppearances.Add(app);
 			}
+
+			public void AddOrReplace(EntityAppearance app)
+			{
+				if (newAppearances == null)
+					newAppearances = new EntityAppearanceCollection();
+				newAppearances.AddOrReplace(app);
+			}
 		}
 
-		public abstract Changes Evolve(Entity currentState, int generation, Random randomSource);
+		public async Task<NewState> EvolveAsync(Entity currentState, int generation, Random randomSource)
+		{
+			EntityLogic.NewState newState = new EntityLogic.NewState();
+			newState.newAppearances = currentState.Appearances;
+			newState.newPosition = currentState.ID.Position;
+			newState.newState = currentState.LogicState;
+			await Task.Run( () => Evolve(ref newState, currentState, generation, randomSource));
+			return newState;
+		}
+		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource);
 		public abstract void Hash(Hasher h);
 		public abstract int CompareTo(EntityLogic other);
 	}
@@ -366,28 +403,32 @@ namespace Shard
 			return "Entity " + ID;
 		}
 
-		public void Evolve(EntityChangeSet outChangeSet, int roundNumber)
+		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber)
 		{
 			if (LogicState != null)
 			{
 				try
 				{
 					Random randomSource = new Random(new Helper.HashCombiner().Add(roundNumber).Add(ID).GetHashCode());
-					EntityLogic.Changes changes = LogicState.Evolve(this, roundNumber, randomSource);
+
+					var state = LogicState;
+					Entity copy = this;
+					
+					var newState = await state.EvolveAsync(copy, roundNumber, randomSource);
 
 					int oID = 0;
-					if (changes.broadcasts != null)
-						foreach (var b in changes.broadcasts)
+					if (newState.broadcasts != null)
+						foreach (var b in newState.broadcasts)
 							outChangeSet.Add(new EntityChange.Broadcast(ID, b, oID++));
-					if (changes.messages != null)
-						foreach (var m in changes.messages)
+					if (newState.messages != null)
+						foreach (var m in newState.messages)
 							outChangeSet.Add(new EntityChange.Message(ID, oID++, m.receiver, m.data));
 
-					Vec3 dest = changes.newPosition ?? this.ID.Position;
+					Vec3 dest = newState.newPosition;
 					if (!Simulation.CheckDistance("Motion", dest, this, Simulation.M))
 						dest = ID.Position;
-					outChangeSet.Add(new EntityChange.Motion(this, changes.newState, changes.newAppearances, dest)); //motion doubles as logic-state-update
-					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID.Relocate(dest), changes.newAppearances, dest - ID.Position)));
+					outChangeSet.Add(new EntityChange.Motion(this, newState.newState, newState.newAppearances, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID.Relocate(dest), newState.newAppearances, dest - ID.Position)));
 				}
 				catch
 				{
@@ -434,6 +475,8 @@ namespace Shard
 		//}
 		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts)
 		{
+			if (!Simulation.FullSimulationSpace.Contains(id.Position))
+				throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
 			LogicState = state;
 			Appearances = appearance;
@@ -492,6 +535,17 @@ namespace Shard
 				   Equals(LogicState, other.LogicState) &&
 				   Helper.AreEqual(InboundMessages, other.InboundMessages) &&
 				   Helper.AreEqual(Contacts, other.Contacts);
+		}
+
+		public override int GetHashCode()
+		{
+			return new Helper.HashCombiner()
+				.Add(ID)
+				.Add(Appearances)
+				.Add(LogicState)
+				.Add(InboundMessages)
+				.Add(Contacts)
+				.GetHashCode();
 		}
 	}
 

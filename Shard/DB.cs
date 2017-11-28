@@ -152,11 +152,8 @@ namespace Shard
 				return 0;
 			}
 
-			public override Changes Evolve(Shard.Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Shard.Entity currentState, int generation, Random randomSource)
 			{
-				Changes rs = new Changes();
-				rs.newState = this;
-				return rs;
 			}
 
 			public override void Hash(Hasher h)

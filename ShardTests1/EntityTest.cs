@@ -36,7 +36,7 @@ namespace ShardTests1
 
 
 
-		private class ConsistentAppearance : EntityLogic
+		private class ConsistentLogic : EntityLogic
 		{
 			public static bool IsConsistent(EntityAppearanceCollection app)
 			{
@@ -51,12 +51,8 @@ namespace ShardTests1
 				return 0;
 			}
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
-				Changes ch = new Changes();
-
-				ch.newState = this; //no changes
-
 				bool isConsistent = true;
 
 				var old = currentState.GetAppearance<ConsistencyAppearance>();
@@ -78,15 +74,43 @@ namespace ShardTests1
 					}
 
 				}
-				ch.Add(new ConsistencyAppearance(isConsistent));	//is consistent?
+				newState.AddOrReplace(new ConsistencyAppearance(isConsistent));	//is consistent?
 
 				float M = Simulation.M;
 				do
 				{
-					ch.newPosition = Simulation.MySpace.Clamp(currentState.ID.Position + random.NextVec3(-M, M));
+					newState.newPosition = Simulation.MySpace.Clamp(currentState.ID.Position + random.NextVec3(-M, M));
 				}
-				while (ch.newPosition == currentState.ID.Position);
-				return ch;
+				while (newState.newPosition == currentState.ID.Position);
+			}
+
+			public override void Hash(Hasher h)
+			{
+				h.Add(GetType());
+			}
+		}
+
+
+		public class RandomMotion : EntityLogic
+		{
+			public override int CompareTo(EntityLogic other)
+			{
+				return 0;
+			}
+
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			{
+				while (newState.newPosition == currentState.ID.Position)
+				{
+					newState.newPosition = currentState.ID.Position + randomSource.NextVec3(-Simulation.M, Simulation.M);
+					if (!Simulation.CheckDistance("Motion", newState.newPosition, currentState, Simulation.M))
+						throw new Exception("WTF");
+
+					newState.newPosition = Simulation.FullSimulationSpace.Clamp(newState.newPosition);
+					if (!Simulation.CheckDistance("Motion", newState.newPosition, currentState, Simulation.M))
+						throw new Exception("WTF2");
+
+				}
 			}
 
 			public override void Hash(Hasher h)
@@ -102,7 +126,7 @@ namespace ShardTests1
 				return 0;
 			}
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				throw new NotImplementedException();
 			}
@@ -135,7 +159,7 @@ namespace ShardTests1
 		public void SimpleEntityFaultTest()
 		{
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, 
-				new RandomLogic(new Type[] { typeof(ConsistentAppearance), typeof(FaultLogic) }).Instantiate));
+				new RandomLogic(new Type[] { typeof(ConsistentLogic), typeof(FaultLogic) }).Instantiate));
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 			int any = -1;
@@ -165,7 +189,7 @@ namespace ShardTests1
 			{
 				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 
-				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentAppearance() : (EntityLogic)(new FaultLogic())));
+				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())));
 
 				int faultyCount = 0;
 				Entity faulty = new Entity();
@@ -219,7 +243,7 @@ namespace ShardTests1
 							var adv = set.FindAdvertisementFor(e.ID);
 							Assert.IsNotNull(e.Appearances);
 						}
-						bool consistent = ConsistentAppearance.IsConsistent(e.Appearances);
+						bool consistent = ConsistentLogic.IsConsistent(e.Appearances);
 						bool icIsInc = ic.IsInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
 						if (!consistent && !icIsInc)
@@ -245,7 +269,7 @@ namespace ShardTests1
 
 		public static EntityPool RandomDefaultPool(int numEntities)
 		{
-			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentAppearance()));
+			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentLogic()));
 		}
 
 		[TestMethod]
@@ -294,14 +318,27 @@ namespace ShardTests1
 		[TestMethod]
 		public void EntityMotionTest()
 		{
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100,i => new ConsistentAppearance()));
+			int numEntities = 100;
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()));
 
 			for (int i = 0; i < 100; i++)
 			{
 				var old = pool.ToArray();
 				EntityChangeSet set = new EntityChangeSet();
-				pool.Evolve(set,null,i);
+				int numErrors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i);
+				Assert.AreEqual(0, numErrors);
+				Assert.AreEqual(numEntities, set.FindNamedSet("motions").Size);
+				foreach (var e in old)
+				{
+					var m = set.FindMotionOf(e.ID.Guid);
+					Assert.IsNotNull(m);
+					Assert.AreNotEqual(m.TargetLocation, m.Origin.Position, i.ToString());
+					Assert.IsTrue(Simulation.FullSimulationSpace.Contains(m.TargetLocation));
+					Assert.IsTrue(Simulation.MySpace.Contains(m.TargetLocation));
+				}
+
 				Assert.AreEqual(0, set.Execute(pool));
+				Assert.AreEqual(numEntities, pool.Count);
 				Entity e1;
 				foreach (var e in old)
 				{

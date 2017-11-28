@@ -19,7 +19,7 @@ namespace Shard
 	public static class Extensions
 	{
 
-		public static void Enter(this SpinLock lck)
+		public static void Enter(ref SpinLock lck)
 		{
 			bool amIn = false;
 			for (int i = 0; i < 10; i++)
@@ -34,7 +34,7 @@ namespace Shard
 
 		public static void DoLocked(this SpinLock lck, Action action)
 		{
-			lck.Enter();    //if fails, throws exception, not locked, all good
+			Enter(ref lck);    //if fails, throws exception, not locked, all good
 			try
 			{
 				action();

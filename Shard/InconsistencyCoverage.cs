@@ -63,7 +63,7 @@ namespace Shard
 			{
 				cube = cube.SubCube(new Int3(1), base.Size);
 				if (cube.Size != base.Size)
-					throw new Exception("Unexpted grown size: "+cube.Size+". Expected "+base.Size);
+					throw new IntegrityViolation("Unexpted grown size: "+cube.Size+". Expected "+base.Size);
 			}
 			return new InconsistencyCoverage(cube);
 		}

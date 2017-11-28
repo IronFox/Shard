@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -143,25 +144,15 @@ namespace Shard
 		/// Evolves all local entities (in parallel), and stores changes in the specified change set
 		/// </summary>
 		/// <param name="set"></param>
-		public int Evolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber)
+		public int Evolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, int timeoutMS=1000)
 		{
-			int numErrors = 0;
-			Parallel.ForEach(fullMap.Values, ctr =>
-			{
-				try
-				{
-					ctr.entity.Evolve(set, roundNumber);
-				}
-				catch (Exception ex)
-				{
-					Log.Error(ctr.entity+": "+ex);
+			return set.Evolve(EnumerateEntities(), ic, roundNumber, timeoutMS);
+		}
 
-					ic.FlagInconsistentR(Simulation.MySpace.Relativate(ctr.entity.ID.Position));
-
-					Interlocked.Increment(ref numErrors);
-				}
-			});
-			return numErrors;
+		public IEnumerable<Entity> EnumerateEntities()
+		{
+			foreach (var ctr in fullMap.Values)
+				yield return ctr.entity;
 		}
 
 		public Entity[] ToArray()
@@ -207,7 +198,7 @@ namespace Shard
 			if (other != ctr)
 			{
 				fullMap.ForceAdd(ctr.entity.ID, other);
-				throw new Exception("Removed container does not equal provided container");
+				throw new IntegrityViolation("Removed container does not equal provided container");
 			}
 			guidMap.ForceRemove(ctr.entity.ID.Guid);
 			return true;
@@ -326,4 +317,23 @@ namespace Shard
 		}
 	}
 
+	[Serializable]
+	internal class ExecutionException : Exception
+	{
+		public ExecutionException()
+		{
+		}
+
+		public ExecutionException(string message) : base(message)
+		{
+		}
+
+		public ExecutionException(string message, Exception innerException) : base(message, innerException)
+		{
+		}
+
+		protected ExecutionException(SerializationInfo info, StreamingContext context) : base(info, context)
+		{
+		}
+	}
 }

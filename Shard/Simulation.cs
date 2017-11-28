@@ -12,7 +12,7 @@ namespace Shard
 	public static class Simulation
 	{
 		public static ShardID ID { get; private set; }
-		private static ShardID ext;
+		private static ShardID ext = new ShardID(Int3.One,1);
 		public static float R { get; private set; } = 1f / 8;
 		public static float M { get; private set; } = 1f / 16;
 
@@ -223,7 +223,7 @@ namespace Shard
 		{
 			get
 			{
-				return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 < ext.XYZ);
+				return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
 			}
 		}
 
@@ -237,7 +237,7 @@ namespace Shard
 			}
 		}
 
-		internal static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
+		public static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
 		{
 			float dist = GetDistance(referencePosition, e.ID.Position);
 			if (dist <= maxDistance)

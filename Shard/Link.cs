@@ -88,42 +88,40 @@ namespace Shard
 
 		public int Filter(Func<string,object,bool> filter)
 		{
-			bool isIn = false;
 			int removed = 0;
-			filterLock.Enter(ref isIn);
-			if (!isIn)
-				throw new Exception("Failed to acquire lock");
-			try
+			filterLock.DoLocked(()=>
 			{
+				try
+				{
 
-				Queue<Tuple<string, object>> temp = new Queue<Tuple<string, object>>();
-				Tuple<string,object> tmp;
-				while (dispatch.TryDequeue(out tmp))
-					if (filter(tmp.Item1, tmp.Item2))
-					{
-						temp.Enqueue(tmp);
-					}
-					else
-						removed++;
-				while (temp.Count > 0)
-					dispatch.Enqueue(temp.Dequeue());
+					Queue<Tuple<string, object>> temp = new Queue<Tuple<string, object>>();
+					Tuple<string, object> tmp;
+					while (dispatch.TryDequeue(out tmp))
+						if (filter(tmp.Item1, tmp.Item2))
+						{
+							temp.Enqueue(tmp);
+						}
+						else
+							removed++;
+					while (temp.Count > 0)
+						dispatch.Enqueue(temp.Dequeue());
 
 
-				while (sent.TryDequeue(out tmp))
-					if (filter(tmp.Item1, tmp.Item2))
-					{
-						temp.Enqueue(tmp);
-					}
-					else
-						removed++;
-				while (temp.Count > 0)
-					sent.Enqueue(temp.Dequeue());
+					while (sent.TryDequeue(out tmp))
+						if (filter(tmp.Item1, tmp.Item2))
+						{
+							temp.Enqueue(tmp);
+						}
+						else
+							removed++;
+					while (temp.Count > 0)
+						sent.Enqueue(temp.Dequeue());
 
-				//leave sem as is, allow null result of GetNext()
-			}
-			catch (Exception)
-			{}
-			filterLock.Exit();
+					//leave sem as is, allow null result of GetNext()
+				}
+				catch (Exception)
+				{ }
+			});
 			return removed;
 		}
 

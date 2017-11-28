@@ -201,7 +201,7 @@ namespace Shard
 			public int Generation { get { return generation; } }
 
 
-			public Computation(int generation)
+			public Computation(int generation, int entityLogicTimeoutMS=100)
 			{
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
@@ -242,20 +242,9 @@ namespace Shard
 				data.entities = new EntityPool(input.FinalEntities);
 				data.localChangeSet = new EntityChangeSet();
 
-				Parallel.For(0, input.FinalEntities.Length, (i) =>
-				{
-					try
-					{
-						input.FinalEntities[i].Evolve(data.localChangeSet,generation);
-					}
-					catch (Exception ex)
-					{
-						untrimmed.FlagInconsistentR(Simulation.MySpace.Relativate(input.FinalEntities[i].ID.Position), Int3.One);
-						Log.Error(input.FinalEntities[i] + ": " + ex);
-					}
-				});
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
+				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation);
 
 				foreach (var n in Simulation.Neighbors)
 				{

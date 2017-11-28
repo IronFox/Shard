@@ -239,8 +239,11 @@ namespace Shard
 
 			public MyCouchSerializer()
 			{
-//				serializer = new MyCouch.Serialization.DefaultSerializer(new MyCouch.Serialization.SerializationConfiguration();
-				serializer = new MyCouch.MyCouchClient("https://127.0.0.1","none").Entities.Serializer;
+				//				serializer = new MyCouch.Serialization.DefaultSerializer(new MyCouch.Serialization.SerializationConfiguration();
+				using (var cl = new MyCouch.MyCouchClient("https://127.0.0.1", "none"))
+				{
+					serializer = cl.Entities.Serializer;
+				}
 				Console.WriteLine(serializer.GetType());
 			}
 

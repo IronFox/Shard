@@ -23,12 +23,9 @@ namespace Shard.Tests
 				return 0;
 			}
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
-				Changes rs = new Changes();
-				rs.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
-				rs.newState = this;
-				return rs;
+				newState.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
 			}
 
 			public override void Hash(Hasher h)
@@ -48,12 +45,9 @@ namespace Shard.Tests
 				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
-				Changes rs = new Changes();
-				rs.newPosition = currentState.ID.Position + Motion;
-				rs.newState = this;
-				return rs;
+				newState.newPosition = currentState.ID.Position + Motion;
 			}
 
 			public override void Hash(Hasher h)
@@ -80,12 +74,8 @@ namespace Shard.Tests
 				return 0;
 			}
 
-			public override Changes Evolve(Entity currentState, int generation, Random randomSource)
-			{
-				Changes rs = new Changes();
-				rs.newState = this;
-				return rs;
-			}
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			{}
 
 			public override void Hash(Hasher h)
 			{
