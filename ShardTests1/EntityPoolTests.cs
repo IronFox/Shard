@@ -20,13 +20,12 @@ namespace Shard.Tests
 			Random random = new Random();
 			List<Entity> testEntities = CreateEntities(100);
 
-			Hasher h0 = new Hasher();
 			EntityPool original = new EntityPool();
 			foreach (var e in testEntities)
 				Assert.IsTrue(original.Insert(e));
 			original.VerifyIntegrity();
-			h0.Add(original);
-			var hash0 = h0.Finish();
+
+			var h0 = original.HashDigest;
 
 			for (int i = 0; i < 100; i++)
 			{
@@ -35,10 +34,8 @@ namespace Shard.Tests
 				foreach (var e in testEntities)
 					Assert.IsTrue(compare.Insert(e));
 				compare.VerifyIntegrity();
-				Hasher h1 = new Hasher();
-				h1.Add(compare);
-				var hash1 = h1.Finish();
-				Assert.AreEqual(hash0, hash1);
+				var h1 = compare.HashDigest;
+				Assert.AreEqual(h0, h1);
 			}
 
 

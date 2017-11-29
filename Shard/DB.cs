@@ -31,6 +31,27 @@ namespace Shard
 
 		private static MyCouchStore sdsStore, rcsStore, logicStore;
 
+		public static Func<string, Task<ScriptedLogicFactory>> LogicLoader { get; set; }
+
+
+		class Script : Entity
+		{
+			public string Text { get; set; }
+		}
+
+		public static async Task<ScriptedLogicFactory> GetLogicAsync(string scriptName)
+		{
+			if (LogicLoader != null)
+			{
+				var logic = await LogicLoader(scriptName);
+				if (logic != null)
+					return logic;
+			}
+
+
+			Script script = await logicStore.GetByIdAsync<Script>(scriptName);
+			return new ScriptedLogicFactory(scriptName, script.Text);
+		}
 
 		public static void Start(Host host, string username=null, string password = null)
 		{
@@ -142,6 +163,7 @@ namespace Shard
 			return sdsStore.GetByIdAsync<SDS.Serial>(myID.Encoded).Result;
 		}
 
+		[Serializable]
 		private class MyLogicState : EntityLogic
 		{
 			public MyLogicState()
@@ -154,10 +176,6 @@ namespace Shard
 			}
 
 			public override void Evolve(ref NewState newState, Shard.Entity currentState, int generation, Random randomSource)
-			{
-			}
-
-			public override void Hash(Hasher h)
 			{
 			}
 		}

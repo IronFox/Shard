@@ -4,7 +4,8 @@ using VectorMath;
 
 namespace Shard
 {
-	public class BitCube : IHashable
+	[Serializable]
+	public class BitCube
 	{
 		private uint[,,] grid;
 		public const int BytesPerEntry = 4;
@@ -67,11 +68,6 @@ namespace Shard
 			oneCount = 0;
 		}
 
-		public void Hash(Hasher h)
-		{
-			h.Add(GridSize);
-			h.Add(grid);
-		}
 
 		public BitCube() { }
 		public BitCube(Int3 size)

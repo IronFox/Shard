@@ -2,8 +2,11 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +14,8 @@ using VectorMath;
 
 namespace Shard
 {
-	public class EntityPool : IHashable, IEnumerable<Entity>
+	[Serializable]
+	public class EntityPool : IEnumerable<Entity>, ISerializable
 	{
 		private class Container
 		{
@@ -265,17 +269,6 @@ namespace Shard
 			return rs;
 		}
 
-		public void Hash(Hasher h)
-		{
-			var source = guidMap.Values.ToArray();
-			Entity[] ar = new Entity[source.Length];
-			for (int i = 0; i < ar.Length; i++)
-				ar[i] = source[i].entity;
-
-			Array.Sort(ar);
-			foreach (var e in ar)
-				h.Add(e);
-		}
 
 		private class ConverterEnumerator : IEnumerator<Entity>
 		{
@@ -314,6 +307,29 @@ namespace Shard
 		IEnumerator IEnumerable.GetEnumerator()
 		{
 			return new ConverterEnumerator(guidMap.Values.GetEnumerator());
+		}
+
+		public void GetObjectData(SerializationInfo info, StreamingContext context)
+		{
+			var source = guidMap.Values.ToArray();
+			Entity[] ar = new Entity[source.Length];
+			for (int i = 0; i < ar.Length; i++)
+				ar[i] = source[i].entity;
+
+			Array.Sort(ar);
+			info.AddValue("ar", ar);
+		}
+
+		public SDS.Digest HashDigest	//for testing purposes
+		{
+			get
+			{
+				using (var ms = Helper.Serialize(this))
+				{
+					return new SDS.Digest(SHA256.Create().ComputeHash(ms));
+				}
+
+			}
 		}
 	}
 

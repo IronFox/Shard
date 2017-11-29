@@ -3,6 +3,7 @@ using VectorMath;
 
 namespace Shard
 {
+	[Serializable]
 	public class InconsistencyCoverage : BitCube
 	{
 		public static int CommonResolution { get; set; } = 8;

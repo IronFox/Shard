@@ -162,7 +162,6 @@
     <Compile Include="Entity\EntityPool.cs" />
     <Compile Include="Entity\ScriptedLogicFactory.cs" />
     <Compile Include="Extensions.cs" />
-    <Compile Include="Hasher.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
     <Compile Include="IntArray.cs" />

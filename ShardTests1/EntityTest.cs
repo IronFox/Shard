@@ -27,10 +27,9 @@ namespace ShardTests1
 				return other != null ? IsConsistent.CompareTo(that.IsConsistent) : -1;
 			}
 
-			public override void Hash(Hasher h)
+			public override int GetHashCode()
 			{
-				h.Add(GetType());
-				h.Add(IsConsistent.GetHashCode());
+				return IsConsistent.GetHashCode();
 			}
 		}
 
@@ -83,11 +82,6 @@ namespace ShardTests1
 				}
 				while (newState.newPosition == currentState.ID.Position);
 			}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
-			}
 		}
 
 
@@ -112,11 +106,6 @@ namespace ShardTests1
 
 				}
 			}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
-			}
 		}
 
 		public class FaultLogic : EntityLogic
@@ -129,11 +118,6 @@ namespace ShardTests1
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				throw new NotImplementedException();
-			}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
 			}
 		}
 		

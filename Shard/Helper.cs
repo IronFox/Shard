@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace Shard
 {
@@ -46,6 +49,7 @@ namespace Shard
 			f2i.Int32Bits = v; 
 			return f2i.FloatValue;
 		}
+
 
 		public static int FloatToInt2(float f)
 		{
@@ -97,6 +101,57 @@ namespace Shard
 			}
 		}
 
+		public static object Deserialize(byte[] serial)
+		{
+			var f = new BinaryFormatter();
+			using (MemoryStream ms = new MemoryStream(serial))
+			{
+				return f.Deserialize(ms);
+			}
+		}
+
+
+		private sealed class AssemblyBinder : SerializationBinder
+		{
+			Assembly myAssembly;
+			bool ignoreAssemblyName;
+			public override Type BindToType(string assemblyName, string typeName)
+			{
+				if (ignoreAssemblyName || myAssembly.FullName == assemblyName)
+					return myAssembly.GetType(typeName);
+				throw new InvalidOperationException("Requested assembly name '"+assemblyName+"' does not match name of local assembly '"+myAssembly.FullName+"'");
+			}
+
+			public AssemblyBinder(Assembly assembly, bool ignoreAssemblyName)
+			{
+				myAssembly = assembly;
+				this.ignoreAssemblyName = ignoreAssemblyName;
+			}
+		}
+
+		public static object Deserialize(byte[] serial, Assembly context, bool ignoreAssemblyName)
+		{
+			var f = new BinaryFormatter();
+			f.Binder = new AssemblyBinder(context, ignoreAssemblyName);
+			using (MemoryStream ms = new MemoryStream(serial))
+			{
+				return f.Deserialize(ms);
+			}
+		}
+
+		public static MemoryStream Serialize(object obj)
+		{
+			var f = new BinaryFormatter();
+			var ms = new MemoryStream();
+			f.Serialize(ms, obj);
+			ms.Seek(0, SeekOrigin.Begin);
+			return ms;
+		}
+		public static byte[] SerializeToArray(object obj)
+		{
+			using (var ms = Serialize(obj))
+				return ms.ToArray();
+		}
 
 		internal class Comparator
 		{

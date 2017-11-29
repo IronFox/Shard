@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using VectorMath;
@@ -8,6 +10,7 @@ using VectorMath;
 namespace Shard
 {
 
+	[Serializable]
 	public class SDS
 	{
 
@@ -35,7 +38,7 @@ namespace Shard
 			}
 		}
 
-
+		[Serializable]
 		public struct ID
 		{
 			public readonly Int3 shardID;
@@ -79,11 +82,46 @@ namespace Shard
 			}
 		}
 
+		public struct Digest
+		{
+			byte[] data;
+
+			public Digest(byte[] sha256hash) : this()
+			{
+				data = sha256hash;
+			}
+
+			public override bool Equals(object obj)
+			{
+				if (!(obj is Digest))
+				{
+					return false;
+				}
+
+				var digest = (Digest)obj;
+				return Helper.AreEqual(data,digest.data);
+			}
+
+			public override int GetHashCode()
+			{
+				return data != null ? data.GetHashCode() : -663559515;
+			}
+
+			public static bool operator ==(Digest a, Digest b)
+			{
+				return Helper.AreEqual(a.data, b.data);
+			}
+			public static bool operator !=(Digest a, Digest b)
+			{
+				return !(a == b);
+			}
+
+		}
 
 		public struct IntermediateData
 		{
 			public EntityPool entities;
-			public Hasher.Hash inputHash;
+			public Digest inputHash;
 			public EntityChangeSet localChangeSet;
 			public InconsistencyCoverage ic;
 			public bool inputConsistent;
@@ -174,18 +212,19 @@ namespace Shard
 
 		public int Inconsistency { get { return IC != null ? IC.OneCount : -1; } }
 
-		public Hasher.Hash HashDigest
+		public Digest HashDigest
 		{
 			get
 			{
-				using (Hasher hasher = new Hasher())
+				var f = new BinaryFormatter();
+				using (var ms = new MemoryStream())
 				{
-					hasher.Add(IsFullyConsistent);
-					foreach (var e in FinalEntities)
-						e.Hash(hasher);
-					IC.Hash(hasher);
-					hasher.Add(Generation);
-					return hasher.Finish();
+					f.Serialize(ms, IsFullyConsistent);
+					f.Serialize(ms, Generation);
+					f.Serialize(ms, FinalEntities);
+					f.Serialize(ms, IC);
+					ms.Seek(0, SeekOrigin.Begin);
+					return new Digest(SHA256.Create().ComputeHash(ms));
 				}
 			}
 		}

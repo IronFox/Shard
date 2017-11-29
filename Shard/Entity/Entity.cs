@@ -20,7 +20,7 @@ namespace Shard
 	}
 
 	[Serializable]
-	public struct EntityID : IComparable<EntityID>, IHashable
+	public struct EntityID : IComparable<EntityID>
 	{
 		public readonly Vec3 Position;
 		public readonly Guid Guid;
@@ -32,12 +32,6 @@ namespace Shard
 			Position = position;
 		}
 
-
-		public void Hash(Hasher h)
-		{
-			h.Add(Position);
-			h.Add(Guid);
-		}
 
 		public override int GetHashCode()
 		{
@@ -78,15 +72,19 @@ namespace Shard
 	}
 
 	[Serializable]
-	public abstract class EntityAppearance : IComparable<EntityAppearance>, IHashable
+	public abstract class EntityAppearance : IComparable<EntityAppearance>
 	{
 		public abstract int CompareTo(EntityAppearance other);
-
-		public abstract void Hash(Hasher h);
+		public override bool Equals(object obj)
+		{
+			EntityAppearance other = obj as EntityAppearance;
+			return other != null && CompareTo(other) == 0;
+		}
+		public override abstract int GetHashCode();
 	}
 
 	[Serializable]
-	public class EntityAppearanceCollection : IComparable<EntityAppearanceCollection>, IHashable, ISerializable, IEnumerable<EntityAppearance>
+	public class EntityAppearanceCollection : IComparable<EntityAppearanceCollection>, ISerializable, IEnumerable<EntityAppearance>
 	{
 		private SortedList<Type, EntityAppearance> members = new SortedList<Type, EntityAppearance>();
 
@@ -158,11 +156,6 @@ namespace Shard
 				Add(a);
 		}
 
-		public void Hash(Hasher h)
-		{
-			foreach (var app in members.Values)
-				h.Add(app);
-		}
 
 		public override string ToString()
 		{
@@ -211,7 +204,7 @@ namespace Shard
 	}
 
 	[Serializable]
-	public struct EntityContact : IComparable<EntityContact>, IHashable
+	public struct EntityContact : IComparable<EntityContact>
 	{
 		public readonly EntityID ID;
 		public readonly EntityAppearanceCollection Appearances;
@@ -224,14 +217,6 @@ namespace Shard
 			Velocity = velocity;
 		}
 
-		public void Hash(Hasher h)
-		{
-			h.Add(ID);
-			if (Appearances != null)
-				foreach (var app in Appearances)
-					h.Add(app);
-			h.Add(Velocity);
-		}
 
 		public int CompareTo(EntityContact other)
 		{
@@ -268,7 +253,7 @@ namespace Shard
 
 
 	[Serializable]
-	public class EntityMessage : IHashable
+	public class EntityMessage
 	{
 		public readonly EntityID Sender;
 		public readonly byte[] Payload;
@@ -292,12 +277,6 @@ namespace Shard
 			return new Helper.HashCombiner().Add(Sender).Add(Payload).GetHashCode();
 		}
 
-		public void Hash(Hasher h)
-		{
-			h.Add(Sender);
-			h.Add(Payload);
-		}
-
 		public override string ToString()
 		{
 			return "Msg:"+Sender+":["+Helper.Length(Payload)+"]";
@@ -318,7 +297,7 @@ namespace Shard
 
 
 	[Serializable]
-	public abstract class EntityLogic : IHashable, IComparable<EntityLogic>
+	public abstract class EntityLogic : IComparable<EntityLogic>
 	{
 		public struct Message
 		{
@@ -362,13 +341,12 @@ namespace Shard
 			return newState;
 		}
 		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource);
-		public abstract void Hash(Hasher h);
 		public abstract int CompareTo(EntityLogic other);
 	}
 		
 
 	[Serializable]
-	public struct Entity : IHashable, IComparable<Entity>
+	public struct Entity : IComparable<Entity>
 	{
 	
 		public int FindContact(EntityID id)
@@ -446,23 +424,6 @@ namespace Shard
 		public readonly EntityMessage[] InboundMessages;
 		public readonly EntityContact[] Contacts;
 
-
-
-		public void Hash(Hasher h)
-		{
-			h.Add(ID);
-			if (Appearances != null)
-				foreach (var app in Appearances)
-					h.Add(app);
-			h.Add(LogicState);
-			if (InboundMessages != null)
-				foreach (var m in InboundMessages)
-					h.Add(m);
-			if (Contacts != null)
-				foreach (var c in Contacts)
-					h.Add(c);
-		}
-
 		public T GetAppearance<T>() where T : EntityAppearance
 		{
 			if (Appearances != null)
@@ -471,10 +432,6 @@ namespace Shard
 		}
 
 
-		//public Entity MoveTo(Vec3 newLocation)
-		//{
-		//	return new Entity(new EntityID(ID.Guid, newLocation), LogicState, Appearance,InboundMessages,Contacts);
-		//}
 		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts)
 		{
 			if (!Simulation.FullSimulationSpace.Contains(id.Position))
@@ -486,9 +443,6 @@ namespace Shard
 			InboundMessages = messages;
 			Contacts = contacts;
 		}
-
-
-
 
 
 		internal Entity SetIncoming(EntityMessage[] messages, EntityContact[] contacts)

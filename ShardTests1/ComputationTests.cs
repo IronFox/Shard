@@ -27,11 +27,6 @@ namespace Shard.Tests
 			{
 				newState.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
 			}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
-			}
 		}
 		
 		[Serializable]
@@ -48,12 +43,6 @@ namespace Shard.Tests
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				newState.newPosition = currentState.ID.Position + Motion;
-			}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
-				h.Add(Motion);
 			}
 
 			public override int CompareTo(EntityLogic cmp)
@@ -76,11 +65,6 @@ namespace Shard.Tests
 
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{}
-
-			public override void Hash(Hasher h)
-			{
-				h.Add(GetType());
-			}
 		}
 
 
