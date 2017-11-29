@@ -116,6 +116,10 @@ namespace Shard
 					DB.BeginFetch(link.InboundRCS);
 			}
 
+			int msPerSubStep = DB.Config.msPerTimeStep / (1 + DB.Config.recoverySteps);
+			int msCompletion = msPerSubStep / 10;
+			int msEntityBudget = msPerSubStep / 20;
+
 			Console.Write("Catching up...");
 			Console.Out.Flush();
 			while (stack.NewestSDSGeneration < TimeStep)
@@ -124,13 +128,11 @@ namespace Shard
 				Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen).Complete());
+				stack.Insert(new SDS.Computation(nextGen, msEntityBudget).Complete());
 				CheckIncoming();
 			}
 			Console.WriteLine("done. Starting main loop...");
 
-			int msPerSubStep = DB.Config.msPerTimeStep / (1 + DB.Config.recoverySteps);
-			int msCompletion = msPerSubStep / 10;
 
 			SDS.Computation comp = null;
 			while (true)
@@ -151,7 +153,7 @@ namespace Shard
 					//fast forward: process now. don't care if we're at the beginning
 					int nextGen = stack.NewestSDSGeneration + 1;
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation(nextGen+1);
+					comp = new SDS.Computation(nextGen+1, msEntityBudget);
 				}
 				else
 				{
@@ -173,7 +175,7 @@ namespace Shard
 								break;
 						}
 						if (at < stack.Size)
-							comp = new SDS.Computation(stack[at].Generation);
+							comp = new SDS.Computation(stack[at].Generation, msEntityBudget);
 					}
 				}
 

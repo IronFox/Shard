@@ -14,7 +14,7 @@ namespace Shard
 		public InconsistencyCoverage(Int3 size) : base(size)
 		{}
 
-		public InconsistencyCoverage(Serial serial) : base(serial.Data)
+		public InconsistencyCoverage(Serial serial) : base(serial?.Data)
 		{}
 
 

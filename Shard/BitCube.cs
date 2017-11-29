@@ -109,6 +109,10 @@ namespace Shard
 
 		public BitCube(byte[] data)
 		{
+			if (data == null || data.Length < 12)
+			{
+				return;
+			}
 			Int3 size;
 			size.X = BitConverter.ToInt32(data, 0);
 			size.Y = BitConverter.ToInt32(data, 4);

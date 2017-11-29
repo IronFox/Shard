@@ -1,6 +1,9 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shard;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Text;
 
 namespace Shard.Tests
 {
@@ -10,15 +13,59 @@ namespace Shard.Tests
 		static Random random = new Random();
 
 
+		private static async Task DBRCSStackTestAsync()
+		{
+
+			var s = new DB.RCSStack(RandomRCSID());
+			int numEntries = 10;
+			RCS[] rcss = new RCS[numEntries];
+			Task[] tasks = new Task[numEntries];
+
+			Parallel.For(0, numEntries, i =>
+			{
+				RCS rcs = RandomOutboundRCS(true);
+				tasks[i] = s.PutAsync(i * 2, rcs.Export());  //only every second (0,2,4,...). Should fill intermeditate ones
+				rcss[i] = rcs;
+			});
+
+			Task.WaitAll(tasks);
+
+
+			await s.ViewAsync(stack =>
+			{
+				StringBuilder seqBuilder = new StringBuilder();
+				for (int i = 0; i < stack.CountEntries(); i++)
+					seqBuilder.Append((stack.Entries[i].IsDefined() ? "x" : "-"));
+				string seq = seqBuilder.ToString();
+
+				Assert.AreEqual(stack.CountEntries(), (numEntries -1) * 2 + 1);
+				for (int i = 0; i+1 < numEntries; i++)
+					Assert.IsTrue(stack.Entries[i * 2 + 1].IsUndefined(),i.ToString());
+				for (int i = 0; i < numEntries; i++)
+				{
+					Assert.IsTrue(stack.Entries[i * 2].IsDefined(), i.ToString()+" "+seq);
+					Assert.AreEqual(rcss[i], new RCS(stack.Entries[i * 2]), i.ToString());
+				}
+			}
+			);
+
+			for (int i = 0; i < numEntries; i++)
+			{
+				await s.SignalOldestGenerationUpdateAsync(0, i * 2, 0);
+				await s.ViewAsync(stack =>
+				{
+					Assert.AreEqual(stack.CountEntries(), (numEntries - 1 - i) * 2 + 1);
+					for (int k = i; k < numEntries; k++)
+						Assert.AreEqual(rcss[k], new RCS(stack.Entries[(k - i) * 2]));
+				}
+				);
+			}
+		}
+
 		[TestMethod]
 		public void DBRCSStackTest()
 		{
-			var s = new DB.RCSStack(RandomRCSID());
-			for (int i = 0; i < 10; i++)
-			{
-				RCS rcs = RandomOutboundRCS(true);
-				s.Put(i, rcs);
-			}
+			DBRCSStackTestAsync().Wait();
 
 		}
 

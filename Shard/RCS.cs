@@ -345,6 +345,15 @@ namespace Shard
 				return new Helper.HashCombiner().Add(CS).Add(IC).GetHashCode();
 			}
 
+			public bool IsUndefined()
+			{
+				return CS == null || IC == null;
+			}
+			public bool IsDefined()
+			{
+				return !IsUndefined();
+			}
+
 			public override string ToString()
 			{
 				return "CS["+Helper.Length(CS)+"], IC="+IC;
@@ -386,11 +395,13 @@ namespace Shard
 		public RCS(SerialData rcs)
 		{
 			IC = new InconsistencyCoverage(rcs.IC);
-
-			using (var ms = new MemoryStream(rcs.CS))
-			{
-				CS = (EntityChangeSet) new BinaryFormatter().Deserialize(ms);
-			}
+			if (rcs.CS == null)
+				CS = new EntityChangeSet();
+			else
+				using (var ms = new MemoryStream(rcs.CS))
+				{
+					CS = (EntityChangeSet) new BinaryFormatter().Deserialize(ms);
+				}
 		}
 
 		public RCS(EntityChangeSet cs, InconsistencyCoverage ic)

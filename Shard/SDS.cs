@@ -201,7 +201,7 @@ namespace Shard
 			public int Generation { get { return generation; } }
 
 
-			public Computation(int generation, int entityLogicTimeoutMS=100)
+			public Computation(int generation, int entityLogicTimeoutMS)
 			{
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
@@ -244,7 +244,7 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation);
+				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeoutMS);
 
 				foreach (var n in Simulation.Neighbors)
 				{

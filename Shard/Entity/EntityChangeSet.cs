@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
@@ -265,7 +266,7 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, int timeoutMS = 100)
+		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, int timeoutMS)
 		{
 			int numErrors = 0;
 
@@ -274,11 +275,17 @@ namespace Shard
 			foreach (var e in entities)
 				tasks.Add(e.EvolveAsync(this, roundNumber));
 			int at = 0;
+
+			double budget = (double)timeoutMS / 1000.0;
+			Stopwatch watch = new Stopwatch();
+
 			foreach (var e in entities)
 			{
+				watch.Start();
 				try
 				{
-					if (!tasks[at].Wait(timeoutMS))
+					
+					if (!tasks[at].Wait(new TimeSpan((int)(TimeSpan.TicksPerSecond * budget))))
 						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+timeoutMS+" ms");
 				}
 				catch (Exception ex)
@@ -289,6 +296,9 @@ namespace Shard
 
 					Interlocked.Increment(ref numErrors);
 				}
+				watch.Stop();
+				budget -= watch.Elapsed.TotalSeconds;
+				budget = Math.Max(budget, 0);
 				at++;
 			}
 			return numErrors;

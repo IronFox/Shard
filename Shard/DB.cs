@@ -301,6 +301,11 @@ namespace Shard
 				rcsPutTask = PutAsync(generation, data.Export());
 			}
 
+			public async Task ViewAsync(Action<SerialRCSStack> action)
+			{
+				await lastKnownState.ChangeAsync(action);
+			}
+
 			public async Task PutAsync(int generation, RCS.SerialData data)
 			{
 				await lastKnownState.ReplaceAsync(async (stack) =>
@@ -312,23 +317,18 @@ namespace Shard
 						if (stack.Entries != null)
 							for (int i = 0; i < stack.Entries.Length; i++)
 								entries[i] = stack.Entries[i];
-						entries[at] = data;
 						stack.Entries = entries;
 					}
+					stack.Entries[at] = data;
 
 					OnPutRCS?.Invoke(stack.Entries[at], generation);
 
+					if (rcsStore == null)	//for testing: DB not initialized. Return modified stack for replacement
+						return stack;
 					for (int i = 0; i < 10; i++)
 					{
 						try
 						{
-							/* Tests (and ONLY tests) may trigger this:
-							 * If rcsStore is null (DB was not initialized), the following line triggers a null-
-							 * reference exception that fails the whole method.
-							 * The stack (by reference) will still have changed, but ReplaceAsync will fail, not
-							 * replacing the reference. The resulting null-reference exception is stored for
-							 * rcsPutTask.Wait() to collect (if ever).
-							 */
 							return await rcsStore.StoreAsync(stack);	
 						}
 						catch (MyCouchResponseException ex)
