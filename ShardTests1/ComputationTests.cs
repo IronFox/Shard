@@ -17,12 +17,6 @@ namespace Shard.Tests
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
-
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				newState.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
@@ -44,25 +38,11 @@ namespace Shard.Tests
 			{
 				newState.newPosition = currentState.ID.Position + Motion;
 			}
-
-			public override int CompareTo(EntityLogic cmp)
-			{
-				MovingLogic other = cmp as MovingLogic;
-				if (other == null)
-					return -1;
-				return Motion.CompareTo(other.Motion);
-			}
 		}
 
 		[Serializable]
 		class StationaryLogic : EntityLogic
 		{
-
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{}
 		}

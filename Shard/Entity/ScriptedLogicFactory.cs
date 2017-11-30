@@ -48,15 +48,15 @@ namespace Shard
 
 		}
 
-
-		public override int CompareTo(EntityLogic log)
-		{
-			return 0;
-		}
-
 		public ScriptedLogic(ScriptedLogicFactory factory)
 		{
 			scriptLogic = factory.Instantiate();
+			this.factory = factory;
+		}
+
+		private ScriptedLogic(ScriptedLogicFactory factory, EntityLogic newState)
+		{
+			scriptLogic = newState;
 			this.factory = factory;
 		}
 
@@ -72,7 +72,12 @@ namespace Shard
 		public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 		{
 			FinishLoading(1);
+			newState.newLogic = scriptLogic;
 			scriptLogic.Evolve(ref newState, currentState, generation, randomSource);
+			if (newState.newLogic == scriptLogic)
+				newState.newLogic = this;
+			else
+				newState.newLogic = new ScriptedLogic(factory,newState.newLogic);
 		}
 
 		public void GetObjectData(SerializationInfo info, StreamingContext context)
@@ -136,6 +141,7 @@ namespace Shard
 			options.GenerateInMemory = true; // Saves us from deleting the Dll when we are done with it, though you could set this to false and save start-up time by next time by not having to re-compile
 											 // And set any others you want, there a quite a few, take some time to look through them all and decide which fit your application best!
 
+			//options.TreatWarningsAsErrors = true;
 			// Add any references you want the users to be able to access, be warned that giving them access to some classes can allow
 			// harmful code to be written and executed. I recommend that you write your own Class library that is the only reference it allows
 			// thus they can only do the things you want them to.
@@ -147,11 +153,12 @@ namespace Shard
 			// Compile our code
 			result = csProvider.CompileAssemblyFromSource(options, code);
 			if (result.Errors.HasErrors)
-				throw new ExecutionException("Unable to load logic '" + scriptName + "': " + FirstError);
+				throw new CompilationException("Unable to compile logic '" + scriptName + "': " + FirstError);
 
-			if (result.Errors.HasWarnings)
-				Log.Message("Warning while loading logic '" + ScriptName + "': " + FirstWarning);
+			//if (result.Errors.HasWarnings)
+			//Log.Message("Warning while loading logic '" + ScriptName + "': " + FirstWarning);
 
+			HashSet<Type> checkedTypes = new HashSet<Type>() ;
 			var a = Assembly;
 			// Now that we have a compiled script, lets run them
 			foreach (Type type in a.GetExportedTypes())
@@ -159,21 +166,48 @@ namespace Shard
 				if (type.BaseType == typeof(EntityLogic))
 				{
 					if (!type.IsSerializable)
-						throw new ExecutionException(ScriptName + ": Type '" + type + "' is entity logic, but not serializable");
+						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but not serializable");
 
 					constructor = type.GetConstructor(Type.EmptyTypes);
-					if (!constructor.IsPublic)
+					if (constructor == null || !constructor.IsPublic)
 					{
-						constructor = null;
-						throw new ExecutionException(ScriptName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
+						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
+						//continue;
 					}
+					CheckType(checkedTypes, type);
+					//no need to check properties: either they represent/can change some local field, or they are ineffective
+					//var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+					//foreach (var p in properties)
+					//{
+					//	if (p.CanWrite)
+					//		throw new LogicCompositionException(ScriptName + ": Property '" + type.Name + "." + p.Name + "' must not have a set method");
+					//}
 
 					if (constructor != null)
 						break;
 				}
 			}
 			if (constructor == null)
-				throw new ExecutionException(ScriptName + ": Failed to find entity logic in assembly");
+				throw new LogicCompositionException(ScriptName + ": Failed to find entity logic in assembly");
+		}
+
+		private void CheckType(HashSet<Type> checkedTypes, Type type, string path = null)
+		{
+			if (checkedTypes.Contains(type))
+				return;
+			checkedTypes.Add(type);
+			if (path == null)
+				path = type.Name;
+			var fields = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+			foreach (var f in fields)
+			{
+				string subPath = path + "." + f.Name;// + "(" + f.FieldType + ")";
+				if (!f.IsInitOnly)
+					throw new InvarianceViolation(ScriptName + ": Field '" + subPath + "' must be declared readonly");
+				Type sub = f.FieldType;
+				if (sub.IsClass)
+					CheckType(checkedTypes, sub, subPath);
+			}
 		}
 
 		public CompilerError FirstError
@@ -195,6 +229,35 @@ namespace Shard
 						return result.Errors[i];
 				return null;
 			}
+		}
+
+		[Serializable]
+		public class CompilationException : Exception
+		{
+			public CompilationException()
+			{
+			}
+
+			public CompilationException(string message) : base(message)
+			{
+			}
+
+			public CompilationException(string message, Exception innerException) : base(message, innerException)
+			{
+			}
+
+			protected CompilationException(SerializationInfo info, StreamingContext context) : base(info, context)
+			{
+			}
+		}
+
+		public class LogicCompositionException : Exception
+		{
+			public LogicCompositionException(string message) : base(message){}
+		}
+		public class InvarianceViolation : Exception
+		{
+			public InvarianceViolation(string message) : base(message) { }
 		}
 	}
 }

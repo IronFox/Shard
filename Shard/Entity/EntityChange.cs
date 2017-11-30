@@ -114,7 +114,7 @@ namespace Shard.EntityChange
 					.Append(Origin, other.Origin)
 					.Append(TargetLocation, other.TargetLocation)
 					.Append(Appearances, other.Appearances)
-					.Append(Logic, other.Logic)
+					//.Append(Logic, other.Logic)
 					.Finish();
 		}
 

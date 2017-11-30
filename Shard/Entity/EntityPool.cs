@@ -14,6 +14,12 @@ using VectorMath;
 
 namespace Shard
 {
+	/// <summary>
+	/// Entity set using lock-free concurrency containers.
+	/// Serialization guarantees written entities are in deterministic order, regardless of their order of insertion.
+	/// As a result, Sha256 digests are also order-independent.
+	/// Other operations may be affected by order of insertion.
+	/// </summary>
 	[Serializable]
 	public class EntityPool : IEnumerable<Entity>, ISerializable
 	{
@@ -125,6 +131,14 @@ namespace Shard
 		}
 
 
+		/// <summary>
+		/// Checks if the specified receiver exists, and is within influence range of <paramref name="senderPosition"/>.
+		/// If so, the message is relayed to the receiver, and the method returns true.
+		/// </summary>
+		/// <param name="senderPosition"></param>
+		/// <param name="receiver"></param>
+		/// <param name="message"></param>
+		/// <returns>True if the entity was found, in range, and the message index was not yet used by the receiver-sender-tuple</returns>
 		public bool RelayMessage(Vec3 senderPosition, Guid receiver, OrderedEntityMessage message)
 		{
 			Container rs;
@@ -172,7 +186,7 @@ namespace Shard
 		/// Sends all queued messages and contact events in parallel to the respective entities.
 		/// All entities are recreated (these attributes are readonly)
 		/// </summary>
-			public void DispatchAll()
+		public void DispatchAll()
 		{
 			Parallel.ForEach(fullMap.Values, ctr =>
 			{

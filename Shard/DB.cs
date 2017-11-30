@@ -163,23 +163,6 @@ namespace Shard
 			return sdsStore.GetByIdAsync<SDS.Serial>(myID.Encoded).Result;
 		}
 
-		[Serializable]
-		private class MyLogicState : EntityLogic
-		{
-			public MyLogicState()
-			{
-			}
-
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
-			public override void Evolve(ref NewState newState, Shard.Entity currentState, int generation, Random randomSource)
-			{
-			}
-		}
-
 
 
 		private static ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>> rcsRequests = new ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>>();

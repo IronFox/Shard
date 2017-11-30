@@ -295,9 +295,12 @@ namespace Shard
 		}
 	}
 
-
+	/// <summary>
+	/// Abstract entity behavior descriptor.
+	/// Actual behavior is implemented in Evolve()
+	/// </summary>
 	[Serializable]
-	public abstract class EntityLogic : IComparable<EntityLogic>
+	public abstract class EntityLogic
 	{
 		public struct Message
 		{
@@ -310,7 +313,7 @@ namespace Shard
 			public Vec3 newPosition;
 			public byte[][] broadcasts;
 			public Message[] messages;
-			public EntityLogic newState;
+			public EntityLogic newLogic;
 			public EntityAppearanceCollection newAppearances;
 
 
@@ -328,20 +331,36 @@ namespace Shard
 				newAppearances.AddOrReplace(app);
 			}
 		}
-
+		/// <summary>
+		/// Creates an asynchronous task that computes the next state in a separate thread
+		/// </summary>
+		/// <param name="currentState">Current entity state</param>
+		/// <param name="generation">Evolution generation index, starting from 0</param>
+		/// <param name="randomSource">Source for random values used during execution</param>
+		/// <returns></returns>
 		public async Task<NewState> EvolveAsync(Entity currentState, int generation, Random randomSource)
 		{
 			NewState newState = new NewState
 			{
 				newAppearances = currentState.Appearances,
 				newPosition = currentState.ID.Position,
-				newState = currentState.LogicState
+				newLogic = currentState.LogicState
 			};
 			await Task.Run( () => Evolve(ref newState, currentState, generation, randomSource));
 			return newState;
 		}
+
+		/// <summary>
+		/// Evolves the local state, potentially generating some modifications to the base entity.
+		/// The method must not change any local variables relevant to evolution. All entity modifications are limited to changes in.
+		/// Evolution must be deterministic.
+		/// <paramref name="newState"/>.
+		/// </summary>
+		/// <param name="newState">Modifications go here</param>
+		/// <param name="currentState">Current entity state</param>
+		/// <param name="generation">Evolution generation index, starting from 0</param>
+		/// <param name="randomSource">Random source to be used exclusively for random values</param>
 		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource);
-		public abstract int CompareTo(EntityLogic other);
 	}
 		
 
@@ -407,7 +426,7 @@ namespace Shard
 					Vec3 dest = newState.newPosition;
 					if (!Simulation.CheckDistance("Motion", dest, this, Simulation.M))
 						dest = ID.Position;
-					outChangeSet.Add(new EntityChange.Motion(this, newState.newState, newState.newAppearances, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChange.Motion(this, newState.newLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID.Relocate(dest), newState.newAppearances, dest - ID.Position)));
 				}
 				catch
@@ -455,7 +474,7 @@ namespace Shard
 			return new Helper.Comparator()
 					.Append(ID, other.ID)
 					.Append(Appearances, other.Appearances)
-					.Append(LogicState, other.LogicState)
+					//.Append(LogicState, other.LogicState)
 					.Finish();
 		}
 

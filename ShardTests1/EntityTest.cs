@@ -44,12 +44,6 @@ namespace ShardTests1
 				var a = app.Get<ConsistencyAppearance>();
 				return a != null && a.IsConsistent;
 			}
-
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				bool isConsistent = true;
@@ -87,11 +81,6 @@ namespace ShardTests1
 
 		public class RandomMotion : EntityLogic
 		{
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				while (newState.newPosition == currentState.ID.Position)
@@ -110,11 +99,6 @@ namespace ShardTests1
 
 		public class FaultLogic : EntityLogic
 		{
-			public override int CompareTo(EntityLogic other)
-			{
-				return 0;
-			}
-
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
 			{
 				throw new NotImplementedException();
