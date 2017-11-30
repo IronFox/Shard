@@ -26,20 +26,18 @@ namespace Shard
 			public string start = DateTime.Now.ToString();
 		}
 
+
 		public static ConfigContainer Config { get; private set; }
 
 
 		private static MyCouchStore sdsStore, rcsStore, logicStore;
 
-		public static Func<string, Task<ScriptedLogicFactory>> LogicLoader { get; set; }
+		public static Func<string, Task<CSLogicProvider>> LogicLoader { get; set; }
 
 
-		class Script : Entity
-		{
-			public string Text { get; set; }
-		}
+		
 
-		public static async Task<ScriptedLogicFactory> GetLogicAsync(string scriptName)
+		public static async Task<CSLogicProvider> GetLogicProviderAsync(string scriptName)
 		{
 			if (LogicLoader != null)
 			{
@@ -48,9 +46,8 @@ namespace Shard
 					return logic;
 			}
 
-
-			Script script = await logicStore.GetByIdAsync<Script>(scriptName);
-			return new ScriptedLogicFactory(scriptName, script.Text);
+			var script = await logicStore.GetByIdAsync<CSLogicProvider.DBSerial>(scriptName);
+			return new CSLogicProvider(script);
 		}
 
 		public static void Start(Host host, string username=null, string password = null)

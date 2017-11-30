@@ -2,6 +2,7 @@
 using Shard;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,7 +10,7 @@ using System.Threading.Tasks;
 namespace Shard.Tests
 {
 	[TestClass()]
-	public class ScriptedLogicFactoryTests
+	public class LogicProviderTests
 	{
 
 		const string code = 
@@ -95,56 +96,91 @@ namespace Shard.Tests
 		";
 
 		[TestMethod()]
-		public void AllowedScriptedLogicFactoryTest()
+		public void AllowedLogicTest()
 		{
 			try
 			{
-				ScriptedLogicFactory factory0 = new ScriptedLogicFactory("DisallowedA", disallowedField);
+				CSLogicProvider factory0 = new CSLogicProvider("DisallowedA", disallowedField);
 				Assert.Fail("The specified code has a non-readonly field. Should have triggered an exception");
 			}
-			catch (ScriptedLogicFactory.InvarianceViolation)
+			catch (CSLogicProvider.InvarianceViolation)
 			{ }
 			try
 			{
-				ScriptedLogicFactory factory1 = new ScriptedLogicFactory("DisallowedB", disallowedProperty);
+				CSLogicProvider factory1 = new CSLogicProvider("DisallowedB", disallowedProperty);
 				Assert.Fail("The specified code has properties with set method. Should have triggered an exception");
 			}
-			catch (ScriptedLogicFactory.InvarianceViolation)
+			catch (CSLogicProvider.InvarianceViolation)
 			{ }
 
 			try
 			{
-				ScriptedLogicFactory factory1 = new ScriptedLogicFactory("DisallowedNested", disallowedNested);
-				Assert.Fail("The specified code has nested types with modifyable fields. Should have triggered an exception");
+				CSLogicProvider factory1 = new CSLogicProvider("DisallowedNested", disallowedNested);
+				Assert.Fail("The specified code has nested types with modifiable fields. Should have triggered an exception");
 			}
-			catch (ScriptedLogicFactory.InvarianceViolation)
+			catch (CSLogicProvider.InvarianceViolation)
 			{ }
 
-			ScriptedLogicFactory factory2 = new ScriptedLogicFactory("Allowed", allowed);
+			CSLogicProvider factory2 = new CSLogicProvider("Allowed", allowed);
 
 
 		}
 
 		[TestMethod()]
-		public void ScriptedLogicFactoryTest()
+		public void LogicProviderTest()
 		{
-			DB.LogicLoader = scriptName => Task.Run( () => new ScriptedLogicFactory(scriptName, code));
-			ScriptedLogicFactory factory = new ScriptedLogicFactory("Test", code);
-			var warning = factory.FirstWarning;
-			Assert.IsNull(warning);
+			DB.LogicLoader = scriptName => Task.Run( () => new CSLogicProvider(scriptName, code));
+			CSLogicProvider provider = new CSLogicProvider("Test", code);
+			var exported = provider.Export();
+			var imported = new CSLogicProvider(exported);
+			Assert.AreEqual(provider, imported);
 
-			ScriptedLogic logic = new ScriptedLogic(factory);
+			DynamicCSLogic logic = new DynamicCSLogic(provider);
 
 			var serialLogic = Helper.SerializeToArray(logic);
 
-			var logic2 = (ScriptedLogic)  Helper.Deserialize(serialLogic);
+			var logic2 = (DynamicCSLogic)  Helper.Deserialize(serialLogic);
 			logic2.FinishLoading(1000);
 
 
 
 			var s2 = logic2.EvolveAsync(new Entity(), 0, new Random()).Result;
-			Assert.AreEqual(s2.newLogic.GetType(), typeof(ScriptedLogic));
+			Assert.AreEqual(s2.newLogic.GetType(), typeof(DynamicCSLogic));
 			Assert.IsFalse(s2.newLogic == logic2);
+
+			var serialProvider = Helper.SerializeToArray(provider);
+			var provider2 = (CSLogicProvider)Helper.Deserialize(serialProvider);
+
+			DB.LogicLoader = scriptName => Task.Run(() => provider2);
+			var logic3 = (DynamicCSLogic)Helper.Deserialize(serialLogic);
+			logic3.FinishLoading(1000);
+
+		}
+
+
+		[TestMethod()]
+		public void ScriptedLogicPerformanceTest()
+		{
+			Stopwatch watch = new Stopwatch();
+			watch.Start();
+			CSLogicProvider factory = null;
+			for (int i = 0; i < 100; i++)
+			{
+				factory = new CSLogicProvider("Test", code);
+			}
+			watch.Stop();
+			Console.WriteLine("Compilation took " + watch.Elapsed);
+
+			var binary = Helper.SerializeToArray(factory);
+			watch.Reset();
+			watch.Start();
+			for (int i = 0; i < 100; i++)
+			{
+				factory = (CSLogicProvider) Helper.Deserialize(binary);
+			}
+			watch.Stop();
+			Console.WriteLine("Loading took " + watch.Elapsed);
+
 		}
 	}
 }

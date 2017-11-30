@@ -160,7 +160,7 @@
     <Compile Include="Entity\EntityChange.cs" />
     <Compile Include="Entity\EntityChangeSet.cs" />
     <Compile Include="Entity\EntityPool.cs" />
-    <Compile Include="Entity\ScriptedLogicFactory.cs" />
+    <Compile Include="Entity\CSLogicProvider.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
