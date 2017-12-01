@@ -263,12 +263,18 @@ namespace Shard
 			}
 		}
 
-		internal class HashCombiner
+		public static HashCombiner Hash<T>(T self)
 		{
-			int hashCode = 2035686911;
+			return new HashCombiner(typeof(T));
+		}
 
-			public HashCombiner()
+		public class HashCombiner
+		{
+			int hashCode;
+
+			public HashCombiner(Type callerType)
 			{
+				hashCode = callerType.GetHashCode();
 			}
 
 			public HashCombiner Add(int hashCode)

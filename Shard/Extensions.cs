@@ -79,7 +79,17 @@ namespace Shard
 
 
 
+		public static int FloorDiv(this TimeSpan a, TimeSpan b)
+		{
+			return (int)Math.Floor(a.TotalSeconds / b.TotalSeconds);
+		}
 
+		public static TimeSpan NotNegative(this TimeSpan s)
+		{
+			if (s.Ticks >= 0)
+				return s;
+			return TimeSpan.FromTicks(0);
+		}
 
 
 		/// <summary>

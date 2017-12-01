@@ -580,6 +580,19 @@ namespace VectorMath
 			hashCode = hashCode * -1521134295 + Z.GetHashCode();
 			return hashCode;
 		}
+
+		/// <summary>
+		/// Iterates in [0,this) along each axis, so that each combination is passed to <paramref name="action"/> once
+		/// </summary>
+		/// <param name="action">Action to execute for each coordinate</param>
+		public void Cover(Action<Int3> action)
+		{
+			Int3 cursor;
+			for (cursor.X = 0; cursor.X < X; cursor.X++)
+				for (cursor.Y = 0; cursor.Y < Y; cursor.Y++)
+					for (cursor.Z = 0; cursor.Z < Z; cursor.Z++)
+						action(cursor);
+		}
 	}
 
 

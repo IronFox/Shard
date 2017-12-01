@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Shard
@@ -18,12 +19,12 @@ namespace Shard
 
 		public static TimeSpan Milliseconds(int milliseconds)
 		{
-			return new TimeSpan(TimeSpan.TicksPerMillisecond * milliseconds);
+			return TimeSpan.FromMilliseconds(milliseconds);
 		}
 
 		internal static void Sleep(TimeSpan timeSpan)
 		{
-			throw new NotImplementedException();
+			Thread.Sleep(timeSpan);
 		}
 	}
 }

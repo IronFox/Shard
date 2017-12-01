@@ -29,7 +29,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				return new Helper.HashCombiner().Add(SerialEntities).Add(IC).GetHashCode();
+				return Helper.Hash(this).Add(SerialEntities).Add(IC).GetHashCode();
 			}
 
 			public override string ToString()
@@ -148,7 +148,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				return new Helper.HashCombiner()
+				return Helper.Hash(this)
 					.Add(entities)
 					.Add(inputHash)
 					.Add(localChangeSet)
@@ -240,7 +240,7 @@ namespace Shard
 			public int Generation { get { return generation; } }
 
 
-			public Computation(int generation, int entityLogicTimeoutMS)
+			public Computation(int generation, TimeSpan entityLogicTimeout)
 			{
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
@@ -283,7 +283,7 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeoutMS);
+				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeout);
 
 				foreach (var n in Simulation.Neighbors)
 				{
@@ -327,7 +327,7 @@ namespace Shard
 
 				if (!ic.AnySet)
 				{
-					DB.Put(rs.Export());
+					DB.PutAsync(rs.Export(),false);
 				}
 				return rs;
 			}

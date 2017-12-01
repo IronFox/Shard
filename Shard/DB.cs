@@ -28,7 +28,7 @@ namespace Shard
 
 
 		public static ConfigContainer Config { get; private set; }
-
+		public static Host Host { get; private set; }
 
 		private static MyCouchStore sdsStore, rcsStore, logicStore;
 
@@ -50,30 +50,67 @@ namespace Shard
 			return new CSLogicProvider(script);
 		}
 
-		public static void Start(Host host, string username=null, string password = null)
+		public static void Connect(Host host, string username = null, string password = null)
 		{
 			url = "http://";
 			if (username != null && password != null)
 				url += Uri.EscapeDataString(username) + ":" + Uri.EscapeDataString(password) + "@";
 			url += host;
+			Host = host;
 
 			sdsStore = new MyCouchStore(url, "sds");
 			rcsStore = new MyCouchStore(url, "rcs");
 			logicStore = new MyCouchStore(url, "logic");
+		}
 
-			var cfg = new MyCouchStore(url, "config");
+
+		private static void Try(Func<bool> f, int numTries, int msBetweenRetries = 5000)
+		{
+			for (int i = 0; i < numTries; i++)
 			{
-				for (int i = 0; i < 3; i++)
+				try
 				{
-					var job = cfg.GetByIdAsync<ConfigContainer>("current");
-					Config = job.Result;
-					if (Config != null)
-						break;
-					Thread.Sleep(5000);
+					if (f())
+						return;
 				}
-				if (Config == null)
-					throw new Exception("Unable to fetch configuration");
+				catch
+				{ }
+				if (i + 1 < numTries)
+				{
+					Log.Message("No luck. Sleeping "+ msBetweenRetries + " mseconds...");
+					Thread.Sleep(msBetweenRetries);
+				}
 			}
+			if (Config == null)
+				throw new Exception("Failed attempt");
+		}
+
+		public static void PullConfig(int numTries = 3)
+		{
+			var cfg = new MyCouchStore(url, "config");
+			Try(() =>
+			{
+				Log.Message("Fetching simulation configuration from " + Host + " ...");
+				var job = cfg.GetByIdAsync<ConfigContainer>("current");
+				Config = job.Result;
+				return Config != null;
+			}, numTries);
+
+		}
+
+		public static void PutConfig(ConfigContainer container, int numTries = 3)
+		{
+			var cfg = new MyCouchStore(url, "config");
+			Config = container;
+			Config._id = "current";
+			Config._rev = null;
+			Try(() =>
+			{
+				Log.Message("Storing simulation configuration on " + Host + " ...");
+				Config = cfg.StoreAsync(Config).Result;
+				return Config != null;
+			}, numTries);
+
 		}
 
 		public class Entity
@@ -343,12 +380,53 @@ namespace Shard
 		}
 
 
-		internal static void Put(SDS.Serial serial)
+		internal static void PutNow(SDS.Serial serial, bool forceReplace)
 		{
 			if (OnPutSDS != null)
 				OnPutSDS(serial);
+			Try(() =>
+			{
+				PutAsync(null,sdsStore,serial, forceReplace).Wait();
+				return true;
+			}, 3);
 		}
 
+		public static Task PutAsyncTask(SDS.Serial serial, bool forceReplace)
+		{
+			return PutAsync(null, sdsStore, serial, forceReplace);
+		}
+		public static async void PutAsync(SDS.Serial serial, bool forceReplace)
+		{
+			try
+			{
+				Log.Message("Storing serial SDS in DB: g" + serial.Generation);
+				await PutAsyncTask(serial, forceReplace);
+				Log.Message("Stored serial SDS in DB: g" + serial.Generation);
+			}
+			catch (Exception ex)
+			{
+				Log.Error(ex);
+				Log.Error("Failed to store serial SDS in DB: g" + serial.Generation);
+			}
+		}
+
+		private static async Task PutAsync(Link lnk, MyCouchStore store, Entity e, bool forceReplace)
+		{
+			if (forceReplace)
+			{
+				await store.DeleteAsync(e._id);
+			}
+			try
+			{
+				var header = await store.StoreAsync(e._id, e._rev, store.Client.DocumentSerializer.Serialize(e));
+				e._rev = header.Rev;
+			}
+			catch (MyCouchResponseException)
+			{
+				var e2 = store.GetByIdAsync(e._id);	//if we get here, then the copy script has rejected our data => read data must be newer
+				Simulation.FetchIncoming(lnk, e2);
+			}
+		}
 
 		public class Serializer
 		{

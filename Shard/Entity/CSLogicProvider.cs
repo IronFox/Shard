@@ -130,6 +130,7 @@ namespace Shard
 					&& SourceCode == other.SourceCode;
 		}
 
+		
 
 		public EntityLogic Instantiate()
 		{
@@ -287,6 +288,15 @@ namespace Shard
 		{
 			info.AddValue("scriptName", ScriptName);
 			info.AddValue("assembly", BinaryAssembly);
+		}
+
+		public override int GetHashCode()
+		{
+			var hashCode = -342463410;
+			hashCode = hashCode * -1521134295 + EqualityComparer<byte[]>.Default.GetHashCode(BinaryAssembly);
+			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(ScriptName);
+			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(SourceCode);
+			return hashCode;
 		}
 
 		public CSLogicProvider(SerializationInfo info, StreamingContext context)

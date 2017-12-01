@@ -134,7 +134,7 @@ namespace ShardTests1
 			for (int i = 0; i < 8; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				int numErrors = pool.Evolve(set,ic,i);
+				int numErrors = pool.Evolve(set,ic,i,TimeSpan.FromSeconds(1));
 				if (numErrors != 0)
 				{
 					Assert.IsTrue(ic.OneCount > 0);
@@ -173,7 +173,7 @@ namespace ShardTests1
 				for (int i = 0; i < InconsistencyCoverage.CommonResolution; i++)	//no point going further than current resolution
 				{
 					EntityChangeSet set = new EntityChangeSet();
-					int numErrors = pool.Evolve(set, ic, i);
+					int numErrors = pool.Evolve(set, ic, i, TimeSpan.FromSeconds(1));
 					Assert.AreEqual(0, set.Execute(pool));
 					//Assert.AreEqual(ic.OneCount, 1);
 
@@ -247,7 +247,7 @@ namespace ShardTests1
 			for (int i = 0; i < 100; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				pool.Evolve(set,null,i);
+				pool.Evolve(set,null,i, TimeSpan.FromSeconds(1));
 				Assert.AreEqual(0, set.Execute(pool));
 
 				HashSet<Guid> env = new HashSet<Guid>();
@@ -293,7 +293,7 @@ namespace ShardTests1
 			{
 				var old = pool.ToArray();
 				EntityChangeSet set = new EntityChangeSet();
-				int numErrors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i);
+				int numErrors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(1));
 				Assert.AreEqual(0, numErrors);
 				Assert.AreEqual(numEntities, set.FindNamedSet("motions").Size);
 				foreach (var e in old)

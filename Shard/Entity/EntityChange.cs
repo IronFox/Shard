@@ -61,7 +61,7 @@ namespace Shard.EntityChange
 		}
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner().Add(Origin).Add(Target).GetHashCode();
+			return Helper.Hash(this).Add(Origin).Add(Target).GetHashCode();
 		}
 
 
@@ -94,7 +94,7 @@ namespace Shard.EntityChange
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner()
+			return Helper.Hash(this)
 				.Add(Origin)
 				.Add(TargetLocation)
 				.Add(Appearances)
@@ -232,7 +232,7 @@ namespace Shard.EntityChange
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner()
+			return Helper.Hash(this)
 					.Add(Origin)
 					.Add(SentOrderID)
 					.Add(Payload)
@@ -277,7 +277,7 @@ namespace Shard.EntityChange
 		}
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner()
+			return Helper.Hash(this)
 					.Add(base.GetHashCode())
 					.Add(TargetEntityID)
 					.GetHashCode();
@@ -329,7 +329,7 @@ namespace Shard.EntityChange
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner()
+			return Helper.Hash(this)
 					.Add(Origin)
 					.Add(Appearances)
 					.GetHashCode();

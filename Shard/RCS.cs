@@ -47,7 +47,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				return new Helper.HashCombiner().Add(OldestGeneration).Add(LastUpdateTimeStep).GetHashCode();
+				return Helper.Hash(this).Add(OldestGeneration).Add(LastUpdateTimeStep).GetHashCode();
 			}
 
 			public override string ToString()
@@ -166,7 +166,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				var h = new Helper.HashCombiner();
+				var h = Helper.Hash(this);
 				for (int i = 0; i < Count(); i++)
 					h.Add(All[i]);
 				return h.GetHashCode();
@@ -309,7 +309,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			var h = new Helper.HashCombiner();
+			var h = Helper.Hash(this);
 			h.Add(Destinations);
 			for (int i = 0; i < CountEntries(); i++)
 				h.Add(Entries[i]);
@@ -342,7 +342,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				return new Helper.HashCombiner().Add(CS).Add(IC).GetHashCode();
+				return Helper.Hash(this).Add(CS).Add(IC).GetHashCode();
 			}
 
 			public bool IsUndefined()
@@ -381,7 +381,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				return new Helper.HashCombiner().Add(Data).Add(Generation).GetHashCode();
+				return Helper.Hash(this).Add(Data).Add(Generation).GetHashCode();
 			}
 
 			public override string ToString()
@@ -484,7 +484,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner().Add(base.GetHashCode()).Add(IC).GetHashCode();
+			return Helper.Hash(this).Add(base.GetHashCode()).Add(IC).GetHashCode();
 		}
 	}
 }

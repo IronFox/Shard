@@ -185,7 +185,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			var h = new Helper.HashCombiner();
+			var h = Helper.Hash(this);
 			foreach (var app in members.Values)
 				h.Add(app);
 			return h.GetHashCode();
@@ -274,7 +274,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner().Add(Sender).Add(Payload).GetHashCode();
+			return Helper.Hash(this).Add(Sender).Add(Payload).GetHashCode();
 		}
 
 		public override string ToString()
@@ -408,7 +408,7 @@ namespace Shard
 			{
 				try
 				{
-					Random randomSource = new Random(new Helper.HashCombiner().Add(roundNumber).Add(ID).GetHashCode());
+					Random randomSource = new Random(Helper.Hash(this).Add(roundNumber).Add(ID).GetHashCode());
 
 					var state = LogicState;
 					Entity copy = this;
@@ -514,7 +514,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			return new Helper.HashCombiner()
+			return Helper.Hash(this)
 				.Add(ID)
 				.Add(Appearances)
 				.Add(LogicState)

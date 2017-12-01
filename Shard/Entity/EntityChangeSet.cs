@@ -125,7 +125,7 @@ namespace Shard
 
 			public override int GetHashCode()
 			{
-				var h = new Helper.HashCombiner();
+				var h = Helper.Hash(this);
 				foreach (var v in ToSortedArray())
 					h.Add(v);
 				return h.GetHashCode();
@@ -266,7 +266,7 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, int timeoutMS)
+		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
 		{
 			int numErrors = 0;
 
@@ -276,17 +276,16 @@ namespace Shard
 				tasks.Add(e.EvolveAsync(this, roundNumber));
 			int at = 0;
 
-			double budget = (double)timeoutMS / 1000.0;
 			Stopwatch watch = new Stopwatch();
+			watch.Start();
 
 			foreach (var e in entities)
 			{
-				watch.Start();
 				try
 				{
 					
-					if (!tasks[at].Wait(new TimeSpan((int)(TimeSpan.TicksPerSecond * budget))))
-						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+timeoutMS+" ms");
+					if (!tasks[at].Wait( (budget - watch.Elapsed).NotNegative()))
+						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+budget+" ms");
 				}
 				catch (Exception ex)
 				{
@@ -296,9 +295,6 @@ namespace Shard
 
 					Interlocked.Increment(ref numErrors);
 				}
-				watch.Stop();
-				budget -= watch.Elapsed.TotalSeconds;
-				budget = Math.Max(budget, 0);
 				at++;
 			}
 			return numErrors;
@@ -360,7 +356,7 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			var h = new Helper.HashCombiner()
+			var h = Helper.Hash(this)
 				.Add(base.GetHashCode());
 			foreach (var s in Sets)
 				h.Add(s);

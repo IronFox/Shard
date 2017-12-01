@@ -12,7 +12,7 @@ namespace Shard
 	public static class Simulation
 	{
 		public static ShardID ID { get; private set; }
-		private static ShardID ext = new ShardID(Int3.One,1);
+		private static ShardID ext = new ShardID(Int3.One, 1);
 		public static float R { get; private set; } = 1f / 8;
 		public static float M { get; private set; } = 1f / 16;
 
@@ -56,7 +56,22 @@ namespace Shard
 		{
 			get
 			{
-				return Math.Max(0, (int)((Clock.Now - startDate).TotalMilliseconds / DB.Config.msPerTimeStep));
+				return Math.Max(0, MSIntoSimulation / DB.Config.msPerTimeStep);
+			}
+		}
+		public static int MSIntoSimulation
+		{
+			get
+			{
+				return (int)((Clock.Now - startDate).TotalMilliseconds);
+			}
+		}
+
+		public static int MSToSimulationStart
+		{
+			get
+			{
+				return -MSIntoSimulation;
 			}
 		}
 
@@ -117,8 +132,8 @@ namespace Shard
 			}
 
 			int msPerSubStep = DB.Config.msPerTimeStep / (1 + DB.Config.recoverySteps);
-			int msCompletion = msPerSubStep / 10;
-			int msEntityBudget = msPerSubStep / 20;
+			int msComputation = msPerSubStep / 2;
+			TimeSpan perComputation = TimeSpan.FromMilliseconds(msComputation);
 
 			Console.Write("Catching up...");
 			Console.Out.Flush();
@@ -128,32 +143,45 @@ namespace Shard
 				Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen, msEntityBudget).Complete());
+				stack.Insert(new SDS.Computation(nextGen, perComputation).Complete());
 				CheckIncoming();
 			}
 			Console.WriteLine("done. Starting main loop...");
 
+
+			TimeSpan perSubStep = TimeSpan.FromMilliseconds(msPerSubStep);
 
 			SDS.Computation comp = null;
 			while (true)
 			{
 				CheckIncoming();
 
-				int timeStep = (int)((Clock.Now - startDate).TotalMilliseconds / DB.Config.msPerTimeStep);
+				int timeStep = TimeStep;
 				Console.WriteLine("at " + timeStep);
+				int wait = MSToSimulationStart;
+				if (wait > 0)
+				{
+					Console.WriteLine("Must wait "+wait+" more MS...");
+					Thread.Sleep(Math.Min(1000, MSToSimulationStart));
+					continue;
+				}
 
-				int msIntoStep = (int)((Clock.Now - (startDate + new TimeSpan(TimeSpan.TicksPerMillisecond * DB.Config.msPerTimeStep))).TotalMilliseconds);
-				int recoveryIndex = msIntoStep / msPerSubStep;
-				int msIntoSubStep = msIntoStep - recoveryIndex * msPerSubStep;
-				int msRemainingInSubStep = (recoveryIndex + 1) * msPerSubStep - msIntoStep;
-				int msRemainingUntilCompletion = (recoveryIndex + 1) * msPerSubStep - msCompletion - msIntoStep;
+				DateTime stepStart = startDate + TimeSpan.FromMilliseconds( DB.Config.msPerTimeStep * timeStep);
+				TimeSpan elapsed = Clock.Now - stepStart;
+
+				int recoveryIndex = elapsed.FloorDiv(perSubStep);
+				DateTime subStart = stepStart + TimeSpan.FromMilliseconds(recoveryIndex * msPerSubStep);
+				TimeSpan subElapsed = Clock.Now - subStart;
+				TimeSpan subRemaining = perSubStep - subElapsed;
+				TimeSpan subCompRemaining = perComputation - subElapsed;
+
 
 				if (timeStep != stack.NewestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
 					int nextGen = stack.NewestSDSGeneration + 1;
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation(nextGen+1, msEntityBudget);
+					comp = new SDS.Computation(nextGen+1, subCompRemaining);
 				}
 				else
 				{
@@ -175,21 +203,23 @@ namespace Shard
 								break;
 						}
 						if (at < stack.Size)
-							comp = new SDS.Computation(stack[at].Generation, msEntityBudget);
+							comp = new SDS.Computation(stack[at].Generation, perComputation);
 					}
 				}
 
-				if (msRemainingUntilCompletion <= 0 && comp != null)
+				if (subCompRemaining.TotalSeconds <= 0 && comp != null)
 				{
 					stack.Insert(comp.Complete());
 					comp = null;
 				}
 
 				if (comp != null)
-					Clock.Sleep(Clock.Milliseconds(msRemainingUntilCompletion));
+					Clock.Sleep(subCompRemaining);
 				else
-					Clock.Sleep(Clock.Milliseconds(msRemainingInSubStep));
+					Clock.Sleep(subRemaining);
 			}
+
+
 		}
 
 		public static void Configure(ShardID addr, DB.ConfigContainer config, bool forceAllLinksPassive)
@@ -309,23 +339,23 @@ namespace Shard
 
 				if (obj is SDS.Serial)
 				{
-					Debug.Assert(HaveSibling(lnk));
+					//Debug.Assert(HaveSibling(lnk));
 					SDS.Serial raw = (SDS.Serial)obj;
 					if (raw.Generation <= stack.OldestSDSGeneration)
 					{
-						Console.Error.WriteLine("SDS update from sibling " + lnk + ": Rejected. Already moved past generation " + raw.Generation);
+						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Already moved past generation " + raw.Generation);
 						return;
 					}
 					SDS existing = stack.FindGeneration(raw.Generation);
 					if (existing.IsFullyConsistent)
 					{
-						Console.Error.WriteLine("SDS update from sibling " + lnk + ": Rejected. Generation already consistent: " + raw.Generation);
+						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Generation already consistent: " + raw.Generation);
 						return;
 					}
 					SDS sds = new SDS(raw);
 					if (sds.IsFullyConsistent)
 					{
-						Console.Out.WriteLine("SDS update from sibling " + lnk + ": Accepted generation " + raw.Generation);
+						Console.Out.WriteLine("SDS update from sibling or DB: Accepted generation " + raw.Generation);
 						stack.Insert(sds);
 						return;
 					}
