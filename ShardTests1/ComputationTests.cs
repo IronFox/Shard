@@ -17,7 +17,7 @@ namespace Shard.Tests
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				newState.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
 			}
@@ -34,7 +34,7 @@ namespace Shard.Tests
 				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				newState.newPosition = currentState.ID.Position + Motion;
 			}
@@ -43,7 +43,7 @@ namespace Shard.Tests
 		[Serializable]
 		class StationaryLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{}
 		}
 

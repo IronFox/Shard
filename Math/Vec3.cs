@@ -587,6 +587,8 @@ namespace VectorMath
 		/// <param name="action">Action to execute for each coordinate</param>
 		public void Cover(Action<Int3> action)
 		{
+			if ((this <= 0).Any)
+				return;
 			Int3 cursor;
 			for (cursor.X = 0; cursor.X < X; cursor.X++)
 				for (cursor.Y = 0; cursor.Y < Y; cursor.Y++)

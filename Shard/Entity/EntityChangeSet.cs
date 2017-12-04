@@ -266,7 +266,7 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public int Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
+		public List<EntityEvolutionException> Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
 		{
 			int numErrors = 0;
 
@@ -279,17 +279,21 @@ namespace Shard
 			Stopwatch watch = new Stopwatch();
 			watch.Start();
 
+			List<EntityEvolutionException> rs = null;
+
 			foreach (var e in entities)
 			{
 				try
 				{
 					
 					if (!tasks[at].Wait( (budget - watch.Elapsed).NotNegative()))
-						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+budget+" ms");
+						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+budget.TotalMilliseconds+" ms");
 				}
 				catch (Exception ex)
 				{
-					Log.Error(e + ": " + ex);
+					if (rs == null)
+						rs = new List<EntityEvolutionException>();
+					rs.Add(new EntityEvolutionException(e, ex ));
 
 					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
@@ -297,8 +301,7 @@ namespace Shard
 				}
 				at++;
 			}
-			return numErrors;
-
+			return rs;
 		}
 
 		private static void Get<T>(string name, ref Set<T> set, SerializationInfo info) where T : EntityChange.Abstract

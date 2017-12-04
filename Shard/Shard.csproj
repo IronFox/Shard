@@ -159,8 +159,10 @@
     <Compile Include="Entity\Entity.cs" />
     <Compile Include="Entity\EntityChange.cs" />
     <Compile Include="Entity\EntityChangeSet.cs" />
+    <Compile Include="Entity\EntityEvolutionException.cs" />
     <Compile Include="Entity\EntityPool.cs" />
     <Compile Include="Entity\CSLogicProvider.cs" />
+    <Compile Include="Entity\EntityRandom.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="InconsistencyCoverage.cs" />

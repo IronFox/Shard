@@ -263,6 +263,19 @@ namespace Shard
 			}
 		}
 
+		public static IEnumerable<string> Convert<T>(IEnumerable<T> e, Func<T, string> toString)
+		{
+			foreach (var t in e)
+				yield return toString(t);
+		}
+
+		public static string Concat<T>(string glue, IEnumerable<T> e, Func<T, string> toString)
+		{
+			if (e == null)
+				return "";
+			return string.Join(glue, Convert(e, toString));
+		}
+
 		public static HashCombiner Hash<T>(T self)
 		{
 			return new HashCombiner(typeof(T));

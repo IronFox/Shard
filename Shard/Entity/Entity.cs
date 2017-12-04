@@ -32,6 +32,9 @@ namespace Shard
 			Position = position;
 		}
 
+		public EntityID(Vec3 position) : this(Guid.NewGuid(), position)
+		{ }
+
 
 		public override int GetHashCode()
 		{
@@ -91,12 +94,17 @@ namespace Shard
 		public void Add(EntityAppearance app)
 		{
 			Type t = app.GetType();
+			if (!t.IsSerializable)
+				throw new IntegrityViolation("Trying to add non-serializable appearance to collection: "+t);
 			if (Contains(t))
 				throw new IntegrityViolation("This appearance already exists in this collection");
 			members.Add(t, app);
 		}
 		public void AddOrReplace(EntityAppearance app)
 		{
+			Type t = app.GetType();
+			if (!t.IsSerializable)
+				throw new IntegrityViolation("Trying to add non-serializable appearance to collection: " + t);
 			members[app.GetType()] = app;
 		}
 
@@ -201,6 +209,10 @@ namespace Shard
 			return members.Values.GetEnumerator();
 		}
 
+		public EntityAppearanceCollection Duplicate()
+		{
+			return (EntityAppearanceCollection)Helper.Deserialize(Helper.SerializeToArray(this));
+		}
 	}
 
 	[Serializable]
@@ -308,14 +320,53 @@ namespace Shard
 			public Guid receiver;
 		}
 
+		public struct Instantiation
+		{
+			public Vec3 targetLocation;
+			public EntityAppearanceCollection appearances;
+			public EntityLogic logic;
+		}
+
 		public struct NewState
 		{
 			public Vec3 newPosition;
-			public byte[][] broadcasts;
-			public Message[] messages;
+			public List<byte[]> broadcasts;
+			public List<Message> messages;
+			public List<Instantiation> instantiations;
+			public List<EntityID> removals;
 			public EntityLogic newLogic;
 			public EntityAppearanceCollection newAppearances;
 
+			public NewState(Entity source)
+			{
+				newPosition = source.ID.Position;
+				broadcasts = null;
+				messages = null;
+				instantiations = null;
+				removals = null;
+				newLogic = source.LogicState;
+				newAppearances = source.Appearances?.Duplicate();
+			}
+
+
+			public void Instantiate(Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances)
+			{
+				if (instantiations == null)
+					instantiations = new List<Instantiation>();
+				instantiations.Add( new Instantiation()
+				{
+					appearances = appearances,
+					logic = logic,
+					targetLocation = targetLocation
+				});
+			}
+
+			public void Remove(EntityID entityID)
+			{
+				if (removals == null)
+					removals = new List<EntityID>();
+				removals.Add(entityID);
+			}
 
 			public void Add(EntityAppearance app)
 			{
@@ -330,7 +381,22 @@ namespace Shard
 					newAppearances = new EntityAppearanceCollection();
 				newAppearances.AddOrReplace(app);
 			}
+
+			public void Send(Message message)
+			{
+				if (messages == null)
+					messages = new List<Message>();
+				messages.Add(message);
+			}
+			public void Broadcast(byte[] data)
+			{
+				if (broadcasts == null)
+					broadcasts = new List<byte[]>();
+				broadcasts.Add(data);
+			}
 		}
+
+
 		/// <summary>
 		/// Creates an asynchronous task that computes the next state in a separate thread
 		/// </summary>
@@ -338,16 +404,15 @@ namespace Shard
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Source for random values used during execution</param>
 		/// <returns></returns>
-		public async Task<NewState> EvolveAsync(Entity currentState, int generation, Random randomSource)
+		public async Task<NewState> EvolveAsync(Entity currentState, int generation)
 		{
-			NewState newState = new NewState
+			return await Task.Run( () =>
 			{
-				newAppearances = currentState.Appearances,
-				newPosition = currentState.ID.Position,
-				newLogic = currentState.LogicState
-			};
-			await Task.Run( () => Evolve(ref newState, currentState, generation, randomSource));
-			return newState;
+				EntityRandom random = new EntityRandom(currentState,generation);
+				NewState newState = new NewState(currentState);
+				Evolve(ref newState, currentState, generation, random);
+				return newState;
+			});
 		}
 
 		/// <summary>
@@ -360,7 +425,7 @@ namespace Shard
 		/// <param name="currentState">Current entity state</param>
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource);
+		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource);
 	}
 		
 
@@ -408,13 +473,10 @@ namespace Shard
 			{
 				try
 				{
-					Random randomSource = new Random(Helper.Hash(this).Add(roundNumber).Add(ID).GetHashCode());
-
 					var state = LogicState;
 					Entity copy = this;
 					
-					var newState = await state.EvolveAsync(copy, roundNumber, randomSource);
-
+					var newState = await state.EvolveAsync(copy, roundNumber);
 					int oID = 0;
 					if (newState.broadcasts != null)
 						foreach (var b in newState.broadcasts)
@@ -426,8 +488,22 @@ namespace Shard
 					Vec3 dest = newState.newPosition;
 					if (!Simulation.CheckDistance("Motion", dest, this, Simulation.M))
 						dest = ID.Position;
+					var newID = ID.Relocate(dest);
 					outChangeSet.Add(new EntityChange.Motion(this, newState.newLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
-					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID.Relocate(dest), newState.newAppearances, dest - ID.Position)));
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
+					if (newState.instantiations != null)
+						foreach (var inst in newState.instantiations)
+							outChangeSet.Add(new EntityChange.Instantiation(newID, inst.targetLocation, inst.appearances, inst.logic));
+					if (newState.removals != null)
+						foreach (var rem in newState.removals)
+							outChangeSet.Add(new EntityChange.Removal(newID, rem));
+					int messageID = 0;
+					if (newState.messages != null)
+						foreach (var m in newState.messages)
+							outChangeSet.Add(new EntityChange.Message(ID,messageID++,m.receiver,m.data));
+					if (newState.broadcasts != null)
+						foreach (var b in newState.broadcasts)
+							outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
 				}
 				catch
 				{

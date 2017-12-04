@@ -13,7 +13,7 @@ namespace Shard.Tests
 	public class LogicProviderTests
 	{
 
-		const string code = 
+		const string code =
 			@"	using Shard;
 				using System;
 				[Serializable]
@@ -25,7 +25,7 @@ namespace Shard.Tests
 				{
 					this.counter = counter;
 				}
-				public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
 					newState.newLogic = new TestLogic(counter+1);
 				}
@@ -39,7 +39,7 @@ namespace Shard.Tests
 			public class TestLogic : Shard.EntityLogic {
 				int someField = 3;
 				
-				public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
 			};
 		";
@@ -51,7 +51,7 @@ namespace Shard.Tests
 			public class TestLogic : Shard.EntityLogic {
 				public int SomeProperty{get;set;}	//generates a hidden field due to set
 				
-				public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
 			};
 		";
@@ -68,7 +68,7 @@ namespace Shard.Tests
 
 				readonly Nested n = new Nested();
 				
-				public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
 					n.a = 4;
 				}
@@ -90,7 +90,7 @@ namespace Shard.Tests
 				}
 				readonly NestedStruct test = new NestedStruct() {testInt = 42};
 				
-				public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
 			};
 		";
@@ -144,7 +144,7 @@ namespace Shard.Tests
 
 
 
-			var s2 = logic2.EvolveAsync(new Entity(), 0, new Random()).Result;
+			var s2 = logic2.EvolveAsync(new Entity(), 0).Result;
 			Assert.AreEqual(s2.newLogic.GetType(), typeof(DynamicCSLogic));
 			Assert.IsFalse(s2.newLogic == logic2);
 

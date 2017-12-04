@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shard;
 using Shard.Tests;
 using System.Collections.Generic;
+using VectorMath;
 
 namespace ShardTests1
 {
@@ -12,6 +13,7 @@ namespace ShardTests1
 		static Random random = new Random();
 
 
+		[Serializable]
 		private class ConsistencyAppearance : EntityAppearance
 		{
 			public ConsistencyAppearance(bool isConsistent)
@@ -44,16 +46,24 @@ namespace ShardTests1
 				var a = app.Get<ConsistencyAppearance>();
 				return a != null && a.IsConsistent;
 			}
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public static void CheckRandom(EntityRandom random, string at)
 			{
-				bool isConsistent = true;
+				int i0 = random.Next(), i1 = random.Next(), i2 = random.Next();
+				if (i0 == i1 && i1 == i2)
+					throw new Exception("Random generator is out of whack: " + at);
 
+			}
+
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom random)
+			{
+				CheckRandom(random,"started");
+				bool isConsistent = true;
 				var old = currentState.GetAppearance<ConsistencyAppearance>();
 				if (old != null)
 				{
 					isConsistent = old.IsConsistent;
 				}
-				
+
 
 				if (isConsistent && currentState.Contacts != null)
 				{
@@ -67,12 +77,21 @@ namespace ShardTests1
 					}
 
 				}
-				newState.AddOrReplace(new ConsistencyAppearance(isConsistent));	//is consistent?
+				newState.AddOrReplace(new ConsistencyAppearance(isConsistent)); //is consistent?
 
+				if (!Simulation.MySpace.Contains(currentState.ID.Position))
+					throw new IntegrityViolation(currentState+": not located in simulation space "+ Simulation.MySpace);
+
+				CheckRandom(random, "loop prior");
+				int cnt = 0;
 				float M = Simulation.M;
 				do
 				{
-					newState.newPosition = Simulation.MySpace.Clamp(currentState.ID.Position + random.NextVec3(-M, M));
+					CheckRandom(random, "loop "+cnt);
+					Vec3 draw = random.NextVec3(-M, M);
+					newState.newPosition = Simulation.MySpace.Clamp(currentState.ID.Position + draw);
+					if (++cnt > 1000)
+						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + M + "->"+draw+" in " + Simulation.MySpace+"; "+random.Next()+", "+random.Next()+", "+random.Next());
 				}
 				while (newState.newPosition == currentState.ID.Position);
 			}
@@ -81,7 +100,7 @@ namespace ShardTests1
 
 		public class RandomMotion : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				while (newState.newPosition == currentState.ID.Position)
 				{
@@ -99,7 +118,7 @@ namespace ShardTests1
 
 		public class FaultLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				throw new NotImplementedException();
 			}
@@ -134,8 +153,8 @@ namespace ShardTests1
 			for (int i = 0; i < 8; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				int numErrors = pool.Evolve(set,ic,i,TimeSpan.FromSeconds(1));
-				if (numErrors != 0)
+				var errors = pool.Evolve(set,ic,i,TimeSpan.FromSeconds(1));
+				if (errors != null)
 				{
 					Assert.IsTrue(ic.OneCount > 0);
 					if (any == -1)
@@ -173,7 +192,8 @@ namespace ShardTests1
 				for (int i = 0; i < InconsistencyCoverage.CommonResolution; i++)	//no point going further than current resolution
 				{
 					EntityChangeSet set = new EntityChangeSet();
-					int numErrors = pool.Evolve(set, ic, i, TimeSpan.FromSeconds(1));
+					var errors = pool.Evolve(set, ic, i, TimeSpan.FromSeconds(1));
+					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors, error => error.Message));
 					Assert.AreEqual(0, set.Execute(pool));
 					//Assert.AreEqual(ic.OneCount, 1);
 
@@ -247,7 +267,8 @@ namespace ShardTests1
 			for (int i = 0; i < 100; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				pool.Evolve(set,null,i, TimeSpan.FromSeconds(1));
+				var errors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(5));
+				Assert.IsNull(errors, errors != null ? errors[0].Message : "");
 				Assert.AreEqual(0, set.Execute(pool));
 
 				HashSet<Guid> env = new HashSet<Guid>();
@@ -293,8 +314,8 @@ namespace ShardTests1
 			{
 				var old = pool.ToArray();
 				EntityChangeSet set = new EntityChangeSet();
-				int numErrors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(1));
-				Assert.AreEqual(0, numErrors);
+				var errors = pool.Evolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(1));
+				Assert.IsNull(errors);
 				Assert.AreEqual(numEntities, set.FindNamedSet("motions").Size);
 				foreach (var e in old)
 				{

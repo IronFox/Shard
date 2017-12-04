@@ -1,0 +1,26 @@
+{
+	"worldSize" = [1,1,1],
+	"startIn" = "01:00",
+
+	"entities" =
+	[
+		{
+			"position" = [0.2,0.4,0.1],
+			"logic" = "randomMotion.v1",
+			"appearances" = 
+			[
+				{"color" = "red"}
+			]
+		}
+		
+		{
+			"position" = "<RandomVector(0,1)>",
+			"logic" = "randomMotion.v1",
+			"appearances" = 
+			[
+				{"color" = "<RandomColor>"}
+			],
+			"instances" = 100
+		}
+	]
+}

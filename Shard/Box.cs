@@ -168,6 +168,11 @@ namespace Shard
 			return X.Intersects(other.X) && Y.Intersects(other.Y) && Z.Intersects(other.Z);
 				
 		}
+
+		public override string ToString()
+		{
+			return "[" + Min.ToString() + "," + Max.ToString() + "]";
+		}
 	}
 
 

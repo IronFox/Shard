@@ -70,7 +70,7 @@ namespace Shard
 			}
 		}
 
-		public override void Evolve(ref NewState newState, Entity currentState, int generation, Random randomSource)
+		public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 		{
 			FinishLoading(1);
 			newState.newLogic = scriptLogic;

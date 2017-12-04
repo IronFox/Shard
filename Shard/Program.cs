@@ -35,7 +35,7 @@ namespace Shard
 			}
 		}
 
-		static void SetupScenario(Host dbHost, DB.ConfigContainer cfg, int numEntities, Func<Entity> entityFactory)
+		static void SetupScenario(Host dbHost, DB.ConfigContainer cfg, IEnumerable<Entity> entities)
 		{
 			DB.Connect(dbHost);
 			DB.PutConfig(cfg);
@@ -46,18 +46,17 @@ namespace Shard
 					grid[at.X, at.Y, at.Z] = new SDSFactory(Box.OffsetSize(new Vec3(at), Vec3.One, at+1 >= cfg.extent.XYZ));
 				}
 			);
-			for (int i = 0; i < numEntities; i++)
+			foreach (var e in entities)
 			{
-				Entity e = entityFactory();
 				var cell = Int3.Min( e.ID.Position.FloorInt3, cfg.extent.XYZ);
 				grid[cell.X, cell.Y, cell.Z].Include(e);
 			}
 
 			Task[] tasks = new Task[cfg.extent.XYZ.Product];
-			int at = 0;
+			int idx = 0;
 			foreach (var factory in grid)
 			{
-				tasks[at++] = DB.PutAsyncTask(factory.Finish(),true);
+				tasks[idx++] = DB.PutAsyncTask(factory.Finish(),true);
 			}
 
 			Task.WaitAll(tasks);
@@ -67,8 +66,11 @@ namespace Shard
 
 		static void Main(string[] args)
 		{
-			//shard 
-			//shard localhost:2018 1-2-3 16-16-4 0.1 0.05
+
+			//SetupScenario(new Host("localhost", 1024),
+			//			new DB.ConfigContainer() { m = 0.05f, start = (DateTime.Now.ToUniversalTime() + TimeSpan.FromHours(1)).ToString() },
+			//			GenerateEntities(1000));
+
 
 			if (args.Length != 2)
 			{

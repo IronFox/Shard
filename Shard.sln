@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shard", "Shard\Shard.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VectorMath", "Math\VectorMath.csproj", "{8B82845E-874B-4B7C-9EA6-85C968B73986}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardTests1", "ShardTests1\ShardTests1.csproj", "{C16B5786-0D4D-4E50-AD1D-1A19C35E6C42}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardTests", "ShardTests1\ShardTests.csproj", "{C16B5786-0D4D-4E50-AD1D-1A19C35E6C42}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
