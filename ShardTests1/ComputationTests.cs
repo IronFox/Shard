@@ -116,7 +116,7 @@ namespace Shard.Tests
 		}
 
 
-		private void AssertNoErrors(SDS.Computation comp)
+		public static void AssertNoErrors(SDS.Computation comp)
 		{
 			var errors = comp.Errors;
 			if (errors == null)
@@ -157,8 +157,7 @@ namespace Shard.Tests
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
-			stack.Clear();
-			stack.Insert(root);
+			stack.ResetToRoot(root);
 
 			const int NumIterations = 10;
 
@@ -260,8 +259,7 @@ namespace Shard.Tests
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
-			stack.Clear();
-			stack.Insert(root);
+			stack.ResetToRoot(root);
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
@@ -362,8 +360,7 @@ namespace Shard.Tests
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
-			stack.Clear();
-			stack.Insert(root);
+			stack.ResetToRoot(root);
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));

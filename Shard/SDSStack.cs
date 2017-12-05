@@ -11,9 +11,10 @@ namespace Shard
 	{
 		private List<SDS> sdsList = new List<SDS>();
 
-		public void Clear()
+		public void ResetToRoot(SDS root)
 		{
 			sdsList.Clear();
+			Insert(root);
 		}
 
 		private void Trim()

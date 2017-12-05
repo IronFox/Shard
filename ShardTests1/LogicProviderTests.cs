@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard.Tests
 {
@@ -98,22 +99,24 @@ namespace Shard.Tests
 		const string instantiationTest =
 		@"	using Shard;
 			using System;
+			using VectorMath;
+
 			[Serializable]
 			public class InstantiatedLogic : Shard.EntityLogic {
-
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
-
-
+					//self-destruct
+					newState.Remove(currentState.ID);
 				}
 			};
+			[Serializable]
 			public class InstantiatorLogic : Shard.EntityLogic {
 
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
 					//Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances
-					newState.Instantiate(currentState.
-
+					//if (generation == 1)
+						newState.Instantiate(currentState.ID.Position + randomSource.NextVec3(-1,1),new InstantiatedLogic(),null);
 				}
 			};
 		";
@@ -180,6 +183,60 @@ namespace Shard.Tests
 
 		}
 
+		[TestMethod()]
+		public void ScriptedLogicInstantiationTest()
+		{
+			CSLogicProvider provider = new CSLogicProvider("Test", instantiationTest);
+			DB.LogicLoader = scriptName => Task.Run(() => provider);
+
+
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new DynamicCSLogic(provider,"InstantiatorLogic"),
+						null,null,null),
+				}
+			);
+			//EntityTest.RandomDefaultPool(100);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+			Assert.AreEqual(intermediate.entities.Count, 1);
+
+			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.ResetToRoot(root);
+
+			const int NumIterations = 3;
+
+			for (int i = 0; i < NumIterations; i++)
+			{
+				SDS temp = stack.AllocateGeneration(i + 1);
+				SDS.Computation comp = new SDS.Computation(i + 1, TimeSpan.FromMilliseconds(10));
+				ComputationTests.AssertNoErrors(comp);
+				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
+				Assert.AreEqual(instantiations, 1);
+				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i+1,2));	//can never be more than 2
+				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
+				Assert.IsTrue(comp.Intermediate.inputConsistent);
+				SDS sds = comp.Complete();
+				Assert.AreEqual(sds.FinalEntities.Length, 2);	//previous clone self-destructed, so we are back to exactly 2
+				Assert.IsTrue(sds.IsFullyConsistent);
+				stack.Insert(sds);
+			}
+			Assert.AreEqual(1, stack.Size);
+			foreach (var e in stack.Last().FinalEntities)
+				Assert.IsTrue(e.LogicState is DynamicCSLogic, e.LogicState.GetType().ToString());
+		}
+
 
 		[TestMethod()]
 		public void ScriptedLogicPerformanceTest()
@@ -187,12 +244,12 @@ namespace Shard.Tests
 			Stopwatch watch = new Stopwatch();
 			watch.Start();
 			CSLogicProvider factory = null;
-			for (int i = 0; i < 100; i++)
+			for (int i = 0; i < 10; i++)
 			{
 				factory = new CSLogicProvider("Test", code);
 			}
 			watch.Stop();
-			Console.WriteLine("Compilation took " + watch.Elapsed);
+			Console.WriteLine("Compilation of 10 scripts took " + watch.Elapsed);
 
 			var binary = Helper.SerializeToArray(factory);
 			watch.Reset();
@@ -202,8 +259,10 @@ namespace Shard.Tests
 				factory = (CSLogicProvider) Helper.Deserialize(binary);
 			}
 			watch.Stop();
-			Console.WriteLine("Loading took " + watch.Elapsed);
+			Console.WriteLine("Loading of 100 assemblies took " + watch.Elapsed);
 
 		}
+
+
 	}
 }
