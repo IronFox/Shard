@@ -459,7 +459,7 @@ namespace Shard
 				var delta = ID.XYZ - Simulation.ID.XYZ;
 				Int3 offset = (delta * InconsistencyCoverage.CommonResolution + 1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
 				Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution + 1);
-				return IntBox.MinAndMax(offset, end, Bool3.True);
+				return IntBox.FromMinAndMax(offset, end, Bool3.True);
 			}
 		}
 		public IntBox ICImportRegion
@@ -469,7 +469,7 @@ namespace Shard
 				var delta = ID.XYZ - Simulation.ID.XYZ;
 				Int3 offset = (delta * InconsistencyCoverage.CommonResolution).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
 				Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
-				return IntBox.MinAndMax(offset, end, Bool3.True);
+				return IntBox.FromMinAndMax(offset, end, Bool3.True);
 			}
 		}
 

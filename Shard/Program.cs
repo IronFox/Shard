@@ -48,9 +48,13 @@ namespace Shard
 					grid[at.X, at.Y, at.Z] = new SDSFactory(Box.OffsetSize(new Vec3(at), Vec3.One, at+1 >= cfg.extent.XYZ));
 				}
 			);
+			var gridBox = IntBox.FromMinAndMax(Int3.Zero, cfg.extent.XYZ, Bool3.False);
+			var simulationSpace = Box.FromMinAndMax(Vec3.Zero, new Vec3(cfg.extent.XYZ), Bool3.True);
 			foreach (var e in entities)
 			{
-				var cell = Int3.Min( e.ID.Position.FloorInt3, cfg.extent.XYZ);
+				if (!simulationSpace.Contains(e.ID.Position))
+					throw new Exception("Scenario entity "+e+" is located outside simulation space");
+				var cell = gridBox.Clamp(e.ID.Position.FloorInt3);
 				grid[cell.X, cell.Y, cell.Z].Include(e);
 			}
 

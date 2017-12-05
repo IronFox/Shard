@@ -284,7 +284,7 @@ namespace Shard
 				new Range(min.Z, min.Z + size.Z, maxIsInclusive.Z)
 			);
 		}
-		public static IntBox MinAndMax(Int3 min, Int3 max, Bool3 maxIsInclusive)
+		public static IntBox FromMinAndMax(Int3 min, Int3 max, Bool3 maxIsInclusive)
 		{
 			return new IntBox(
 				new Range(min.X, max.X, maxIsInclusive.X),
