@@ -17,6 +17,11 @@ namespace Shard
 		public EntityRandom(Entity currentState, int generation) : this(Helper.Hash(typeof(EntityRandom)).Add(generation).Add(currentState.ID).GetHashCode())
 		{}
 
+		public bool NextBool()
+		{
+			return NextU() >= uint.MaxValue / 2;
+		}
+
 		public int Next()
 		{
 			return (int)NextU();
@@ -27,6 +32,11 @@ namespace Shard
 			x = y; y = z; z = w;
 			w = w ^ (w >> 19) ^ (t ^ (t >> 8));
 			return w;
+		}
+
+		public int Next(int exclusiveMax)
+		{
+			return (int)((long)NextU() * exclusiveMax / ((long)uint.MaxValue+1));
 		}
 
 		public float NextFloat()
