@@ -228,12 +228,13 @@ namespace Shard
 			// project to store the interfaces that both this class and the other uses. Just remember, this will expose ALL public classes to
 			// the "script"
 			options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+			options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
 			// Compile our code
 			var result = csProvider.CompileAssemblyFromSource(options, code);
-			var assembly = result.CompiledAssembly;
-			binaryAssembly = File.ReadAllBytes(result.PathToAssembly);
 			if (result.Errors.HasErrors)
 				throw new CompilationException("Unable to compile logic: " + result.Errors[0]);
+			var assembly = result.CompiledAssembly;
+			binaryAssembly = File.ReadAllBytes(result.PathToAssembly);
 
 			//foreach (var f in result.TempFiles)
 			//{
