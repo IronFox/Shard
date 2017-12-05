@@ -267,7 +267,7 @@ namespace Shard
 		{
 			get
 			{
-				return Box.CreateUsingMax(Vec3.Zero, new Vec3(ext.XYZ), Bool3.True);
+				return Box.FromMinAndMax(Vec3.Zero, new Vec3(ext.XYZ), Bool3.True);
 			}
 		}
 

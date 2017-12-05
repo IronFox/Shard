@@ -1,6 +1,8 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -64,11 +66,79 @@ namespace Shard
 		}
 
 
+		static Dictionary<string, CSLogicProvider> providers = new Dictionary<string, CSLogicProvider>();
+		static CSLogicProvider GetProvider(string name)
+		{
+			CSLogicProvider provider;
+			if (providers.TryGetValue(name, out provider))
+				return provider;
+			provider = new CSLogicProvider(name, File.ReadAllText(Path.Combine("scenario", "Logic", name+ ".cs")));
+			providers[name] = provider;
+			return provider;
+		}
+
+		static Random random = new Random();
+		static IEnumerable<Entity> Translate(IEnumerable<ScenarioEntity> e)
+		{
+			foreach (var se in e)
+			{
+				for (int i = 0; i < se.instances; i++)
+				{
+					Vec3 pos = Vec3.Zero;
+					if (se.position.Length == 3)
+					{
+						pos = new Vec3(se.position, 0);
+					}
+					else if (se.position.Length == 6)
+					{
+						pos = random.NextVec3(Box.FromMinAndMax(new Vec3(se.position, 0), new Vec3(se.position, 3), Bool3.True));
+					}
+					else
+						throw new Exception("Invalid position declaration: " + se.position);
+
+					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
+					
+
+					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null), appearances, null, null);
+				}
+				
+			}
+		}
+
+
+		public class ScenarioConfig
+		{
+			public int[] worldSize;
+			public float R, M;
+			public ScenarioEntity[] entities;
+		}
+
+		public class ScenarioEntity
+		{
+			public float[] position;
+			public string logic;
+			public dynamic[] appearances;
+			public int instances = 1;
+		}
+
+
+
+
 		static void Main(string[] args)
 		{
 
-			//SetupScenario(new Host("localhost", 1024),
-			//			new DB.ConfigContainer() { m = 0.05f, start = (DateTime.Now.ToUniversalTime() + TimeSpan.FromHours(1)).ToString() },
+			string json = File.ReadAllText("scenario/test0.json");
+			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(json);
+
+			SetupScenario(new Host("localhost", 1024),
+						new DB.ConfigContainer()
+						{
+							extent = new ShardID(scenario.worldSize[0],scenario.worldSize[1],scenario.worldSize[2],1),
+							m = scenario.M,
+							r = scenario.R,
+							start = (DateTime.Now.ToUniversalTime() + TimeSpan.FromHours(1)).ToString()
+						},
+						Translate(scenario.entities));
 			//			GenerateEntities(1000));
 
 

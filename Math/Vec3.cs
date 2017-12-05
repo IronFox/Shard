@@ -66,6 +66,13 @@ namespace VectorMath
 			this.Z = i3.Z;
 		}
 
+		public Vec3(float[] position, int offset)
+		{
+			X = position[offset];
+			Y = position[offset+1];
+			Z = position[offset+2];
+		}
+
 		public float Length { get { return (float)System.Math.Sqrt(Vec.Dot(this, this)); } }
 
 		public Int3 FloorInt3 { get { return new Int3((int)Math.Floor(X), (int)Math.Floor(Y), (int)Math.Floor(Z)); } }

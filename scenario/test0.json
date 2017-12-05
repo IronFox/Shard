@@ -1,25 +1,28 @@
 {
-	"worldSize" = [2,1,1],
-
-	"entities" =
+	"worldSize" : [1,1,1],
+	
+	"R" : 0.025,
+	"M" : 0.0025,
+	
+	"entities" :
 	[
 		{
-			"position" = [0.2,0.4,0.1],
-			"logic" = "randomMotion.v1",
-			"appearances" = 
+			"position" : [0.2,0.4,0.1],
+			"logic" : "randomMotion.v1",
+			"appearances" : 
 			[
-				{"color" = "red"}
+				{"color" : "red"}
 			]
-		}
+		},
 		
 		{
-			"position" = "<RandomVector(0,1)>",
-			"logic" = "randomMotion.v1",
-			"appearances" = 
+			"position" : [0,0,0, 1,1,1],
+			"logic" : "randomMotion.v1",
+			"appearances" : 
 			[
-				{"color" = "<RandomColor>"}
+				{"color" : "<RandomColor>"}
 			],
-			"instances" = 100
+			"instances" : 100
 		}
 	]
 }

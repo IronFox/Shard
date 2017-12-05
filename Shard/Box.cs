@@ -128,7 +128,7 @@ namespace Shard
 				new Range(min.Z, min.Z + size.Z, maxIsInclusive.Z)
 			);
 		}
-		public static Box CreateUsingMax(Vec3 min, Vec3 max, Bool3 maxIsInclusive)
+		public static Box FromMinAndMax(Vec3 min, Vec3 max, Bool3 maxIsInclusive)
 		{
 			return new Box(
 				new Range(min.X, max.X, maxIsInclusive.X),

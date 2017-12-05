@@ -248,7 +248,7 @@ namespace Shard.EntityChange
 		public override bool Affects(Box cube)
 		{
 			float r = Simulation.R;
-			return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			return cube.Intersects(Box.FromMinAndMax(Origin.Position - r, Origin.Position + r, Bool3.True));
 		}
 	}
 
@@ -339,7 +339,7 @@ namespace Shard.EntityChange
 		public override bool Affects(Box cube)
 		{
 			float r = Simulation.SensorRange;
-			return cube.Intersects(Box.CreateUsingMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			return cube.Intersects(Box.FromMinAndMax(Origin.Position - r, Origin.Position + r, Bool3.True));
 		}
 	}
 
