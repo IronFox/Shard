@@ -49,14 +49,16 @@ namespace Shard
 
 		}
 
-		public DynamicCSLogic(CSLogicProvider provider)
+		public DynamicCSLogic(CSLogicProvider provider, string logicName)
 		{
-			scriptLogic = provider.Instantiate();
+			scriptLogic = provider.Instantiate(logicName);
 			this.provider = provider;
 		}
 
 		private DynamicCSLogic(CSLogicProvider provider, EntityLogic newState)
 		{
+			if (newState.GetType().Assembly != provider.Assembly)
+				throw new IntegrityViolation("Illegal state/provider combination given: "+newState.GetType()+"/"+provider);
 			scriptLogic = newState;
 			this.provider = provider;
 		}
@@ -79,6 +81,17 @@ namespace Shard
 				newState.newLogic = this;
 			else
 				newState.newLogic = new DynamicCSLogic(provider,newState.newLogic);
+
+			if (newState.instantiations != null)
+				for (int i = 0; i < newState.instantiations.Count; i++)
+				{
+					var inst = newState.instantiations[i];
+					if (inst.logic != null)
+					{
+						inst.logic = new DynamicCSLogic(provider, inst.logic);
+						newState.instantiations[i] = inst;
+					}
+				}
 		}
 
 		public void GetObjectData(SerializationInfo info, StreamingContext context)
@@ -115,7 +128,7 @@ namespace Shard
 		//CompilerResults result;
 		public readonly Assembly Assembly;
 		public readonly byte[] BinaryAssembly;
-		public readonly ConstructorInfo Constructor;
+		private readonly Dictionary<string,ConstructorInfo> constructors = new Dictionary<string, ConstructorInfo>();
 
 		public readonly string ScriptName,SourceCode;
 		public readonly bool FromScript;
@@ -132,9 +145,11 @@ namespace Shard
 
 		
 
-		public EntityLogic Instantiate()
+		public EntityLogic Instantiate(string logicName)
 		{
-			return Constructor.Invoke(null) as EntityLogic;
+			if (string.IsNullOrEmpty(logicName) && constructors.Count == 1)
+				return constructors.First().Value.Invoke(null) as EntityLogic;
+			return constructors[logicName].Invoke(null) as EntityLogic;
 		}
 
 		public EntityLogic DeserializeLogic(byte[] serialData)
@@ -154,7 +169,7 @@ namespace Shard
 			else
 				Assembly = Assembly.Load(BinaryAssembly);
 
-			CheckAssembly(out Constructor);
+			CheckAssembly(constructors);
 		}
 
 		public DBSerial Export()
@@ -174,7 +189,7 @@ namespace Shard
 			ScriptName = scriptName;
 			Assembly = Assembly.Load(binaryAssembly);
 			this.BinaryAssembly = binaryAssembly;
-			CheckAssembly(out Constructor);
+			CheckAssembly(constructors);
 		}
 
 
@@ -184,7 +199,7 @@ namespace Shard
 			FromScript = true;
 			ScriptName = scriptName;
 			Assembly = Compile(code, out BinaryAssembly);
-			CheckAssembly(out Constructor);
+			CheckAssembly(constructors);
 		}
 
 		private static Assembly Compile(string code, out byte[] binaryAssembly)
@@ -231,10 +246,11 @@ namespace Shard
 			return assembly;
 		}
 
-		void CheckAssembly(out ConstructorInfo outConstructor)
+		void CheckAssembly(Dictionary<string, ConstructorInfo> constructors)
 		{
 			HashSet<Type> checkedTypes = new HashSet<Type>() ;
 			var a = Assembly;
+			constructors.Clear();
 			// Now that we have a compiled script, lets run them
 			foreach (Type type in a.GetExportedTypes())
 			{
@@ -243,26 +259,19 @@ namespace Shard
 					if (!type.IsSerializable)
 						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but not serializable");
 
-					outConstructor = type.GetConstructor(Type.EmptyTypes);
-					if (Constructor == null || !Constructor.IsPublic)
+					var c = type.GetConstructor(Type.EmptyTypes);
+					if (c == null || !c.IsPublic)
 					{
 						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
 						//continue;
 					}
 					CheckType(checkedTypes, type);
-					//no need to check properties: either they represent/can change some local field, or they are ineffective
-					//var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-					//foreach (var p in properties)
-					//{
-					//	if (p.CanWrite)
-					//		throw new LogicCompositionException(ScriptName + ": Property '" + type.Name + "." + p.Name + "' must not have a set method");
-					//}
 
-					if (outConstructor != null)
-						return;
+					constructors[type.Name] = c;
 				}
 			}
-			throw new LogicCompositionException(ScriptName + ": Failed to find entity logic in assembly");
+			if (constructors.Count == 0)
+				throw new LogicCompositionException(ScriptName + ": Failed to find any entity logic in assembly");
 		}
 
 		private void CheckType(HashSet<Type> checkedTypes, Type type, string path = null)

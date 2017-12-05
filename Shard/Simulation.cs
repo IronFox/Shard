@@ -33,6 +33,8 @@ namespace Shard
 
 		public static void AdvertiseOldestGeneration(int gen)
 		{
+			if (siblings == null)
+				return;	//during tests
 			var data = new OldestGeneration(gen);
 			siblings.AdvertiseOldestGeneration(data);
 			neighbors.AdvertiseOldestGeneration(data);
@@ -269,13 +271,33 @@ namespace Shard
 			}
 		}
 
-		public static bool CheckDistance(string task, Vec3 referencePosition, Entity e, float maxDistance)
+		public static Vec3 ClampDestination(string task, Vec3 newPosition, EntityID currentEntityPosition, float maxDistance)
 		{
-			float dist = GetDistance(referencePosition, e.ID.Position);
+			float dist = GetDistance(newPosition, currentEntityPosition.Position);
+			if (dist <= maxDistance)
+				return newPosition;
+
+			Log.Error(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
+			newPosition = currentEntityPosition.Position + (newPosition - currentEntityPosition.Position) * maxDistance / dist;
+
+			Debug.Assert(GetDistance(newPosition, currentEntityPosition.Position) <= maxDistance);
+
+			return newPosition;
+		}
+
+		public static bool CheckDistance(string task, Vec3 taskLocation, EntityID currentEntityPosition, float maxDistance)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
 			if (dist <= maxDistance)
 				return true;
-			Log.Error(e + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
+			Log.Error(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
 			return false;
+		}
+
+
+		public static bool CheckDistance(string task, Vec3 taskLocation, Entity actor, float maxDistance)
+		{
+			return CheckDistance(task, taskLocation, actor.ID, maxDistance);
 		}
 		internal static bool CheckDistance(string task, Vec3 referencePosition, Vec3 targetPosition, float maxDistance)
 		{
@@ -384,6 +406,7 @@ namespace Shard
 					return true;
 			return false;
 		}
+
 	}
 
 	public class OldestGeneration

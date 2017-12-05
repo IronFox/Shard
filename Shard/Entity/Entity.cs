@@ -475,7 +475,7 @@ namespace Shard
 				{
 					var state = LogicState;
 					Entity copy = this;
-					
+
 					var newState = await state.EvolveAsync(copy, roundNumber);
 					int oID = 0;
 					if (newState.broadcasts != null)
@@ -485,18 +485,19 @@ namespace Shard
 						foreach (var m in newState.messages)
 							outChangeSet.Add(new EntityChange.Message(ID, oID++, m.receiver, m.data));
 
-					Vec3 dest = newState.newPosition;
-					if (!Simulation.CheckDistance("Motion", dest, this, Simulation.M))
-						dest = ID.Position;
+					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
 					var newID = ID.Relocate(dest);
 					outChangeSet.Add(new EntityChange.Motion(this, newState.newLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
 					if (newState.instantiations != null)
 						foreach (var inst in newState.instantiations)
-							outChangeSet.Add(new EntityChange.Instantiation(newID, inst.targetLocation, inst.appearances, inst.logic));
+							outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic));
 					if (newState.removals != null)
 						foreach (var rem in newState.removals)
-							outChangeSet.Add(new EntityChange.Removal(newID, rem));
+						{
+							if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
+								outChangeSet.Add(new EntityChange.Removal(newID, rem));
+						}
 					int messageID = 0;
 					if (newState.messages != null)
 						foreach (var m in newState.messages)

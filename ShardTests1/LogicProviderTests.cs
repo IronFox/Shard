@@ -95,6 +95,29 @@ namespace Shard.Tests
 			};
 		";
 
+		const string instantiationTest =
+		@"	using Shard;
+			using System;
+			[Serializable]
+			public class InstantiatedLogic : Shard.EntityLogic {
+
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+				{
+
+
+				}
+			};
+			public class InstantiatorLogic : Shard.EntityLogic {
+
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+				{
+					//Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances
+					newState.Instantiate(currentState.
+
+				}
+			};
+		";
+
 		[TestMethod()]
 		public void AllowedLogicTest()
 		{
@@ -135,7 +158,7 @@ namespace Shard.Tests
 			var imported = new CSLogicProvider(exported);
 			Assert.AreEqual(provider, imported);
 
-			DynamicCSLogic logic = new DynamicCSLogic(provider);
+			DynamicCSLogic logic = new DynamicCSLogic(provider,null);
 
 			var serialLogic = Helper.SerializeToArray(logic);
 

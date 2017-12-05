@@ -235,6 +235,9 @@ namespace Shard
 			IntermediateData data;
 			int generation;
 			SDS old;
+			List<EntityEvolutionException> errors;
+
+			public List<EntityEvolutionException> Errors { get { return errors; } }
 
 			public IntermediateData Intermediate { get { return data; } }
 			public int Generation { get { return generation; } }
@@ -283,7 +286,7 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeout);
+				errors = data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeout);
 
 				foreach (var n in Simulation.Neighbors)
 				{

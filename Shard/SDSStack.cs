@@ -11,6 +11,11 @@ namespace Shard
 	{
 		private List<SDS> sdsList = new List<SDS>();
 
+		public void Clear()
+		{
+			sdsList.Clear();
+		}
+
 		private void Trim()
 		{
 			int newest = NewestConsistentSDSIndex;
@@ -87,6 +92,8 @@ namespace Shard
 			else
 			{
 				int at = sds.Generation - OldestSDS.Generation;
+				if (at < 0 || at >= sdsList.Count)
+					throw new IntegrityViolation("Cannot insert SDS generation "+sds.Generation+", oldest = "+OldestSDSGeneration);
 				sdsList[at] = sds;
 			}
 			Trim();

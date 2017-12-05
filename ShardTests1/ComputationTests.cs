@@ -14,6 +14,9 @@ namespace Shard.Tests
 	{
 		static Random random = new Random();
 
+		/// <summary>
+		/// Logic that intentionally moves too fast, thus triggering forceful clamping. Should not cause a fault
+		/// </summary>
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
@@ -47,6 +50,150 @@ namespace Shard.Tests
 			{}
 		}
 
+		[Serializable]
+		public class PingPacket
+		{
+			public readonly int Counter;
+
+			public PingPacket(int counter)
+			{
+				this.Counter = counter;
+			}
+
+			public PingPacket Increment()
+			{
+				return new PingPacket(Counter + 1);
+			}
+		}
+
+		[Serializable]
+		class PongLogic : EntityLogic
+		{
+			readonly PingPacket packet;
+			public int CounterState { get { return packet != null ? packet.Counter : -1; } }
+
+			public PongLogic(PingPacket data)
+			{
+				this.packet = data;
+			}
+
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			{
+				PingPacket data = null;
+				if (currentState.InboundMessages != null)
+					foreach (var m in currentState.InboundMessages)
+					{
+						if (m.Sender == currentState.ID)
+							continue;
+						data = Helper.Deserialize(m.Payload) as PingPacket;
+						if (data != null)
+							break;
+					}
+				if (data == null)
+					return;
+				newState.Broadcast(Helper.SerializeToArray(data.Increment()));
+				newState.newLogic = new PongLogic(data);
+			}
+		}
+
+
+		[Serializable]
+		class PingLogic : EntityLogic
+		{
+			readonly PingPacket p;
+
+			public int CounterState { get { return p.Counter; } }
+
+			public PingLogic(PingPacket packet)
+			{
+				p = packet;
+			}
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			{
+				newState.Broadcast(Helper.SerializeToArray(p.Increment()));
+				newState.newLogic = new PongLogic(p.Increment());
+			}
+		}
+
+
+		private void AssertNoErrors(SDS.Computation comp)
+		{
+			var errors = comp.Errors;
+			if (errors == null)
+				return;
+
+			Assert.Fail(errors[0].Message);
+		}
+
+
+		[TestMethod()]
+		public void PingPongTest()
+		{
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new PingLogic(new PingPacket(0)),	//check that this doesn't actually cause a fault (should get clamped)
+						null,null,null),
+
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center + new Vec3(Simulation.R)),
+						new PongLogic(null),
+						//new EntityTest.FaultLogic.State(),
+						null,null,null),
+				}
+			);
+			//EntityTest.RandomDefaultPool(100);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+
+			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.Clear();
+			stack.Insert(root);
+
+			const int NumIterations = 10;
+
+			for (int i = 0; i < NumIterations; i++)
+			{
+				SDS temp = stack.AllocateGeneration(i + 1);
+				Assert.AreEqual(temp.Generation, i + 1);
+				Assert.IsNotNull(stack.FindGeneration(i + 1));
+				SDS.Computation comp = new SDS.Computation(i + 1, TimeSpan.FromMilliseconds(10));
+				AssertNoErrors(comp);
+				Assert.AreEqual(comp.Intermediate.entities.Count, 2);
+				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
+				Assert.IsTrue(comp.Intermediate.inputConsistent);
+				Assert.AreEqual(comp.Generation, i + 1);
+				SDS sds = comp.Complete();
+				Assert.IsTrue(sds.Intermediate == comp.Intermediate);
+				Assert.IsTrue(sds.IsFullyConsistent);
+				Assert.IsTrue(sds.IC.OneCount == 0);
+				Assert.AreEqual(sds.Generation, i+1);
+				Assert.AreEqual(sds.FinalEntities.Length, 2);
+				stack.Insert(sds);
+			}
+			Assert.AreEqual(1, stack.Size);
+			int sum = 0;
+			foreach (var e in stack.Last().FinalEntities)
+			{
+				if (e.LogicState is PongLogic)
+				{
+					int cs = ((PongLogic)e.LogicState).CounterState;
+					Assert.IsTrue(cs == NumIterations-2 || cs == NumIterations-1, cs.ToString());
+					sum += cs;	//one should be at counter 8, one at 9
+				}
+			}
+			Assert.AreEqual(NumIterations*2-3, sum);
+		}
 
 		[TestMethod()]
 		public void NestedComputationTest()
@@ -113,11 +260,13 @@ namespace Shard.Tests
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
+			stack.Clear();
 			stack.Insert(root);
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
 			SDS.Computation comp = new SDS.Computation(1,TimeSpan.FromMilliseconds(10));
+			AssertNoErrors(comp);
 			Assert.AreEqual(comp.Intermediate.entities.Count, 3);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
 			Assert.IsTrue(comp.Intermediate.inputConsistent);
@@ -194,8 +343,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
-						new ExceedingMovementLogic(),
-						//new EntityTest.FaultLogic.State(),
+						new ExceedingMovementLogic(),	//check that this doesn't actually cause a fault (should get clamped)
 						null,null,null),
 
 					new Entity(
@@ -214,11 +362,13 @@ namespace Shard.Tests
 			Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
+			stack.Clear();
 			stack.Insert(root);
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
 			SDS.Computation comp = new SDS.Computation(1, TimeSpan.FromMilliseconds(10));
+			AssertNoErrors(comp);
 			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
 			Assert.IsTrue(comp.Intermediate.inputConsistent);
