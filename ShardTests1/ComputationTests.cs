@@ -122,7 +122,11 @@ namespace Shard.Tests
 			if (errors == null)
 				return;
 
-			Assert.Fail(errors[0].Message);
+			Exception ex = errors[0];
+			while (ex.InnerException != null)
+				ex = ex.InnerException;
+
+			Assert.Fail(ex.ToString());
 		}
 
 

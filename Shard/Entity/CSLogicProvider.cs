@@ -13,7 +13,7 @@ namespace Shard
 	[Serializable]
 	public class DynamicCSLogic : EntityLogic, ISerializable
 	{
-		private EntityLogic scriptLogic;
+		private EntityLogic nestedLogic;
 		private CSLogicProvider provider;
 		private Constructor constructor;
 
@@ -22,36 +22,46 @@ namespace Shard
 			Task task;
 			CSLogicProvider provider;
 			EntityLogic instance;
-			public readonly string ScriptName;
+			public readonly string AssemblyName,LogicName;
 			public readonly byte[] SerialData;
+			public readonly object[] ConstructorParameters;
 
-			public Constructor(string scriptName, byte[] data)
+			public Constructor(string assemblyName, byte[] data)
 			{
-				ScriptName = scriptName;
+				AssemblyName = assemblyName;
 				SerialData = data;
+				LogicName = null;
+				task = Load();
+			}
+			public Constructor(string assemblyName, string logicName, object[] constructorParameters)
+			{
+				AssemblyName = assemblyName;
+				SerialData = null;
+				LogicName = logicName;
+				ConstructorParameters = constructorParameters;
 				task = Load();
 			}
 
 			private async Task Load()
 			{
-				provider = await DB.GetLogicProviderAsync(ScriptName);
-				instance = provider.DeserializeLogic(SerialData);
+				provider = await DB.GetLogicProviderAsync(AssemblyName);
+				instance = SerialData != null ? provider.DeserializeLogic(SerialData) : provider.Instantiate(LogicName, ConstructorParameters);
 			}
 
 			public void Finish(DynamicCSLogic target, int timeoutMS)
 			{
 				if (!task.Wait(timeoutMS))
-					throw new ExecutionException(ScriptName+": Failed to load/deserialize in time");
+					throw new ExecutionException(AssemblyName+": Failed to load/deserialize in time");
 				target.provider = provider;
-				target.scriptLogic = instance;
+				target.nestedLogic = instance;
 			}
 
 
 		}
 
-		public DynamicCSLogic(CSLogicProvider provider, string logicName)
+		public DynamicCSLogic(CSLogicProvider provider, string logicName, object[] constructorParameters)
 		{
-			scriptLogic = provider.Instantiate(logicName);
+			nestedLogic = provider.Instantiate(logicName, constructorParameters);
 			this.provider = provider;
 		}
 
@@ -59,13 +69,13 @@ namespace Shard
 		{
 			if (newState.GetType().Assembly != provider.Assembly)
 				throw new IntegrityViolation("Illegal state/provider combination given: "+newState.GetType()+"/"+provider);
-			scriptLogic = newState;
+			nestedLogic = newState;
 			this.provider = provider;
 		}
 
 		public void FinishLoading(int timeoutMS)
 		{
-			if (scriptLogic == null)
+			if (nestedLogic == null)
 			{
 				constructor.Finish(this, timeoutMS);
 				constructor = null;
@@ -75,18 +85,16 @@ namespace Shard
 		public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 		{
 			FinishLoading(1);
-			newState.newLogic = scriptLogic;
-			scriptLogic.Evolve(ref newState, currentState, generation, randomSource);
-			if (newState.newLogic == scriptLogic)
-				newState.newLogic = this;
-			else
+			newState.newLogic = nestedLogic;
+			nestedLogic.Evolve(ref newState, currentState, generation, randomSource);
+			if (!(newState.newLogic is DynamicCSLogic))
 				newState.newLogic = new DynamicCSLogic(provider,newState.newLogic);
 
 			if (newState.instantiations != null)
 				for (int i = 0; i < newState.instantiations.Count; i++)
 				{
 					var inst = newState.instantiations[i];
-					if (inst.logic != null)
+					if (inst.logic != null && !(inst.logic is DynamicCSLogic))
 					{
 						inst.logic = new DynamicCSLogic(provider, inst.logic);
 						newState.instantiations[i] = inst;
@@ -98,18 +106,23 @@ namespace Shard
 		{
 			if (constructor != null)
 			{
-				info.AddValue("scriptName", constructor.ScriptName);
+				info.AddValue("assemblyName", constructor.AssemblyName);
 				info.AddValue("state", constructor.SerialData);
 				return;
 			}
-			info.AddValue("scriptName", provider.ScriptName);
-			info.AddValue("state", Helper.SerializeToArray( scriptLogic ));
+			info.AddValue("assemblyName", provider.AssemblyName);
+			info.AddValue("state", Helper.SerializeToArray( nestedLogic ));
 		}
 
 
 		public DynamicCSLogic(SerializationInfo info, StreamingContext context)
 		{
-			constructor = new Constructor(info.GetString("scriptName"),(byte[])info.GetValue("state", typeof(byte[])));
+			constructor = new Constructor(info.GetString("assemblyName"),(byte[])info.GetValue("state", typeof(byte[])));
+		}
+
+		public DynamicCSLogic(string assemblyName, string logicName, object[] constructorParameters)
+		{
+			constructor = new Constructor(assemblyName, logicName, constructorParameters);
 		}
 
 	}
@@ -128,9 +141,9 @@ namespace Shard
 		//CompilerResults result;
 		public readonly Assembly Assembly;
 		public readonly byte[] BinaryAssembly;
-		private readonly Dictionary<string,ConstructorInfo> constructors = new Dictionary<string, ConstructorInfo>();
+		private readonly Dictionary<string,Type> types = new Dictionary<string, Type>();
 
-		public readonly string ScriptName,SourceCode;
+		public readonly string AssemblyName,SourceCode;
 		public readonly bool FromScript;
 
 		public override bool Equals(object obj)
@@ -139,17 +152,31 @@ namespace Shard
 			return other != null
 					//&& other.assembly.Equals(assembly)
 					&& Helper.AreEqual(other.BinaryAssembly,BinaryAssembly)
-					&& ScriptName == other.ScriptName
+					&& AssemblyName == other.AssemblyName
 					&& SourceCode == other.SourceCode;
 		}
 
-		
 
-		public EntityLogic Instantiate(string logicName)
+
+		public EntityLogic Instantiate(string logicName, object[] constructorParameters)
 		{
-			if (string.IsNullOrEmpty(logicName) && constructors.Count == 1)
-				return constructors.First().Value.Invoke(null) as EntityLogic;
-			return constructors[logicName].Invoke(null) as EntityLogic;
+			Type t = string.IsNullOrEmpty(logicName) && types.Count == 1 ? types.First().Value : types[logicName];
+
+			var rs = Activator.CreateInstance(t, constructorParameters) as EntityLogic;
+
+			if (rs == null)
+			{
+				List<string> types = new List<string>();
+				for (int i = 0; i < Helper.Length(constructorParameters); i++)
+					if (constructorParameters[i] != null)
+						types.Add(constructorParameters[i].GetType().Name);
+					else
+						types.Add("null");
+				string parameters = string.Join(",", types);
+
+				throw new ExecutionException("Unable to find appropritate constructor for logic " + AssemblyName + "." + logicName+"("+parameters+")");
+			}
+			return rs;
 		}
 
 		public EntityLogic DeserializeLogic(byte[] serialData)
@@ -160,7 +187,7 @@ namespace Shard
 		public CSLogicProvider(DBSerial serial)
 		{
 			FromScript = serial.compiledAssembly == null || serial.compiledAssembly.Length == 0;
-			ScriptName = serial._id;
+			AssemblyName = serial._id;
 			SourceCode = serial.sourceCode;
 			BinaryAssembly = serial.compiledAssembly;
 
@@ -169,7 +196,7 @@ namespace Shard
 			else
 				Assembly = Assembly.Load(BinaryAssembly);
 
-			CheckAssembly(constructors);
+			CheckAssembly(types);
 		}
 
 		public DBSerial Export()
@@ -177,29 +204,29 @@ namespace Shard
 			return new DBSerial()
 			{
 				compiledAssembly = BinaryAssembly,
-				_id = ScriptName,
+				_id = AssemblyName,
 				sourceCode = SourceCode
 			};
 		}
 
 
-		public CSLogicProvider(string scriptName, byte[] binaryAssembly)
+		public CSLogicProvider(string assemblyName, byte[] binaryAssembly)
 		{
 			FromScript = false;
-			ScriptName = scriptName;
+			AssemblyName = assemblyName;
 			Assembly = Assembly.Load(binaryAssembly);
 			this.BinaryAssembly = binaryAssembly;
-			CheckAssembly(constructors);
+			CheckAssembly(types);
 		}
 
 
-		public CSLogicProvider(string scriptName, string code)
+		public CSLogicProvider(string assemblyName, string code)
 		{
 			SourceCode = code;
 			FromScript = true;
-			ScriptName = scriptName;
+			AssemblyName = assemblyName;
 			Assembly = Compile(code, out BinaryAssembly);
-			CheckAssembly(constructors);
+			CheckAssembly(types);
 		}
 
 		private static Assembly Compile(string code, out byte[] binaryAssembly)
@@ -217,7 +244,7 @@ namespace Shard
 											 
 
 //			Directory.CreateDirectory("logicAssemblies");
-//			options.OutputAssembly = Path.Combine("logicAssemblies",scriptName+".dll");
+//			options.OutputAssembly = Path.Combine("logicAssemblies",assemblyName+".dll");
 			
 			//options.TreatWarningsAsErrors = true;
 			// Add any references you want the users to be able to access, be warned that giving them access to some classes can allow
@@ -247,32 +274,32 @@ namespace Shard
 			return assembly;
 		}
 
-		void CheckAssembly(Dictionary<string, ConstructorInfo> constructors)
+		void CheckAssembly(Dictionary<string, Type> types)
 		{
 			HashSet<Type> checkedTypes = new HashSet<Type>() ;
 			var a = Assembly;
-			constructors.Clear();
+			types.Clear();
 			// Now that we have a compiled script, lets run them
 			foreach (Type type in a.GetExportedTypes())
 			{
 				if (type.BaseType == typeof(EntityLogic))
 				{
 					if (!type.IsSerializable)
-						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but not serializable");
+						throw new LogicCompositionException(AssemblyName + ": Type '" + type + "' is entity logic, but not serializable");
 
 					var c = type.GetConstructor(Type.EmptyTypes);
 					if (c == null || !c.IsPublic)
 					{
-						throw new LogicCompositionException(ScriptName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
+						throw new LogicCompositionException(AssemblyName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
 						//continue;
 					}
 					CheckType(checkedTypes, type);
 
-					constructors[type.Name] = c;
+					types[type.Name] = type;
 				}
 			}
-			if (constructors.Count == 0)
-				throw new LogicCompositionException(ScriptName + ": Failed to find any entity logic in assembly");
+			if (types.Count == 0)
+				throw new LogicCompositionException(AssemblyName + ": Failed to find any entity logic in assembly");
 		}
 
 		private void CheckType(HashSet<Type> checkedTypes, Type type, string path = null)
@@ -287,7 +314,7 @@ namespace Shard
 			{
 				string subPath = path + "." + f.Name;// + "(" + f.FieldType + ")";
 				if (!f.IsInitOnly)
-					throw new InvarianceViolation(ScriptName + ": Field '" + subPath + "' must be declared readonly");
+					throw new InvarianceViolation(AssemblyName + ": Field '" + subPath + "' must be declared readonly");
 				Type sub = f.FieldType;
 				if (sub.IsClass)
 					CheckType(checkedTypes, sub, subPath);
@@ -296,7 +323,7 @@ namespace Shard
 
 		public void GetObjectData(SerializationInfo info, StreamingContext context)
 		{
-			info.AddValue("scriptName", ScriptName);
+			info.AddValue("assemblyName", AssemblyName);
 			info.AddValue("assembly", BinaryAssembly);
 		}
 
@@ -304,14 +331,14 @@ namespace Shard
 		{
 			var hashCode = -342463410;
 			hashCode = hashCode * -1521134295 + EqualityComparer<byte[]>.Default.GetHashCode(BinaryAssembly);
-			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(ScriptName);
+			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(AssemblyName);
 			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(SourceCode);
 			return hashCode;
 		}
 
 		public CSLogicProvider(SerializationInfo info, StreamingContext context)
 		{
-			ScriptName = info.GetString("scriptName");
+			AssemblyName = info.GetString("assemblyName");
 			BinaryAssembly = (byte[])info.GetValue("assembly", typeof(byte[]));
 			Assembly = Assembly.Load(BinaryAssembly);
 		}

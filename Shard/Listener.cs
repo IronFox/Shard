@@ -44,7 +44,7 @@ namespace Shard
 						Link link = linkLookup?.Invoke(host);
 						if (link == null)
 						{
-							var lnk = InteractionLink.Establish(client);
+							var lnk = InteractionLink.Establish(client,linkLookup);
 							OnNewInteractionLink?.Invoke(lnk);
 							continue;
 						}

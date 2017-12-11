@@ -103,7 +103,7 @@ namespace Shard
 					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
 					
 
-					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null), appearances);
+					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null,null), appearances);
 				}
 				
 			}

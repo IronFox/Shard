@@ -161,7 +161,7 @@ namespace Shard.Tests
 			var imported = new CSLogicProvider(exported);
 			Assert.AreEqual(provider, imported);
 
-			DynamicCSLogic logic = new DynamicCSLogic(provider,null);
+			DynamicCSLogic logic = new DynamicCSLogic(provider,null,null);
 
 			var serialLogic = Helper.SerializeToArray(logic);
 
@@ -199,7 +199,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
-						new DynamicCSLogic(provider,"InstantiatorLogic"),
+						new DynamicCSLogic(provider,"InstantiatorLogic",null),
 						null),
 				}
 			);
@@ -236,6 +236,102 @@ namespace Shard.Tests
 			foreach (var e in stack.Last().FinalEntities)
 				Assert.IsTrue(e.LogicState is DynamicCSLogic, e.LogicState.GetType().ToString());
 		}
+
+
+
+		const string remoteTestA =
+		@"	using Shard;
+			using System;
+			using VectorMath;
+
+			[Serializable]
+			public class InstantiatorLogic : Shard.EntityLogic {
+
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+				{
+					newState.Instantiate(currentState.ID.Position + randomSource.NextVec3(-1,1),""RemoteB"",""InstantiatedLogic"",new object[]{""Hello World""},null);
+				}
+			};
+		";
+
+		const string remoteTestB =
+		@"	using Shard;
+			using System;
+			using VectorMath;
+
+			[Serializable]
+			public class InstantiatedLogic : Shard.EntityLogic {
+				public InstantiatedLogic()
+				{}
+				public InstantiatedLogic(string test)
+				{
+					if (test != ""Hello World"")
+						throw new Exception(""WTF"");
+				}
+				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+				{
+					//self-destruct
+					newState.Remove(currentState.ID);
+				}
+			};
+		";
+
+		[TestMethod()]
+		public void ScriptedRemoteLogicInstantiationTest()
+		{
+			CSLogicProvider providerA = new CSLogicProvider("RemoteA", remoteTestA);
+			CSLogicProvider providerB = new CSLogicProvider("RemoteB", remoteTestB);
+			DB.LogicLoader = scriptName => Task.Run(() => scriptName == providerA.AssemblyName ? providerA : providerB);
+
+
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new DynamicCSLogic(providerA,"InstantiatorLogic",null),
+						null),
+				}
+			);
+			//EntityTest.RandomDefaultPool(100);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+			Assert.AreEqual(intermediate.entities.Count, 1);
+
+			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.ResetToRoot(root);
+
+			const int NumIterations = 3;
+
+			for (int i = 0; i < NumIterations; i++)
+			{
+				SDS temp = stack.AllocateGeneration(i + 1);
+				SDS.Computation comp = new SDS.Computation(i + 1, TimeSpan.FromMilliseconds(10));
+				ComputationTests.AssertNoErrors(comp);
+				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
+				Assert.AreEqual(instantiations, 1);
+				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i + 1, 2));  //can never be more than 2
+				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
+				Assert.IsTrue(comp.Intermediate.inputConsistent);
+				SDS sds = comp.Complete();
+				Assert.AreEqual(sds.FinalEntities.Length, 2);   //previous clone self-destructed, so we are back to exactly 2
+				Assert.IsTrue(sds.IsFullyConsistent);
+				stack.Insert(sds);
+			}
+			Assert.AreEqual(1, stack.Size);
+			foreach (var e in stack.Last().FinalEntities)
+				Assert.IsTrue(e.LogicState is DynamicCSLogic, e.LogicState.GetType().ToString());
+		}
+
+
 
 
 		[TestMethod()]

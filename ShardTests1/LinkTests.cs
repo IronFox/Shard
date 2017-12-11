@@ -160,7 +160,7 @@ namespace Shard.Tests
 			stream.Write(BitConverter.GetBytes(data.Length + 36), 0, 4);
 			stream.Write(from.ToByteArray(), 0, 16);
 			stream.Write(to.ToByteArray(), 0, 16);
-			stream.Write(BitConverter.GetBytes((int)data.Length), 0, 4);
+			stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
 			stream.Write(data, 0, data.Length);
 		}
 

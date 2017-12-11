@@ -19,9 +19,10 @@ namespace Shard
 	{
 		public enum ChannelID
 		{
-			RegisterReceiver = 1,	//[Guid: me], may be called multiple times, to receive messages from entities
-			UnregisterReceiver = 2,	//[Guid: me], deauthenticate
-			SendMessage = 3,	//c2s: [Guid: me][Guid: toEntity][bytes...], s2c: [Guid: fromEntity][Guid: to][bytes...]
+			RegisterLink = 1,		//[int[4]: shardID]
+			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages from entities
+			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
+			SendMessage = 4,	//c2s: [Guid: me][Guid: toEntity][uint: num bytes][bytes...], s2c: [Guid: fromEntity][uint: num bytes][bytes...]
 		}
 
 		private int orderIndex=0;
@@ -33,11 +34,13 @@ namespace Shard
 		private readonly IPEndPoint endPoint;
 		private readonly NetworkStream stream;
 		private bool closed = false;
+		private readonly Func<Host, Link> linkLookup;
 
 		private HashSet<Guid> guids = new HashSet<Guid>();
 
-		public InteractionLink(TcpClient client)
+		public InteractionLink(TcpClient client, Func<Host, Link> linkLookup)
 		{
+			this.linkLookup = linkLookup;
 			this.client = client;
 			thread = new Thread(new ThreadStart(ThreadMain));
 			thread.Start();
@@ -111,12 +114,29 @@ namespace Shard
 			return new Guid(ReadBytes(16));
 		}
 
+		private ShardID NextShardID()
+		{
+			byte[] raw = ReadBytes(4 * 4);
+			return new ShardID(BitConverter.ToInt32(raw, 0), BitConverter.ToInt32(raw, 4), BitConverter.ToInt32(raw, 8), BitConverter.ToInt32(raw, 12));
+		}
+
 		private byte[] NextBytes()
 		{
 			int numBytes = BitConverter.ToInt32(ReadBytes(4),0);
 			return ReadBytes(numBytes);
 		}
 
+
+		private void Abandon()
+		{
+			lock (this)
+			{
+				closed = true;
+				foreach (var g in guids)
+					guidMap.TryRemove(g);
+				guids.Clear();
+			}
+		}
 
 		private void ThreadMain()
 		{
@@ -139,6 +159,12 @@ namespace Shard
 					{
 						switch (channel)
 						{
+							case (uint)ChannelID.RegisterLink:
+								ShardID id = NextShardID();
+								var lnk = linkLookup?.Invoke(new Host(id));
+								lnk.SetPassiveClient(client);
+								Abandon();
+								break;
 							case (uint)ChannelID.RegisterReceiver:
 								Guid guid = NextGuid();
 								if (!guids.Contains(guid))
@@ -223,11 +249,11 @@ namespace Shard
 			}
 		}
 
-		public static InteractionLink Establish(TcpClient client)
+		public static InteractionLink Establish(TcpClient client, Func<Host, Link> linkLookup)
 		{
 			try
 			{
-				InteractionLink rs = new InteractionLink(client);
+				InteractionLink rs = new InteractionLink(client, linkLookup);
 				lock (registry)
 				{
 					registry.Add(rs);
@@ -248,8 +274,9 @@ namespace Shard
 				lock (stream)
 				{
 					stream.Write(BitConverter.GetBytes((uint)ChannelID.SendMessage), 0, 4);
-					stream.Write(BitConverter.GetBytes(data.Length+16), 0, 4);
+					stream.Write(BitConverter.GetBytes(data.Length+20), 0, 4);
 					stream.Write(senderEntity.ToByteArray(), 0, 16);
+					stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
 					stream.Write(data, 0, data.Length);
 				}
 			}

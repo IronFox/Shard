@@ -414,6 +414,10 @@ namespace Shard
 					targetLocation = targetLocation
 				});
 			}
+			public void Instantiate(Vec3 targetLocation, string assemblyName, string logicName, object[] constructorParameters, EntityAppearanceCollection appearances)
+			{
+				Instantiate(targetLocation, new DynamicCSLogic(assemblyName, logicName, constructorParameters), appearances);
+			}
 
 			public void Remove(EntityID entityID)
 			{
