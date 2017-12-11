@@ -156,6 +156,7 @@
     <Compile Include="BitCube.cs" />
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
+    <Compile Include="Entity\InteractionLink.cs" />
     <Compile Include="Entity\Entity.cs" />
     <Compile Include="Entity\EntityChange.cs" />
     <Compile Include="Entity\EntityChangeSet.cs" />

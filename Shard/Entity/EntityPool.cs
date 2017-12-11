@@ -162,9 +162,9 @@ namespace Shard
 		/// Evolves all local entities (in parallel), and stores changes in the specified change set
 		/// </summary>
 		/// <param name="set"></param>
-		public List<EntityEvolutionException> Evolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
+		public List<EntityEvolutionException> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
 		{
-			return set.Evolve(EnumerateEntities(), ic, roundNumber, budget);
+			return set.Evolve(EnumerateEntities(), null,ic, roundNumber, budget);
 		}
 
 		public IEnumerable<Entity> EnumerateEntities()

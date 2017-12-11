@@ -103,7 +103,7 @@ namespace Shard
 					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
 					
 
-					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null), appearances, null, null);
+					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null), appearances);
 				}
 				
 			}
@@ -112,16 +112,16 @@ namespace Shard
 
 		public class ScenarioConfig
 		{
-			public int[] worldSize;
-			public float R, M;
-			public ScenarioEntity[] entities;
+			public int[] worldSize = null;
+			public float R=0, M=0;
+			public ScenarioEntity[] entities = null;
 		}
 
 		public class ScenarioEntity
 		{
-			public float[] position;
-			public string logic;
-			public dynamic[] appearances;
+			public float[] position = null;
+			public string logic = null;
+			public dynamic[] appearances = null;
 			public int instances = 1;
 		}
 

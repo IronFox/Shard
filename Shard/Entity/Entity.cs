@@ -20,6 +20,48 @@ namespace Shard
 	}
 
 	[Serializable]
+	public struct Actor
+	{
+		public readonly Guid Guid;
+		public readonly bool IsEntity;
+
+
+		public Actor(Guid guid, bool isEntity)
+		{
+			Guid = guid;
+			IsEntity = isEntity;
+		}
+
+		public override bool Equals(object obj)
+		{
+			return obj is Actor && ((Actor)obj) == this;
+		}
+
+		public override int GetHashCode()
+		{
+			return new Helper.HashCombiner(GetType()).Add(Guid).Add(IsEntity).GetHashCode();
+		}
+
+		public static bool operator ==(Actor a, Actor b)
+		{
+			return a.Guid == b.Guid && a.IsEntity == b.IsEntity;
+		}
+		public static bool operator !=(Actor a, Actor b)
+		{
+			return !(a == b);
+		}
+
+		public static bool operator ==(Actor a, EntityID b)
+		{
+			return a.Guid == b.Guid && a.IsEntity;
+		}
+		public static bool operator !=(Actor a, EntityID b)
+		{
+			return !(a == b);
+		}
+	}
+
+	[Serializable]
 	public struct EntityID : IComparable<EntityID>
 	{
 		public readonly Vec3 Position;
@@ -267,10 +309,10 @@ namespace Shard
 	[Serializable]
 	public class EntityMessage
 	{
-		public readonly EntityID Sender;
+		public readonly Actor Sender;
 		public readonly byte[] Payload;
 
-		public EntityMessage(EntityID sender, byte[] payload)
+		public EntityMessage(Actor sender, byte[] payload)
 		{
 			Sender = sender;
 			Payload = payload;
@@ -295,7 +337,7 @@ namespace Shard
 		}
 	}
 
-	public class OrderedEntityMessage
+	public class OrderedEntityMessage : IComparable<OrderedEntityMessage>
 	{
 		public readonly int OrderID;
 		public readonly EntityMessage Message;
@@ -304,6 +346,14 @@ namespace Shard
 		{
 			OrderID = orderID;
 			Message = message;
+		}
+
+		public int CompareTo(OrderedEntityMessage other)
+		{
+			int order = Message.Sender.Guid.CompareTo(other.Message.Sender.Guid);
+			if (order != 0)
+				return order;
+			return OrderID.CompareTo(other.OrderID);
 		}
 	}
 
@@ -317,7 +367,11 @@ namespace Shard
 		public struct Message
 		{
 			public byte[] data;
-			public Guid receiver;
+			public Actor receiver;
+
+			public bool IsDirectedToClient { get { return !receiver.IsEntity; } }
+
+
 		}
 
 		public struct Instantiation
@@ -467,23 +521,16 @@ namespace Shard
 			return "Entity " + ID;
 		}
 
-		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber)
+		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber, ConcurrentBag<OrderedEntityMessage> clientMessages)
 		{
 			if (LogicState != null)
 			{
 				try
 				{
 					var state = LogicState;
-					Entity copy = this;
 
-					var newState = await state.EvolveAsync(copy, roundNumber);
-					int oID = 0;
-					if (newState.broadcasts != null)
-						foreach (var b in newState.broadcasts)
-							outChangeSet.Add(new EntityChange.Broadcast(ID, b, oID++));
-					if (newState.messages != null)
-						foreach (var m in newState.messages)
-							outChangeSet.Add(new EntityChange.Message(ID, oID++, m.receiver, m.data));
+
+					var newState = await state.EvolveAsync(Copy(clientMessages), roundNumber);
 
 					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
 					var newID = ID.Relocate(dest);
@@ -501,7 +548,14 @@ namespace Shard
 					int messageID = 0;
 					if (newState.messages != null)
 						foreach (var m in newState.messages)
-							outChangeSet.Add(new EntityChange.Message(ID,messageID++,m.receiver,m.data));
+						{
+							if (m.IsDirectedToClient)
+							{
+								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data);
+							}
+							else
+								outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
+						}
 					if (newState.broadcasts != null)
 						foreach (var b in newState.broadcasts)
 							outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
@@ -514,11 +568,35 @@ namespace Shard
 			}
 		}
 
+		private Entity Copy(ConcurrentBag<OrderedEntityMessage> clientMessages)
+		{
+			if (clientMessages == null || clientMessages.Count == 0)
+				return this;
+			OrderedEntityMessage[] messages = clientMessages.ToArray();
+			Array.Sort(messages);
+			return AddClientMessages(messages);
+		}
+
+		private Entity AddClientMessages(OrderedEntityMessage[] messages)
+		{
+			if (messages == null || messages.Length == 0)
+				return this;
+
+			EntityMessage[] newMessages = new EntityMessage[InboundMessages.Length + messages.Length];
+			for (int i = 0; i < InboundMessages.Length; i++)
+				newMessages[i] = InboundMessages[i];
+			for (int i = 0; i < messages.Length; i++)
+				newMessages[i + InboundMessages.Length] = messages[i].Message;
+
+			return new Entity(ID, LogicState, Appearances, newMessages, Contacts);
+		}
+
 		public readonly EntityID ID;
 		public readonly EntityAppearanceCollection Appearances;
 		public readonly EntityLogic LogicState;
 		public readonly EntityMessage[] InboundMessages;
 		public readonly EntityContact[] Contacts;
+
 
 		public T GetAppearance<T>() where T : EntityAppearance
 		{
@@ -528,6 +606,8 @@ namespace Shard
 		}
 
 
+		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance= null) : this(id, state, appearance, null, null)
+		{ }
 		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts)
 		{
 			if (!Simulation.FullSimulationSpace.Contains(id.Position))
@@ -538,6 +618,7 @@ namespace Shard
 
 			InboundMessages = messages;
 			Contacts = contacts;
+
 		}
 
 

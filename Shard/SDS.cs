@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -165,6 +166,7 @@ namespace Shard
 
 		public bool SignificantInboundChange { get; private set; }
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
+		public ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>> ClientMessages = new ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>>();
 
 
 		public void FetchNeighborUpdate(Link neighbor, RCS.SerialData data)
@@ -204,6 +206,12 @@ namespace Shard
 			IC = ic;
 			if (inbound != null)
 				InboundRCS = inbound;
+		}
+
+		public void FetchClientMessage(Guid fromClient, Guid toEntity, byte[] data, int orderIndex)
+		{
+			ConcurrentBag<OrderedEntityMessage>  bag = ClientMessages.GetOrAdd(toEntity,guid => new ConcurrentBag<OrderedEntityMessage>());
+			bag.Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient, false), data)));
 		}
 
 		public bool IsFullyConsistent { get { return IC != null && !IC.AnySet; } }
@@ -286,7 +294,7 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				errors = data.localChangeSet.Evolve(input.FinalEntities,data.ic,generation, entityLogicTimeout);
+				errors = data.localChangeSet.Evolve(input.FinalEntities,input.ClientMessages,data.ic,generation, entityLogicTimeout);
 
 				foreach (var n in Simulation.Neighbors)
 				{

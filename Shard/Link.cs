@@ -389,26 +389,18 @@ namespace Shard
 		private void ReadMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();
-			byte[] frame = new byte[4];
-			byte[] buffer = new byte[client.ReceiveBufferSize];
+			//byte[] frame = new byte[4];
+			//byte[] buffer = new byte[client.ReceiveBufferSize];
 			//outer loop
 			try
 			{
 				//communication loop
 				while (ConnectionIsActive)
 				{
-					Read(frame, 4);
-					int size = BitConverter.ToInt32(frame,0);
+					//Read(frame, 4);
+					//int size = BitConverter.ToInt32(frame,0);
 					//Log.Debug(this + ": ReadMain() read frame of size "+size);
-					using (var ms = new MemoryStream())
-					{
-						Read(buffer,ms, size);
-						//Log.Debug(this + ": ReadMain() deserializing");
-						ms.Seek(0, SeekOrigin.Begin);
-						object obj = formatter.Deserialize(ms);
-						//Log.Debug(this + ": ReadMain() dispatching " +obj);
-						OnData(this, obj);
-					}
+					OnData(this, formatter.Deserialize(stream));
 				}
 			}
 			catch (Exception ex)
@@ -477,7 +469,7 @@ namespace Shard
 		{
 			BinaryFormatter formatter = new BinaryFormatter();
 
-			byte[] frame = new byte[4];
+			//byte[] frame = new byte[4];
 
 			//outer loop
 			while (!dispose)
@@ -504,19 +496,8 @@ namespace Shard
 								}
 								else
 									continue;
-							using (var ms = new MemoryStream())
-							{
-								//Log.Debug(this + ": WriteMain() sending "+send);
-
-								formatter.Serialize(ms, send);
-								ByteBuffer.Put(frame, 0, (int)ms.Length);
-								stream.Write(frame, 0, frame.Length);
-								ms.Seek(0, SeekOrigin.Begin);
-								ms.CopyTo(stream);
-								SentSinceLastReconnect++;
-
-								//Log.Debug(this + ": WriteMain() "+ms.Length+" byte(s) sent");
-							}
+							formatter.Serialize(stream, send);
+							SentSinceLastReconnect++;
 						}
 						else
 						{

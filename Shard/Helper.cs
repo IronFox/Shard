@@ -104,8 +104,10 @@ namespace Shard
 		public static object Deserialize(byte[] serial)
 		{
 			var f = new BinaryFormatter();
+
 			using (MemoryStream ms = new MemoryStream(serial))
 			{
+
 				return f.Deserialize(ms);
 			}
 		}

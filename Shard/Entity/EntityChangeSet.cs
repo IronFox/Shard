@@ -266,14 +266,23 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public List<EntityEvolutionException> Evolve(IEnumerable<Entity> entities, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
+		public List<EntityEvolutionException> Evolve(IEnumerable<Entity> entities,
+			ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>> clientMessages,
+			InconsistencyCoverage ic, 
+			int roundNumber, 
+			TimeSpan budget)
 		{
 			int numErrors = 0;
 
 			List<Task> tasks = new List<Task>();
 
 			foreach (var e in entities)
-				tasks.Add(e.EvolveAsync(this, roundNumber));
+			{
+				ConcurrentBag<OrderedEntityMessage> messages = null;
+				if (clientMessages != null)
+					clientMessages.TryGetValue(e.ID.Guid, out messages);
+				tasks.Add(e.EvolveAsync(this, roundNumber, messages));
+			}
 			int at = 0;
 
 			Stopwatch watch = new Stopwatch();

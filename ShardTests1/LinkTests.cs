@@ -3,7 +3,10 @@ using Shard;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -149,6 +152,101 @@ namespace Shard.Tests
 			Assert.IsTrue(lnk.ConnectionIsActive);
 		}
 
+
+
+		private static void SendMessage(NetworkStream stream, Guid from, Guid to, byte[] data)
+		{
+			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.SendMessage), 0, 4);
+			stream.Write(BitConverter.GetBytes(data.Length + 36), 0, 4);
+			stream.Write(from.ToByteArray(), 0, 16);
+			stream.Write(to.ToByteArray(), 0, 16);
+			stream.Write(BitConverter.GetBytes((int)data.Length), 0, 4);
+			stream.Write(data, 0, data.Length);
+		}
+
+		private static void Register(NetworkStream stream, Guid me)
+		{
+			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterReceiver), 0, 4);
+			stream.Write(BitConverter.GetBytes(16), 0, 4);
+			stream.Write(me.ToByteArray(), 0, 16);
+		}
+
+		private static void Unregister(NetworkStream stream, Guid me)
+		{
+			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.UnregisterReceiver), 0, 4);
+			stream.Write(BitConverter.GetBytes(16), 0, 4);
+			stream.Write(me.ToByteArray(), 0, 16);
+		}
+
+		[TestMethod()]
+		public void InteractionLinkTest()
+		{
+			Random random = new Random();
+			Host.DefaultPort = random.Next(1024, 32768);
+			using (Listener listener = new Listener(null))
+			{
+				InteractionLink myLink = null;
+				AutoResetEvent onLink = new AutoResetEvent(false),
+								onRegister = new AutoResetEvent(false),
+								onUnregister = new AutoResetEvent(false),
+								onMessage = new AutoResetEvent(false);
+				Guid me = Guid.NewGuid();
+				Guid lastTargetEntity = Guid.Empty;
+				byte[] lastData = null;
+				listener.OnNewInteractionLink = lnk =>
+				{
+					myLink = lnk;
+					lnk.OnRegisterReceiver = receiver =>
+					{
+						Assert.AreEqual(receiver, me);
+						onRegister.Set();
+					};
+					lnk.OnMessage = (from, to, message) =>
+					{
+						Assert.AreEqual(from, me);
+						lastTargetEntity = to;
+						lastData = message;
+						onMessage.Set();
+					};
+					lnk.OnUnregisterReceiver = receiver =>
+					{
+						Assert.AreEqual(receiver, me);
+						onUnregister.Set();
+					};
+					onLink.Set();
+				};
+				using (TcpClient client = new TcpClient("localhost", Host.DefaultPort))
+				{
+					Assert.IsTrue(onLink.WaitOne());
+
+					var stream = client.GetStream();
+
+					for (int k = 0; k < 3; k++)
+					{
+						me = Guid.NewGuid();
+						Register(stream, me);
+						Assert.IsTrue(onRegister.WaitOne());
+
+						for (int i = 0; i < 10; i++)
+						{
+							Guid target = Guid.NewGuid();
+							for (int j = 0; j < 10; j++)
+							{
+								byte[] data = random.NextBytes(0, 100);
+								SendMessage(stream, me, target, data);
+								Assert.IsTrue(onMessage.WaitOne());
+								Assert.AreEqual(lastTargetEntity, target);
+								Assert.IsTrue(Helper.AreEqual(data, lastData));
+							}
+						}
+						Unregister(stream, me);
+						Assert.IsTrue(onUnregister.WaitOne());
+					}
+				}
+			}
+		}
+
+
 		[TestMethod()]
 		public void LinkTest()
 		{
@@ -216,6 +314,56 @@ namespace Shard.Tests
 		public void FilterTest()
 		{
 			//Assert.Fail();
+		}
+
+		private class DelayedStream : Stream
+		{
+			private readonly byte[] data;
+			private int location = 0;
+			public DelayedStream(byte[] raw)
+			{
+				data = raw;
+			}
+			public override bool CanRead => true;
+
+			public override bool CanSeek => false;
+
+			public override bool CanWrite => false;
+
+			public override long Length => throw new NotImplementedException();
+
+			public override long Position { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+			public override void Flush()
+			{
+				throw new NotImplementedException();
+			}
+
+			static Random random = new Random();
+			public override int Read(byte[] buffer, int offset, int count)
+			{
+				if (count > data.Length - location)
+					return -1;
+				if (random.NextBool())
+					return 0;
+				buffer[offset] = data[location++];
+				return 1;
+			}
+
+			public override long Seek(long offset, SeekOrigin origin)
+			{
+				throw new NotImplementedException();
+			}
+
+			public override void SetLength(long value)
+			{
+				throw new NotImplementedException();
+			}
+
+			public override void Write(byte[] buffer, int offset, int count)
+			{
+				throw new NotImplementedException();
+			}
 		}
 
 		[TestMethod()]

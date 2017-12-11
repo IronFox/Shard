@@ -19,6 +19,12 @@ namespace Shard
 	public static class Extensions
 	{
 
+		public static bool TryRemove<K, T>(this ConcurrentDictionary<K, T> dict, K key)
+		{
+			T temp;
+			return dict.TryRemove(key, out temp);
+		}
+
 		public static void Enter(ref SpinLock lck)
 		{
 			bool amIn = false;

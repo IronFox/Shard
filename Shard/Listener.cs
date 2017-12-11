@@ -12,6 +12,8 @@ namespace Shard
 		private readonly Thread listenerThread;
 		private readonly Func<Host, Link> linkLookup;
 
+		public Action<InteractionLink> OnNewInteractionLink { get; set; }
+
 		public Listener(Func<Host, Link> linkLookup)
 		{
 			this.linkLookup = linkLookup;
@@ -39,9 +41,13 @@ namespace Shard
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
 						Host host = new Host(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
-						Link link = linkLookup(host);
+						Link link = linkLookup?.Invoke(host);
 						if (link == null)
-							throw new Exception("Unable to find link for "+host);
+						{
+							var lnk = InteractionLink.Establish(client);
+							OnNewInteractionLink?.Invoke(lnk);
+							continue;
+						}
 							//Simulation.FindLink(host.ID);
 						link.SetPassiveClient(client);
 					}

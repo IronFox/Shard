@@ -122,7 +122,7 @@ namespace Shard.EntityChange
 		{
 			if (!Simulation.CheckDistance("Insert", Origin.Position, TargetLocation, Simulation.M))
 				return false;
-			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Logic, Appearances, null, null));
+			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Logic, Appearances));
 		}
 
 		public override bool Affects(Box cube)
@@ -212,7 +212,7 @@ namespace Shard.EntityChange
 		{
 			get
 			{
-				return new OrderedEntityMessage(SentOrderID, new EntityMessage(Origin, Payload));
+				return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), Payload));
 			}
 		}
 

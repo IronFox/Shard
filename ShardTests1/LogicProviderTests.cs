@@ -200,7 +200,7 @@ namespace Shard.Tests
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
 						new DynamicCSLogic(provider,"InstantiatorLogic"),
-						null,null,null),
+						null),
 				}
 			);
 			//EntityTest.RandomDefaultPool(100);
