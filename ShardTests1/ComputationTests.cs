@@ -123,7 +123,7 @@ namespace Shard.Tests
 				return;
 
 			Exception ex = errors[0];
-			while (ex.InnerException != null)
+			while (ex.InnerException != null && !(ex is ExecutionException))
 				ex = ex.InnerException;
 
 			Assert.Fail(ex.ToString());

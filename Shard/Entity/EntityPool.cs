@@ -348,7 +348,7 @@ namespace Shard
 	}
 
 	[Serializable]
-	internal class ExecutionException : Exception
+	public class ExecutionException : Exception
 	{
 		public ExecutionException()
 		{

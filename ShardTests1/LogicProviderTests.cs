@@ -244,12 +244,15 @@ namespace Shard.Tests
 			using System;
 			using VectorMath;
 
+			public class CantSerialize
+			{}
+
 			[Serializable]
 			public class InstantiatorLogic : Shard.EntityLogic {
 
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
-					newState.Instantiate(currentState.ID.Position + randomSource.NextVec3(-1,1),""RemoteB"",""InstantiatedLogic"",new object[]{""Hello World""},null);
+					newState.Instantiate(currentState.ID.Position + randomSource.NextVec3(-1,1),""RemoteB"",""InstantiatedLogic"",new object[]{""My Little Secret""},null);
 				}
 			};
 		";
@@ -262,11 +265,13 @@ namespace Shard.Tests
 			[Serializable]
 			public class InstantiatedLogic : Shard.EntityLogic {
 				public InstantiatedLogic()
-				{}
+				{
+					throw new Exception(""Secret not given"");
+				}
 				public InstantiatedLogic(string test)
 				{
-					if (test != ""Hello World"")
-						throw new Exception(""WTF"");
+					if (test != ""My Little Secret"")
+						throw new Exception(""Secret not given or wrong"");
 				}
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
@@ -314,7 +319,7 @@ namespace Shard.Tests
 			for (int i = 0; i < NumIterations; i++)
 			{
 				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, TimeSpan.FromMilliseconds(10));
+				SDS.Computation comp = new SDS.Computation(i + 1, TimeSpan.FromMilliseconds(100));
 				ComputationTests.AssertNoErrors(comp);
 				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);

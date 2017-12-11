@@ -39,6 +39,19 @@ namespace Shard
 				SerialData = null;
 				LogicName = logicName;
 				ConstructorParameters = constructorParameters;
+				if (constructorParameters != null)
+				{
+					int at = 0;
+					foreach (var p in constructorParameters)
+					{
+						if (p != null)
+						{
+							if (!p.GetType().IsSerializable)
+								throw new ExecutionException("Construction of "+assemblyName+"."+logicName+": Parameter #"+at+", type '"+p.GetType()+"' is not serializable");
+						}
+						at++;
+					}
+				}
 				task = Load();
 			}
 
@@ -84,22 +97,29 @@ namespace Shard
 
 		public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 		{
-			FinishLoading(1);
-			newState.newLogic = nestedLogic;
-			nestedLogic.Evolve(ref newState, currentState, generation, randomSource);
-			if (!(newState.newLogic is DynamicCSLogic))
-				newState.newLogic = new DynamicCSLogic(provider,newState.newLogic);
+			try
+			{
+				FinishLoading(1);
+				newState.newLogic = nestedLogic;
+				nestedLogic.Evolve(ref newState, currentState, generation, randomSource);
+				if (!(newState.newLogic is DynamicCSLogic))
+					newState.newLogic = new DynamicCSLogic(provider, newState.newLogic);
 
-			if (newState.instantiations != null)
-				for (int i = 0; i < newState.instantiations.Count; i++)
-				{
-					var inst = newState.instantiations[i];
-					if (inst.logic != null && !(inst.logic is DynamicCSLogic))
+				if (newState.instantiations != null)
+					for (int i = 0; i < newState.instantiations.Count; i++)
 					{
-						inst.logic = new DynamicCSLogic(provider, inst.logic);
-						newState.instantiations[i] = inst;
+						var inst = newState.instantiations[i];
+						if (inst.logic != null && !(inst.logic is DynamicCSLogic))
+						{
+							inst.logic = new DynamicCSLogic(provider, inst.logic);
+							newState.instantiations[i] = inst;
+						}
 					}
-				}
+			}
+			catch (ExecutionException ex)
+			{
+				throw new ExecutionException(provider.AssemblyName + "." + nestedLogic.GetType() + ": " + ex.Message, ex);
+			}
 		}
 
 		public void GetObjectData(SerializationInfo info, StreamingContext context)
@@ -108,6 +128,11 @@ namespace Shard
 			{
 				info.AddValue("assemblyName", constructor.AssemblyName);
 				info.AddValue("state", constructor.SerialData);
+				if (constructor.SerialData == null)
+				{
+					info.AddValue("logicName", constructor.LogicName);
+					info.AddValue("constructorParameters", constructor.ConstructorParameters);
+				}
 				return;
 			}
 			info.AddValue("assemblyName", provider.AssemblyName);
@@ -117,7 +142,16 @@ namespace Shard
 
 		public DynamicCSLogic(SerializationInfo info, StreamingContext context)
 		{
-			constructor = new Constructor(info.GetString("assemblyName"),(byte[])info.GetValue("state", typeof(byte[])));
+			string assemblyName = info.GetString("assemblyName");
+			byte[] serialData = (byte[])info.GetValue("state", typeof(byte[]));
+			if (serialData == null)
+			{
+				string logicName = info.GetString("logicName");
+				object[] parameters = (object[])info.GetValue("constructorParameters", typeof(object[]));
+				constructor = new Constructor(assemblyName, logicName, parameters);
+			}
+			else
+				constructor = new Constructor(assemblyName,serialData);
 		}
 
 		public DynamicCSLogic(string assemblyName, string logicName, object[] constructorParameters)
