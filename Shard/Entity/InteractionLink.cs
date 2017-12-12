@@ -12,7 +12,8 @@ namespace Shard
 {
 	/// <summary>
 	/// Link to an interacting client.
-	/// Communication is treated just like ordinary inter-entity messages, except they have no origin, or maximum range
+	/// Communication is treated just like ordinary inter-entity messages, except they have an external origin guid, or maximum range.
+	/// They may be targeted to a specific entity or broadcast (target guid is empty)
 	/// </summary>
 	[Serializable]
 	public class InteractionLink : ISerializable
@@ -81,6 +82,8 @@ namespace Shard
 				stream.Read(skipBuffer, skipBuffer.Length);
 				bytes -= skipBuffer.Length;
 			}
+			if (bytes == 0)
+				return;
 			stream.Read(skipBuffer, bytes);
 		}
 
@@ -175,7 +178,7 @@ namespace Shard
 								else
 								{
 									if (Simulation.Stack.Size > 0)
-										ClientMessageQueue.FetchClientMessage(from, to, data, orderIndex++);
+										ClientMessageQueue.HandleIncomingMessage(from, to, data, orderIndex++);
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;
