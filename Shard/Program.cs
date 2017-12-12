@@ -32,7 +32,7 @@ namespace Shard
 
 			public SDS.Serial Finish()
 			{
-				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(), new SDS.IntermediateData(), null);
+				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(), new SDS.IntermediateData(), null,null);
 				return sds.Export();
 			}
 		}

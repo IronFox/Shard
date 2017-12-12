@@ -311,11 +311,13 @@ namespace Shard
 	{
 		public readonly Actor Sender;
 		public readonly byte[] Payload;
+		public readonly bool IsBroadcast;
 
-		public EntityMessage(Actor sender, byte[] payload)
+		public EntityMessage(Actor sender, bool broadcast, byte[] payload)
 		{
 			Sender = sender;
 			Payload = payload;
+			IsBroadcast = broadcast;
 		}
 
 		public override bool Equals(object obj)
@@ -525,7 +527,7 @@ namespace Shard
 			return "Entity " + ID;
 		}
 
-		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber, ConcurrentBag<OrderedEntityMessage> clientMessages)
+		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
 		{
 			if (LogicState != null)
 			{
@@ -534,7 +536,7 @@ namespace Shard
 					var state = LogicState;
 
 
-					var newState = await state.EvolveAsync(Copy(clientMessages), roundNumber);
+					var newState = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
 
 					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
 					var newID = ID.Relocate(dest);
@@ -555,7 +557,8 @@ namespace Shard
 						{
 							if (m.IsDirectedToClient)
 							{
-								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data);
+								if (maySendMessages)
+									InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data);
 							}
 							else
 								outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
@@ -572,26 +575,12 @@ namespace Shard
 			}
 		}
 
-		private Entity Copy(ConcurrentBag<OrderedEntityMessage> clientMessages)
+
+		private Entity AddClientMessages(ICollection<EntityMessage> messages)
 		{
-			if (clientMessages == null || clientMessages.Count == 0)
+			if (messages == null || messages.Count == 0)
 				return this;
-			OrderedEntityMessage[] messages = clientMessages.ToArray();
-			Array.Sort(messages);
-			return AddClientMessages(messages);
-		}
-
-		private Entity AddClientMessages(OrderedEntityMessage[] messages)
-		{
-			if (messages == null || messages.Length == 0)
-				return this;
-
-			EntityMessage[] newMessages = new EntityMessage[InboundMessages.Length + messages.Length];
-			for (int i = 0; i < InboundMessages.Length; i++)
-				newMessages[i] = InboundMessages[i];
-			for (int i = 0; i < messages.Length; i++)
-				newMessages[i + InboundMessages.Length] = messages[i].Message;
-
+			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
 			return new Entity(ID, LogicState, Appearances, newMessages, Contacts);
 		}
 

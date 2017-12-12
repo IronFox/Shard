@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -122,6 +124,11 @@ namespace Shard
 			return list[list.Count - 1];
 		}
 
+		public static T PickRandom<T>(this List<T> list, Random random)
+		{
+			return list[random.Next(list.Count)];
+		}
+
 		public static T PickRandom<T>(this T[] array, Random random)
 		{
 			return array[random.Next(array.Length)];
@@ -213,5 +220,35 @@ namespace Shard
 			if (!dict.TryAdd(key, value))
 				throw new IntegrityViolation("Unable to add '" + key + "'=>'"+value+"' to dictionary");
 		}
+
+
+
+
+		public static void Read(this NetworkStream source, byte[] data, int bytes)
+		{
+			int offset = 0;
+			int remaining = bytes;
+			while (remaining > 0)
+			{
+				int read = source.Read(data, offset, remaining);
+				if (read <= 0)
+					throw new Exception("stream.Read() returned " + read);
+				offset += read;
+				remaining -= read;
+			}
+		}
+		public static void Read(this NetworkStream source, byte[] buffer, Stream outData, int bytes)
+		{
+			int remaining = bytes;
+			while (remaining > 0)
+			{
+				int read = source.Read(buffer, 0, Math.Min(remaining, buffer.Length));
+				if (read <= 0)
+					throw new Exception("stream.Read() returned " + read);
+				remaining -= read;
+				outData.Write(buffer, 0, read);
+			}
+		}
+
 	}
 }

@@ -208,12 +208,9 @@ namespace Shard.EntityChange
 			Payload = payload;
 		}
 
-		public OrderedEntityMessage Message
+		public OrderedEntityMessage MakeMessage(bool isBroadcast)
 		{
-			get
-			{
-				return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), Payload));
-			}
+			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), isBroadcast,Payload));
 		}
 
 		public override int CompareTo(object obj)
@@ -241,7 +238,7 @@ namespace Shard.EntityChange
 
 		public override bool Execute(EntityPool pool)
 		{
-			pool.BroadcastMessage(Origin.Position, Message);
+			pool.BroadcastMessage(Origin.Position, MakeMessage(true));
 			return true;
 		}
 
@@ -285,7 +282,7 @@ namespace Shard.EntityChange
 
 		public override bool Execute(EntityPool pool)
 		{
-			return pool.RelayMessage(Origin.Position, TargetEntityID, Message);
+			return pool.RelayMessage(Origin.Position, TargetEntityID, MakeMessage(false));
 		}
 	}
 

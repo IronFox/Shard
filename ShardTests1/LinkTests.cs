@@ -10,6 +10,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard.Tests
 {
@@ -154,14 +155,76 @@ namespace Shard.Tests
 
 
 
-		private static void SendMessage(NetworkStream stream, Guid from, Guid to, byte[] data)
+		struct Message
+		{
+			public readonly Guid From;
+			public readonly Guid To;
+			public readonly byte[] Data;
+
+			public Message(Guid from, Guid to, byte[] data)
+			{
+				From = from;
+				To = to;
+				Data = data;
+			}
+
+		}
+
+
+		private static void SendMessage(NetworkStream stream, Message msg)
 		{
 			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.SendMessage), 0, 4);
-			stream.Write(BitConverter.GetBytes(data.Length + 36), 0, 4);
-			stream.Write(from.ToByteArray(), 0, 16);
-			stream.Write(to.ToByteArray(), 0, 16);
-			stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
-			stream.Write(data, 0, data.Length);
+			int dataLen = Helper.Length(msg.Data);
+			stream.Write(BitConverter.GetBytes(dataLen + 36), 0, 4);
+			stream.Write(msg.From.ToByteArray(), 0, 16);
+			stream.Write(msg.To.ToByteArray(), 0, 16);
+			stream.Write(BitConverter.GetBytes((uint)dataLen), 0, 4);
+			if (dataLen > 0)
+				stream.Write(msg.Data, 0, dataLen);
+		}
+
+		private static byte[] ReadBytes(NetworkStream stream, int numBytes)
+		{
+			byte[] rs = new byte[numBytes];
+			stream.Read(rs, numBytes);
+			return rs;
+		}
+
+
+		private static InteractionLink.ChannelID ReadChannelID(NetworkStream stream)
+		{
+			return (InteractionLink.ChannelID)ReadInt(stream);
+		}
+
+		private static int ReadInt(NetworkStream stream)
+		{
+			return BitConverter.ToInt32(ReadBytes(stream, 4),0);
+		}
+
+		private static Guid ReadGuid(NetworkStream stream)
+		{
+			return new Guid(ReadBytes(stream, 16));
+		}
+
+		private static Message ReadMessage(NetworkStream stream)
+		{
+			/*
+					stream.Write(BitConverter.GetBytes((uint)ChannelID.SendMessage), 0, 4);
+					stream.Write(BitConverter.GetBytes(data.Length+36), 0, 4);
+					stream.Write(senderEntity.ToByteArray(), 0, 16);
+					stream.Write(receiverID.ToByteArray(), 0, 16);
+					stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
+					stream.Write(data, 0, data.Length);
+				*/
+			InteractionLink.ChannelID id = ReadChannelID(stream);
+			Assert.AreEqual(id, InteractionLink.ChannelID.SendMessage);
+			int length = ReadInt(stream);
+			Guid sender = ReadGuid(stream);
+			Guid receiver = ReadGuid(stream);
+			int byteLength = ReadInt(stream);
+			byte[] payload = ReadBytes(stream, byteLength);
+			Assert.AreEqual(length, byteLength + 4 + 16 + 16);
+			return new Message(sender, receiver, payload);
 		}
 
 		private static void Register(NetworkStream stream, Guid me)
@@ -176,6 +239,152 @@ namespace Shard.Tests
 			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.UnregisterReceiver), 0, 4);
 			stream.Write(BitConverter.GetBytes(16), 0, 4);
 			stream.Write(me.ToByteArray(), 0, 16);
+		}
+
+		[Serializable]
+		class SineLogic : EntityLogic
+		{
+			public SineLogic()
+			{}
+
+			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			{
+				if (currentState.InboundMessages != null)
+					foreach (var m in currentState.InboundMessages)
+					{
+						if (!m.Sender.IsEntity)
+						{
+							if (m.IsBroadcast)
+							{
+								newState.Send(new Message() { receiver = m.Sender, data = currentState.ID.Guid.ToByteArray() });
+								continue;
+							}
+							Assert.AreEqual(m.Payload.Length, 4);
+							float f = BitConverter.ToSingle(m.Payload, 0);
+							float f2 = (float)Math.Sin(f);
+							newState.Send(new Message() { receiver = m.Sender, data = BitConverter.GetBytes(f2) });
+						}
+					}
+			}
+		}
+
+
+		[TestMethod()]
+		public void FullInteractionLinkTest()
+		{
+			Random random = new Random();
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new SineLogic()),
+				}
+			);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+
+			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.ResetToRoot(root);
+
+			bool keepRunning = true;
+			//parallel evolution:
+			var task = Task.Run(() =>
+			{
+				for (int i = 0; keepRunning; i++)
+				{
+					SDS temp = stack.AllocateGeneration(i + 1);
+					Assert.AreEqual(temp.Generation, i + 1);
+					Assert.IsNotNull(stack.FindGeneration(i + 1));
+					SDS.Computation comp = new SDS.Computation(i + 1, true, TimeSpan.FromMilliseconds(1000));
+					ComputationTests.AssertNoErrors(comp);
+					Assert.AreEqual(comp.Intermediate.entities.Count, 1);
+					Assert.IsTrue(comp.Intermediate.inputConsistent);
+					SDS sds = comp.Complete();
+					Assert.IsTrue(sds.IsFullyConsistent);
+					Assert.AreEqual(sds.Generation, i + 1);
+					Assert.AreEqual(sds.FinalEntities.Length, 1);
+					stack.Insert(sds);
+				}
+			});
+
+			Host.DefaultPort = random.Next(1024, 32768);
+			using (Listener listener = new Listener(null))
+			{
+				InteractionLink myLink = null;
+				AutoResetEvent onLink = new AutoResetEvent(false),
+								onRegister = new AutoResetEvent(false),
+								onUnregister = new AutoResetEvent(false),
+								onMessage = new AutoResetEvent(false);
+				Guid me = Guid.NewGuid();
+				Guid lastTargetEntity = Guid.Empty;
+				byte[] lastData = null;
+				listener.OnNewInteractionLink = lnk =>
+				{
+					myLink = lnk;
+					lnk.OnRegisterReceiver = receiver =>
+					{
+						Assert.AreEqual(receiver, me);
+						onRegister.Set();
+					};
+					lnk.OnMessage = (from, to, message) =>
+					{
+						Assert.AreEqual(from, me);
+						lastTargetEntity = to;
+						lastData = message;
+						onMessage.Set();
+					};
+					lnk.OnUnregisterReceiver = receiver =>
+					{
+						Assert.AreEqual(receiver, me);
+						onUnregister.Set();
+					};
+					onLink.Set();
+				};
+
+
+
+				using (TcpClient client = new TcpClient("localhost", Host.DefaultPort))
+				{
+					var stream = client.GetStream();
+					Assert.IsTrue(onLink.WaitOne());
+					Register(stream, me);
+					Assert.IsTrue(onRegister.WaitOne());
+
+					SendMessage(stream, new Message(me, Guid.Empty, null)); //broadcast, find entity
+
+
+					
+					Message broadCastResponse = ReadMessage(stream);
+					Assert.AreEqual(broadCastResponse.To, me);
+
+					Guid entityID = broadCastResponse.From;
+
+
+					for (int i = 0; i < 100; i++)
+					{
+						float f = random.NextFloat(0, 100);
+						SendMessage(stream, new Message(me, entityID, BitConverter.GetBytes(f)));
+						Message response = ReadMessage(stream);
+						Assert.AreEqual(response.To, me);
+						Assert.AreEqual(response.From, entityID);
+						Assert.IsNotNull(response.Data);
+						Assert.AreEqual(response.Data.Length, 4);
+						float rs = BitConverter.ToSingle(response.Data, 0);
+						Assert.AreEqual((float)Math.Sin(f), rs);
+					}
+				}
+			}
+			keepRunning = false;
+			task.Wait();
 		}
 
 		[TestMethod()]
@@ -233,7 +442,7 @@ namespace Shard.Tests
 							for (int j = 0; j < 10; j++)
 							{
 								byte[] data = random.NextBytes(0, 100);
-								SendMessage(stream, me, target, data);
+								SendMessage(stream, new Message(me, target, data));
 								Assert.IsTrue(onMessage.WaitOne());
 								Assert.AreEqual(lastTargetEntity, target);
 								Assert.IsTrue(Helper.AreEqual(data, lastData));
@@ -373,3 +582,4 @@ namespace Shard.Tests
 		}
 	}
 }
+ 

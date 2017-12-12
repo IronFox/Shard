@@ -166,7 +166,7 @@ namespace Shard
 
 		public bool SignificantInboundChange { get; private set; }
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
-		public ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>> ClientMessages = new ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>>();
+		public readonly Dictionary<Guid, EntityMessage[]> ClientMessages;
 
 
 		public void FetchNeighborUpdate(Link neighbor, RCS.SerialData data)
@@ -198,21 +198,17 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, IntermediateData intermediate, RCS[] inbound, Dictionary<Guid, EntityMessage[]> clientMessages)
 		{
 			Intermediate = intermediate;
 			Generation = generation;
 			FinalEntities = entities;
 			IC = ic;
+			ClientMessages = clientMessages;
 			if (inbound != null)
 				InboundRCS = inbound;
 		}
 
-		public void FetchClientMessage(Guid fromClient, Guid toEntity, byte[] data, int orderIndex)
-		{
-			ConcurrentBag<OrderedEntityMessage>  bag = ClientMessages.GetOrAdd(toEntity,guid => new ConcurrentBag<OrderedEntityMessage>());
-			bag.Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient, false), data)));
-		}
 
 		public bool IsFullyConsistent { get { return IC != null && !IC.AnySet; } }
 
@@ -244,6 +240,7 @@ namespace Shard
 			int generation;
 			SDS old;
 			List<EntityEvolutionException> errors;
+			Dictionary<Guid, EntityMessage[]> clientMessages;
 
 			public List<EntityEvolutionException> Errors { get { return errors; } }
 
@@ -251,7 +248,7 @@ namespace Shard
 			public int Generation { get { return generation; } }
 
 
-			public Computation(int generation, TimeSpan entityLogicTimeout)
+			public Computation(int generation, bool collectClientMessages, TimeSpan entityLogicTimeout)
 			{
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
@@ -262,7 +259,12 @@ namespace Shard
 				data.inputConsistent = input.IsFullyConsistent;
 				//output = new SDS(generation);
 				data.inputHash = input.HashDigest;
-				
+
+				clientMessages = collectClientMessages ? ClientMessageQueue.Collect() : old.ClientMessages;
+				if (collectClientMessages && old.ClientMessages != null)
+					throw new IntegrityViolation("Client messages in existing SDS should be null (this is the newest/temporary SDS, right?)");
+
+
 				if (old.Intermediate.inputHash == data.inputHash)
 				{
 					data = old.Intermediate;
@@ -294,7 +296,10 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				errors = data.localChangeSet.Evolve(input.FinalEntities,input.ClientMessages,data.ic,generation, entityLogicTimeout);
+				errors = data.localChangeSet.Evolve(input.FinalEntities,clientMessages,data.ic,generation, collectClientMessages, entityLogicTimeout);
+				if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
+					throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");
+
 
 				foreach (var n in Simulation.Neighbors)
 				{
@@ -334,7 +339,7 @@ namespace Shard
 				EntityPool p2 = data.entities.Clone();
 				cs.Execute(p2);
 
-				SDS rs = new SDS(generation, p2.ToArray(), ic, data, old.InboundRCS);
+				SDS rs = new SDS(generation, p2.ToArray(), ic, data, old.InboundRCS,clientMessages);
 
 				if (!ic.AnySet)
 				{

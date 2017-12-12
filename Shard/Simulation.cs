@@ -145,7 +145,7 @@ namespace Shard
 				Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen, perComputation).Complete());
+				stack.Insert(new SDS.Computation(nextGen, nextGen == stack.NewestSDSGeneration,perComputation).Complete());
 				CheckIncoming();
 			}
 			Console.WriteLine("done. Starting main loop...");
@@ -183,7 +183,7 @@ namespace Shard
 					//fast forward: process now. don't care if we're at the beginning
 					int nextGen = stack.NewestSDSGeneration + 1;
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation(nextGen+1, subCompRemaining);
+					comp = new SDS.Computation(nextGen+1, true,subCompRemaining);
 				}
 				else
 				{
@@ -205,7 +205,7 @@ namespace Shard
 								break;
 						}
 						if (at < stack.Size)
-							comp = new SDS.Computation(stack[at].Generation, perComputation);
+							comp = new SDS.Computation(stack[at].Generation, stack[at].Generation == stack.NewestSDSGeneration, perComputation);
 					}
 				}
 

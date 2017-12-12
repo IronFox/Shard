@@ -318,5 +318,39 @@ namespace Shard
 		{
 			return list != null ? list.Count : 0;
 		}
+
+
+		public static ICollection<T> Concat<T>(ICollection<T> a, ICollection<T> b)
+		{
+			if (a == null || a.Count == 0)
+				return b;
+			if (b == null || b.Count == 0)
+				return a;
+
+
+			T[] rs = new T[a.Count + b.Count];
+			int at = 0;
+			foreach (var it in a)
+				rs[at++] = it;
+			foreach (var it in b)
+				rs[at++] = it;
+			return rs;
+		}
+		public static T[] Concat<T>(T[] a, ICollection<T> b)
+		{
+			if (a == null || a.Length == 0)
+				return b?.ToArray();
+			if (b == null || b.Count == 0)
+				return a;
+
+
+			T[] rs = new T[a.Length + b.Count];
+			int at = 0;
+			foreach (var it in a)
+				rs[at++] = it;
+			foreach (var it in b)
+				rs[at++] = it;
+			return rs;
+		}
 	}
 }

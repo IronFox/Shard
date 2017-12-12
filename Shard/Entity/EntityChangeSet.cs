@@ -267,21 +267,28 @@ namespace Shard
 		}
 
 		public List<EntityEvolutionException> Evolve(IEnumerable<Entity> entities,
-			ConcurrentDictionary<Guid, ConcurrentBag<OrderedEntityMessage>> clientMessages,
+			Dictionary<Guid, EntityMessage[]> clientMessages,
 			InconsistencyCoverage ic, 
 			int roundNumber, 
+			bool maySendMessages,
 			TimeSpan budget)
 		{
 			int numErrors = 0;
 
 			List<Task> tasks = new List<Task>();
 
+			EntityMessage[] clientBroadcasts = null;
+			if (clientMessages != null)
+				clientMessages.TryGetValue(Guid.Empty, out clientBroadcasts);
+
 			foreach (var e in entities)
 			{
-				ConcurrentBag<OrderedEntityMessage> messages = null;
+				EntityMessage[] messages = null;
 				if (clientMessages != null)
+				{
 					clientMessages.TryGetValue(e.ID.Guid, out messages);
-				tasks.Add(e.EvolveAsync(this, roundNumber, messages));
+				}
+				tasks.Add(e.EvolveAsync(this, roundNumber, maySendMessages,Helper.Concat(clientBroadcasts, messages)));
 			}
 			int at = 0;
 
@@ -310,6 +317,21 @@ namespace Shard
 				}
 				at++;
 			}
+			return rs;
+		}
+
+		private static ICollection<OrderedEntityMessage> Combine(ConcurrentBag<OrderedEntityMessage> a, ConcurrentBag<OrderedEntityMessage> b)
+		{
+			if (b == null || b.Count == 0)
+				return a?.ToArray();
+			if (a == null || a.Count == 0)
+				return b.ToArray();
+			OrderedEntityMessage[] rs = new OrderedEntityMessage[a.Count + b.Count];
+			int at = 0;
+			foreach (var msg in a)
+				rs[at++] = msg;
+			foreach (var msg in b)
+				rs[at++] = msg;
 			return rs;
 		}
 

@@ -397,6 +397,8 @@ namespace Shard
 		}
 		public static async void PutAsync(SDS.Serial serial, bool forceReplace)
 		{
+			if (sdsStore == null)
+				return;	//tests
 			try
 			{
 				Log.Message("Storing serial SDS in DB: g" + serial.Generation);

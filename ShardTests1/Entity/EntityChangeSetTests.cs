@@ -31,7 +31,7 @@ namespace Shard.Tests
 
 
 
-		static byte[] RandomByteArray(bool mayBeNull = false)
+		public static byte[] RandomByteArray(bool mayBeNull = false)
 		{
 			if (mayBeNull && random.NextBool(0.125f))
 				return null;

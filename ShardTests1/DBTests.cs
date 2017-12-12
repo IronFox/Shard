@@ -76,13 +76,43 @@ namespace Shard.Tests
 
 		public static SDS RandomSDS()
 		{
-			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), RandomIntermediate(), RandomOutboundRCSs());
+			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), RandomIntermediate(), RandomOutboundRCSs(), RandomClientMessages());
 		}
 
 		public static RCS[] RandomOutboundRCSs()
 		{
 			return RandomOutboundRCSs(random.Next(26));
 		}
+
+		public static Dictionary<Guid, EntityMessage[]> RandomClientMessages()
+		{
+			if (random.NextBool(0.8f))
+				return null;
+			return RandomClientMessages(random.Next(2), random.Next(16));
+		}
+
+		public static Dictionary<Guid, EntityMessage[]> RandomClientMessages(int numGuids, int maxMessagesEach)
+		{
+			if (numGuids == 0)
+				return null;
+			Dictionary<Guid, EntityMessage[]> rs = new Dictionary<Guid, EntityMessage[]>();
+			for (int i = 0; i < numGuids; i++)
+			{
+				Guid guid = Guid.NewGuid(); ;
+
+				var ar = new EntityMessage[random.Next(maxMessagesEach - 1) + 1];
+				rs[guid] = ar;
+				for (int j = 0; j < ar.Length; j++)
+					ar[j] = RandomEntityMessage();
+			}
+			return rs;
+		}
+
+		public static EntityMessage RandomEntityMessage()
+		{
+			return new EntityMessage(new Actor(Guid.NewGuid(), random.NextBool()), random.NextBool(), EntityChangeSetTests.RandomByteArray(true));
+		}
+
 
 		private static RCS[] RandomOutboundRCSs(int count)
 		{

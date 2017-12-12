@@ -60,31 +60,6 @@ namespace Shard
 		{
 			Log.Error(endPoint + ": " + ex);
 		}
-		private void Read(byte[] data, int bytes)
-		{
-			int offset = 0;
-			int remaining = bytes;
-			while (remaining > 0)
-			{
-				int read = stream.Read(data, offset, remaining);
-				if (read <= 0)
-					throw new Exception("stream.Read() returned " + read);
-				offset += read;
-				remaining -= read;
-			}
-		}
-		private void Read(byte[] buffer, Stream outData, int bytes)
-		{
-			int remaining = bytes;
-			while (remaining > 0)
-			{
-				int read = stream.Read(buffer, 0, Math.Min(remaining, buffer.Length));
-				if (read <= 0)
-					throw new Exception("stream.Read() returned " + read);
-				remaining -= read;
-				outData.Write(buffer, 0, read);
-			}
-		}
 
 		private int remainingBytes = 0;
 
@@ -93,7 +68,7 @@ namespace Shard
 			if (remainingBytes < numBytes)
 				throw new SerializationException("Not enough bytes left in packet to deserialize "+numBytes+" byte(s)");
 			byte[] rs = new byte[numBytes];
-			Read(rs, numBytes);
+			stream.Read(rs, numBytes);
 			remainingBytes -= numBytes;
 			return rs;
 		}
@@ -103,10 +78,10 @@ namespace Shard
 		{
 			while (bytes > skipBuffer.Length)
 			{
-				Read(skipBuffer, skipBuffer.Length);
+				stream.Read(skipBuffer, skipBuffer.Length);
 				bytes -= skipBuffer.Length;
 			}
-			Read(skipBuffer, bytes);
+			stream.Read(skipBuffer, bytes);
 		}
 
 		private Guid NextGuid()
@@ -150,7 +125,7 @@ namespace Shard
 				byte[] header = new byte[8];
 				while (!closed)
 				{
-					Read(header, 8);    //channel + size
+					stream.Read(header, 8);    //channel + size
 					uint channel = BitConverter.ToUInt32(header, 0);
 					remainingBytes = BitConverter.ToInt32(header, 4);
 
@@ -200,7 +175,7 @@ namespace Shard
 								else
 								{
 									if (Simulation.Stack.Size > 0)
-										Simulation.Stack.NewestSDS.FetchClientMessage(from, to, data, orderIndex++);
+										ClientMessageQueue.FetchClientMessage(from, to, data, orderIndex++);
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;
@@ -265,7 +240,7 @@ namespace Shard
 			return null;
 		}
 
-		public void Send(Guid senderEntity, byte[] data)
+		public void Send(Guid senderEntity, Guid receiverID, byte[] data)
 		{
 			if (closed)
 				return;
@@ -274,8 +249,9 @@ namespace Shard
 				lock (stream)
 				{
 					stream.Write(BitConverter.GetBytes((uint)ChannelID.SendMessage), 0, 4);
-					stream.Write(BitConverter.GetBytes(data.Length+20), 0, 4);
+					stream.Write(BitConverter.GetBytes(data.Length+36), 0, 4);
 					stream.Write(senderEntity.ToByteArray(), 0, 16);
+					stream.Write(receiverID.ToByteArray(), 0, 16);
 					stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
 					stream.Write(data, 0, data.Length);
 				}
@@ -319,7 +295,7 @@ namespace Shard
 		{
 			InteractionLink link = Lookup(receiver);
 			if (link != null)
-				link.Send(sender,data);
+				link.Send(sender,receiver,data);
 		}
 	}
 }
