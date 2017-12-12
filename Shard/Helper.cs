@@ -64,6 +64,51 @@ namespace Shard
 			return f.GetHashCode();
 		}
 
+		public static bool AreEqual<T, K>(Dictionary<T, K> a, Dictionary<T, K> b)
+		{
+			bool emptyA = a == null || a.Count == 0;
+			bool emptyB = b == null || b.Count == 0;
+			if (emptyA != emptyB)
+				return false;
+			if (emptyA)
+				return true;
+
+			foreach (var pair in a)
+			{
+				K bV;
+				if (!b.TryGetValue(pair.Key,out bV))
+					return false;
+				if (!pair.Value.Equals(bV))
+					return false;
+			}
+			foreach (var pair in b)
+				if (!a.ContainsKey(pair.Key))
+					return false;
+			return true;
+		}
+		public static bool AreEqual<T, K>(Dictionary<T, K[]> a, Dictionary<T, K[]> b)
+		{
+			bool emptyA = a == null || a.Count == 0;
+			bool emptyB = b == null || b.Count == 0;
+			if (emptyA != emptyB)
+				return false;
+			if (emptyA)
+				return true;
+
+			foreach (var pair in a)
+			{
+				K[] bV;
+				if (!b.TryGetValue(pair.Key, out bV))
+					return false;
+				if (!AreEqual(pair.Value,bV))
+					return false;
+			}
+			foreach (var pair in b)
+				if (!a.ContainsKey(pair.Key))
+					return false;
+			return true;
+		}
+
 		public static bool AreEqual<T>(T[] a0, T[] a1)
 		{
 			int len0 = Length(a0);

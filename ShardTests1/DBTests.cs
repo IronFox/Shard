@@ -88,7 +88,7 @@ namespace Shard.Tests
 		{
 			if (random.NextBool(0.8f))
 				return null;
-			return RandomClientMessages(random.Next(2), random.Next(16));
+			return RandomClientMessages(random.Next(2), random.Next(16)+1);
 		}
 
 		public static Dictionary<Guid, EntityMessage[]> RandomClientMessages(int numGuids, int maxMessagesEach)
@@ -165,7 +165,7 @@ namespace Shard.Tests
 				var reverse = serializer.Deserialize<SDS.Serial>(json);
 				Assert.AreEqual(s, reverse);
 				SDS rev2 = new SDS(reverse);
-				Assert.IsTrue(sds.ICAndEntitiesAreEqual(rev2));
+				Assert.IsTrue(sds.ICMessagesAndEntitiesAreEqual(rev2));
 			}
 		}
 

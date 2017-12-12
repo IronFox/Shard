@@ -19,18 +19,22 @@ namespace Shard
 		{
 			public byte[] SerialEntities { get; set; }
 			public InconsistencyCoverage.Serial IC { get; set; }
+			public byte[] SerialMessages { get; set; }
 
 			public override bool Equals(object obj)
 			{
 				var other = obj as Serial;
 				if (other == null)
 					return false;
-				return Helper.AreEqual(SerialEntities,other.SerialEntities) && IC.Equals(other.IC);
+				return Helper.AreEqual(SerialEntities,other.SerialEntities) 
+						&& IC.Equals(other.IC)
+						&& Helper.AreEqual(SerialMessages, other.SerialMessages)
+						;
 			}
 
 			public override int GetHashCode()
 			{
-				return Helper.Hash(this).Add(SerialEntities).Add(IC).GetHashCode();
+				return Helper.Hash(this).Add(SerialEntities).Add(IC).Add(SerialMessages).GetHashCode();
 			}
 
 			public override string ToString()
@@ -163,10 +167,10 @@ namespace Shard
 		public readonly int Generation;
 		public readonly InconsistencyCoverage IC;
 		public readonly IntermediateData Intermediate;
+		public readonly Dictionary<Guid, EntityMessage[]> ClientMessages;
 
 		public bool SignificantInboundChange { get; private set; }
 		public RCS[] InboundRCS { get; private set; } = new RCS[Simulation.NeighborCount];
-		public readonly Dictionary<Guid, EntityMessage[]> ClientMessages;
 
 
 		public void FetchNeighborUpdate(Link neighbor, RCS.SerialData data)
@@ -187,7 +191,7 @@ namespace Shard
 		public SDS(Serial dbSDS)
 		{
 			FinalEntities = Entity.Import(dbSDS.SerialEntities);
-
+			ClientMessages = dbSDS.SerialMessages != null ? (Dictionary<Guid,EntityMessage[]>) Helper.Deserialize(dbSDS.SerialMessages) : null;
 			Generation = dbSDS.Generation;
 			IC = new InconsistencyCoverage(dbSDS.IC);
 		}
@@ -227,6 +231,8 @@ namespace Shard
 					f.Serialize(ms, Generation);
 					f.Serialize(ms, FinalEntities);
 					f.Serialize(ms, IC);
+					if (ClientMessages != null)
+						f.Serialize(ms, ClientMessages);
 					ms.Seek(0, SeekOrigin.Begin);
 					return new Digest(SHA256.Create().ComputeHash(ms));
 				}
@@ -427,14 +433,17 @@ namespace Shard
 			rs.SerialEntities = Entity.Export(FinalEntities);
 			rs.Generation = Generation;
 			rs.IC = IC.Export();
+			rs.SerialMessages = ClientMessages != null ? Helper.SerializeToArray(ClientMessages) : null;
 			rs._id = Simulation.ID.XYZ.Encoded;
 			return rs;
 		}
 
 
-		public bool ICAndEntitiesAreEqual(SDS other)
+		public bool ICMessagesAndEntitiesAreEqual(SDS other)
 		{
-			return IC.Equals(other.IC) && Helper.AreEqual(FinalEntities, other.FinalEntities);
+			return IC.Equals(other.IC) 
+				&& Helper.AreEqual(FinalEntities, other.FinalEntities) 
+				&& Helper.AreEqual(ClientMessages, other.ClientMessages);
 		}
 
 	}
