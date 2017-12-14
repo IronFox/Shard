@@ -16,7 +16,7 @@ namespace Shard
 	/// They may be targeted to a specific entity or broadcast (target guid is empty)
 	/// </summary>
 	[Serializable]
-	public class InteractionLink : ISerializable
+	public class InteractionLink : ISerializable, IDisposable
 	{
 		public enum ChannelID
 		{
@@ -26,14 +26,29 @@ namespace Shard
 			SendMessage = 4,	//c2s: [Guid: me][Guid: toEntity][uint: num bytes][bytes...], s2c: [Guid: fromEntity][uint: num bytes][bytes...]
 		}
 
+		public struct OutPackage
+		{
+			public readonly uint Channel;
+			public readonly byte[] Data;
+
+			public OutPackage(uint channel, byte[] data)
+			{
+				Channel = channel;
+				Data = data;
+			}
+
+		}
+
 		private int orderIndex=0;
 
 		private static List<InteractionLink> registry = new List<InteractionLink>();
 
 		private readonly TcpClient client;
-		private readonly Thread thread;
+		private readonly Thread thread, writeThread;
 		private readonly IPEndPoint endPoint;
-		private readonly NetworkStream stream;
+		private readonly NetworkStream netStream;
+		//private readonly MemoryStream writeStream = new MemoryStream();
+		private readonly BlockingCollection<OutPackage> writeQueue = new BlockingCollection<OutPackage>();
 		private bool closed = false;
 		private readonly Func<Host, Link> linkLookup;
 
@@ -43,10 +58,12 @@ namespace Shard
 		{
 			this.linkLookup = linkLookup;
 			this.client = client;
+			netStream = client.GetStream();
+			endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
 			thread = new Thread(new ThreadStart(ThreadMain));
 			thread.Start();
-			endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
-			stream = client.GetStream();
+			writeThread = new Thread(new ThreadStart(WriterMain));
+			writeThread.Start();
 		}
 
 		private void Message(string msg)
@@ -69,7 +86,7 @@ namespace Shard
 			if (remainingBytes < numBytes)
 				throw new SerializationException("Not enough bytes left in packet to deserialize "+numBytes+" byte(s)");
 			byte[] rs = new byte[numBytes];
-			stream.Read(rs, numBytes);
+			netStream.Read(rs, numBytes);
 			remainingBytes -= numBytes;
 			return rs;
 		}
@@ -79,12 +96,12 @@ namespace Shard
 		{
 			while (bytes > skipBuffer.Length)
 			{
-				stream.Read(skipBuffer, skipBuffer.Length);
+				netStream.Read(skipBuffer, skipBuffer.Length);
 				bytes -= skipBuffer.Length;
 			}
 			if (bytes == 0)
 				return;
-			stream.Read(skipBuffer, bytes);
+			netStream.Read(skipBuffer, bytes);
 		}
 
 		private Guid NextGuid()
@@ -110,16 +127,41 @@ namespace Shard
 			lock (this)
 			{
 				closed = true;
+				writeQueue.Dispose();
 				foreach (var g in guids)
 					guidMap.TryRemove(g);
 				guids.Clear();
 			}
 		}
 
+		private void WriterMain()
+		{
+			Message("Starting Write");
+			try
+			{
+				while (!closed)
+				{
+					OutPackage p = writeQueue.Take();
+					netStream.Write(BitConverter.GetBytes(p.Channel), 0, 4);
+					netStream.Write(BitConverter.GetBytes(p.Data.Length), 0, 4);
+					netStream.Write(p.Data, 0, p.Data.Length);
+				}
+			}
+			catch (ObjectDisposedException)
+			{ }
+			catch (SocketException)
+			{ }
+			catch (Exception ex)
+			{
+				Error(ex);
+			}
+			Close();
+		}
+
 		private void ThreadMain()
 		{
 
-			Message("Initiating session");
+			Message("Starting Read");
 
 			try
 			{
@@ -128,7 +170,7 @@ namespace Shard
 				byte[] header = new byte[8];
 				while (!closed)
 				{
-					stream.Read(header, 8);    //channel + size
+					netStream.Read(header, 8);    //channel + size
 					uint channel = BitConverter.ToUInt32(header, 0);
 					remainingBytes = BitConverter.ToInt32(header, 4);
 
@@ -209,21 +251,17 @@ namespace Shard
 				if (closed)
 					return;
 				closed = true;
+				Message("Connection closing...");
 				foreach (var g in guids)
 					guidMap.TryRemove(g);
 				guids.Clear();
 
-				try
-				{
-					stream.Close();
-					client.Close();
-					client.Dispose();
-					Message("Connection closed");
-					lock (registry)
-						registry.Remove(this);
-				}
-				catch
-				{ }
+				try { netStream.Close(); } catch { }
+				try { client.Close(); } catch { }
+				try { client.Dispose(); } catch { }
+				try { writeQueue.Dispose(); } catch { }
+				lock (registry)
+					registry.Remove(this);
 			}
 		}
 
@@ -243,20 +281,28 @@ namespace Shard
 			return null;
 		}
 
-		public void Send(Guid senderEntity, Guid receiverID, byte[] data)
+		public void RelayMessage(Guid senderEntity, Guid receiverID, byte[] data, int generation)
 		{
 			if (closed)
 				return;
 			try
 			{
-				lock (stream)
+				if (writeQueue.Count > 16)
 				{
-					stream.Write(BitConverter.GetBytes((uint)ChannelID.SendMessage), 0, 4);
-					stream.Write(BitConverter.GetBytes(data.Length+36), 0, 4);
-					stream.Write(senderEntity.ToByteArray(), 0, 16);
-					stream.Write(receiverID.ToByteArray(), 0, 16);
-					stream.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
-					stream.Write(data, 0, data.Length);
+					Message("More than 16 messages queued up for dispatch. Closing down");
+					Close();
+					return;
+				}
+
+				using (MemoryStream ms = new MemoryStream())
+				{
+					ms.Write(senderEntity.ToByteArray(), 0, 16);
+					ms.Write(receiverID.ToByteArray(), 0, 16);
+					ms.Write(BitConverter.GetBytes(generation), 0, 4);
+					ms.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
+					ms.Write(data, 0, data.Length);
+
+					writeQueue.Add(new OutPackage((uint)ChannelID.SendMessage, ms.ToArray()));
 				}
 			}
 			catch (Exception ex)
@@ -294,11 +340,16 @@ namespace Shard
 		private static ConcurrentDictionary<Guid, InteractionLink> guidMap = new ConcurrentDictionary<Guid, InteractionLink>();
 
 
-		public static void Relay(Guid sender, Guid receiver, byte[] data)
+		public static void Relay(Guid sender, Guid receiver, byte[] data, int generation)
 		{
 			InteractionLink link = Lookup(receiver);
 			if (link != null)
-				link.Send(sender,receiver,data);
+				link.RelayMessage(sender,receiver,data, generation);
+		}
+
+		public void Dispose()
+		{
+			Close();
 		}
 	}
 }

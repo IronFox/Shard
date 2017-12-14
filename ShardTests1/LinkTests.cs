@@ -206,7 +206,7 @@ namespace Shard.Tests
 			return new Guid(ReadBytes(stream, 16));
 		}
 
-		private static Message ReadMessage(NetworkStream stream)
+		private static Message ReadMessage(NetworkStream stream, out int generation)
 		{
 			/*
 					stream.Write(BitConverter.GetBytes((uint)ChannelID.SendMessage), 0, 4);
@@ -221,9 +221,10 @@ namespace Shard.Tests
 			int length = ReadInt(stream);
 			Guid sender = ReadGuid(stream);
 			Guid receiver = ReadGuid(stream);
+			generation = ReadInt(stream);
 			int byteLength = ReadInt(stream);
 			byte[] payload = ReadBytes(stream, byteLength);
-			Assert.AreEqual(length, byteLength + 4 + 16 + 16);
+			Assert.AreEqual(length, byteLength + 4 + 16 + 16 + 4);
 			return new Message(sender, receiver, payload);
 		}
 
@@ -305,7 +306,7 @@ namespace Shard.Tests
 					SDS temp = stack.AllocateGeneration(i + 1);
 					Assert.AreEqual(temp.Generation, i + 1);
 					Assert.IsNotNull(stack.FindGeneration(i + 1));
-					SDS.Computation comp = new SDS.Computation(i + 1, Simulation.ClientMessageQueue, TimeSpan.FromMilliseconds(1000));
+					SDS.Computation comp = new SDS.Computation(i + 1, Simulation.ClientMessageQueue, TimeSpan.FromSeconds(30));
 					ComputationTests.AssertNoErrors(comp);
 					Assert.AreEqual(comp.Intermediate.entities.Count, 1);
 					Assert.IsTrue(comp.Intermediate.inputConsistent);
@@ -363,8 +364,8 @@ namespace Shard.Tests
 					SendMessage(stream, new Message(me, Guid.Empty, null)); //broadcast, find entity
 
 
-					
-					Message broadCastResponse = ReadMessage(stream);
+					int gen;
+					Message broadCastResponse = ReadMessage(stream, out gen);
 					Assert.AreEqual(broadCastResponse.Data.Length, 16);
 					Assert.AreEqual(broadCastResponse.To, me);
 
@@ -376,7 +377,8 @@ namespace Shard.Tests
 						float f = random.NextFloat(0, 100);
 						Console.WriteLine(i + ": " + f);
 						SendMessage(stream, new Message(me, entityID, BitConverter.GetBytes(f)));
-						Message response = ReadMessage(stream);
+						
+						Message response = ReadMessage(stream, out gen);
 						Assert.AreEqual(response.To, me);
 						Assert.AreEqual(response.From, entityID);
 						Assert.IsNotNull(response.Data);

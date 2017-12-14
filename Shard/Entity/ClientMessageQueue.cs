@@ -76,7 +76,7 @@ namespace Shard
 
 		private void Log(string msg)
 		{
-			Shard.Log.Message("CMG @" + archiveGeneration + " A="+archivedMessages.Count+" N="+newMessages.Count+": " + msg);
+			Shard.Log.Message("CMQ @" + archiveGeneration + " A="+archivedMessages.Count+" N="+newMessages.Count+": " + msg);
 		}
 
 		/// <summary>

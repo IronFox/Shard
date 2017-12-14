@@ -562,7 +562,7 @@ namespace Shard
 							if (m.IsDirectedToClient)
 							{
 								if (maySendMessages)
-									InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data);
+									InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data,roundNumber);
 							}
 							else
 								outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
