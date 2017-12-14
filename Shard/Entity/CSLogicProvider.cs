@@ -318,8 +318,6 @@ namespace Shard
 			{
 				if (type.BaseType == typeof(EntityLogic))
 				{
-					if (!type.IsSerializable)
-						throw new LogicCompositionException(AssemblyName + ": Type '" + type + "' is entity logic, but not serializable");
 
 					var c = type.GetConstructor(Type.EmptyTypes);
 					if (c == null || !c.IsPublic)
@@ -327,7 +325,7 @@ namespace Shard
 						throw new LogicCompositionException(AssemblyName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
 						//continue;
 					}
-					CheckType(checkedTypes, type);
+					CheckType(checkedTypes, type, type.Name,true);
 
 					types[type.Name] = type;
 				}
@@ -336,13 +334,16 @@ namespace Shard
 				throw new LogicCompositionException(AssemblyName + ": Failed to find any entity logic in assembly");
 		}
 
-		private void CheckType(HashSet<Type> checkedTypes, Type type, string path = null)
+		private void CheckType(HashSet<Type> checkedTypes, Type type, string path, bool requireSerializable)
 		{
 			if (checkedTypes.Contains(type))
 				return;
 			checkedTypes.Add(type);
-			if (path == null)
-				path = type.Name;
+			if (requireSerializable && !type.IsSerializable)
+				throw new InvarianceViolation(AssemblyName + ": Type '" + path + "' is entity logic or member, but not serializable");
+			if (requireSerializable && type.GetInterfaces().Contains(typeof(ISerializable)))
+				requireSerializable = false;
+
 			var fields = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 			foreach (var f in fields)
 			{
@@ -351,7 +352,7 @@ namespace Shard
 					throw new InvarianceViolation(AssemblyName + ": Field '" + subPath + "' must be declared readonly");
 				Type sub = f.FieldType;
 				if (sub.IsClass)
-					CheckType(checkedTypes, sub, subPath);
+					CheckType(checkedTypes, sub, subPath, requireSerializable);
 			}
 		}
 
