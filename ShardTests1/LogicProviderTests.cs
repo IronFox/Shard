@@ -220,7 +220,7 @@ namespace Shard.Tests
 			for (int i = 0; i < NumIterations; i++)
 			{
 				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, false,TimeSpan.FromMilliseconds(10));
+				SDS.Computation comp = new SDS.Computation(i + 1, null,TimeSpan.FromMilliseconds(10));
 				ComputationTests.AssertNoErrors(comp);
 				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);
@@ -319,7 +319,7 @@ namespace Shard.Tests
 			for (int i = 0; i < NumIterations; i++)
 			{
 				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, false,TimeSpan.FromMilliseconds(100));
+				SDS.Computation comp = new SDS.Computation(i + 1, null,TimeSpan.FromMilliseconds(100));
 				ComputationTests.AssertNoErrors(comp);
 				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);

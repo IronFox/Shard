@@ -28,7 +28,7 @@ namespace Shard
 		public static Neighborhood Neighbors { get { return neighbors; } }
 
 
-
+		public static ClientMessageQueue ClientMessageQueue { get; private set; } = new ClientMessageQueue();
 
 
 		public static void AdvertiseOldestGeneration(int gen)
@@ -145,7 +145,7 @@ namespace Shard
 				Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen, nextGen == stack.NewestSDSGeneration,perComputation).Complete());
+				stack.Insert(new SDS.Computation(nextGen, ClientMessageQueue,perComputation).Complete());
 				CheckIncoming();
 			}
 			Console.WriteLine("done. Starting main loop...");
@@ -183,7 +183,7 @@ namespace Shard
 					//fast forward: process now. don't care if we're at the beginning
 					int nextGen = stack.NewestSDSGeneration + 1;
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation(nextGen+1, true,subCompRemaining);
+					comp = new SDS.Computation(nextGen+1, ClientMessageQueue, subCompRemaining);
 				}
 				else
 				{
@@ -205,7 +205,7 @@ namespace Shard
 								break;
 						}
 						if (at < stack.Size)
-							comp = new SDS.Computation(stack[at].Generation, stack[at].Generation == stack.NewestSDSGeneration, perComputation);
+							comp = new SDS.Computation(stack[at].Generation, ClientMessageQueue, perComputation);
 					}
 				}
 
@@ -237,7 +237,7 @@ namespace Shard
 				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel, forceAllLinksPassive);
 			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ, forceAllLinksPassive);
 
-
+			ClientMessageQueue = new ClientMessageQueue();
 		}
 
 		public static bool Owns(Vec3 position)

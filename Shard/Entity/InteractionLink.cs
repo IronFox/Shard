@@ -178,7 +178,7 @@ namespace Shard
 								else
 								{
 									if (Simulation.Stack.Size > 0)
-										ClientMessageQueue.HandleIncomingMessage(from, to, data, orderIndex++);
+										Simulation.ClientMessageQueue.HandleIncomingMessage(from, to, data, orderIndex++);
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;

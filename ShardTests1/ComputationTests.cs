@@ -170,7 +170,7 @@ namespace Shard.Tests
 				SDS temp = stack.AllocateGeneration(i + 1);
 				Assert.AreEqual(temp.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));
-				SDS.Computation comp = new SDS.Computation(i + 1, false, TimeSpan.FromMilliseconds(10));
+				SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
 				AssertNoErrors(comp);
 				Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
@@ -267,7 +267,7 @@ namespace Shard.Tests
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1,false, TimeSpan.FromMilliseconds(10));
+			SDS.Computation comp = new SDS.Computation(1,null, TimeSpan.FromMilliseconds(10));
 			AssertNoErrors(comp);
 			Assert.AreEqual(comp.Intermediate.entities.Count, 3);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
@@ -368,7 +368,7 @@ namespace Shard.Tests
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1, false,TimeSpan.FromMilliseconds(10));
+			SDS.Computation comp = new SDS.Computation(1, null,TimeSpan.FromMilliseconds(10));
 			AssertNoErrors(comp);
 			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);

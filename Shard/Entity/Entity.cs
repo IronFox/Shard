@@ -442,6 +442,10 @@ namespace Shard
 				newAppearances.AddOrReplace(app);
 			}
 
+			public void Send(Actor receiver, byte[] data)
+			{
+				Send(new Message() { receiver = receiver, data = data });
+			}
 			public void Send(Message message)
 			{
 				if (messages == null)

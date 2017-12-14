@@ -262,6 +262,7 @@ namespace Shard.Tests
 							Assert.AreEqual(m.Payload.Length, 4);
 							float f = BitConverter.ToSingle(m.Payload, 0);
 							float f2 = (float)Math.Sin(f);
+							Console.WriteLine("@"+generation+": "+ f + "->" + f2);
 							newState.Send(new Message() { receiver = m.Sender, data = BitConverter.GetBytes(f2) });
 						}
 					}
@@ -304,7 +305,7 @@ namespace Shard.Tests
 					SDS temp = stack.AllocateGeneration(i + 1);
 					Assert.AreEqual(temp.Generation, i + 1);
 					Assert.IsNotNull(stack.FindGeneration(i + 1));
-					SDS.Computation comp = new SDS.Computation(i + 1, true, TimeSpan.FromMilliseconds(1000));
+					SDS.Computation comp = new SDS.Computation(i + 1, Simulation.ClientMessageQueue, TimeSpan.FromMilliseconds(1000));
 					ComputationTests.AssertNoErrors(comp);
 					Assert.AreEqual(comp.Intermediate.entities.Count, 1);
 					Assert.IsTrue(comp.Intermediate.inputConsistent);
@@ -364,6 +365,7 @@ namespace Shard.Tests
 
 					
 					Message broadCastResponse = ReadMessage(stream);
+					Assert.AreEqual(broadCastResponse.Data.Length, 16);
 					Assert.AreEqual(broadCastResponse.To, me);
 
 					Guid entityID = broadCastResponse.From;
@@ -372,6 +374,7 @@ namespace Shard.Tests
 					for (int i = 0; i < 100; i++)
 					{
 						float f = random.NextFloat(0, 100);
+						Console.WriteLine(i + ": " + f);
 						SendMessage(stream, new Message(me, entityID, BitConverter.GetBytes(f)));
 						Message response = ReadMessage(stream);
 						Assert.AreEqual(response.To, me);
@@ -379,7 +382,7 @@ namespace Shard.Tests
 						Assert.IsNotNull(response.Data);
 						Assert.AreEqual(response.Data.Length, 4);
 						float rs = BitConverter.ToSingle(response.Data, 0);
-						Assert.AreEqual((float)Math.Sin(f), rs);
+						Assert.AreEqual((float)Math.Sin(f), rs, i+": "+f);
 					}
 				}
 			}

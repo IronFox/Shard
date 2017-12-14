@@ -250,5 +250,17 @@ namespace Shard
 			}
 		}
 
+
+
+		public static T GetOrCreate<K, T>(this Dictionary<K, T> dict, K key)
+		{
+			T rs;
+			if (dict.TryGetValue(key, out rs))
+				return rs;
+			rs = (T)Activator.CreateInstance(typeof(T));
+			dict[key] = rs;
+			return rs;
+		}
+
 	}
 }

@@ -254,7 +254,7 @@ namespace Shard
 			public int Generation { get { return generation; } }
 
 
-			public Computation(int generation, bool collectClientMessages, TimeSpan entityLogicTimeout)
+			public Computation(int generation, ClientMessageQueue freshClientMessages, TimeSpan entityLogicTimeout)
 			{
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
@@ -266,9 +266,9 @@ namespace Shard
 				//output = new SDS(generation);
 				data.inputHash = input.HashDigest;
 
-				clientMessages = collectClientMessages ? ClientMessageQueue.Collect() : old.ClientMessages;
-				if (collectClientMessages && old.ClientMessages != null)
-					throw new IntegrityViolation("Client messages in existing SDS should be null (this is the newest/temporary SDS, right?)");
+				clientMessages = freshClientMessages?.Collect(generation);
+				if (clientMessages == null)	//nothing new, check locally archived...
+					clientMessages = old.ClientMessages;
 
 
 				if (old.Intermediate.inputHash == data.inputHash)
@@ -302,7 +302,8 @@ namespace Shard
 
 
 				data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
-				errors = data.localChangeSet.Evolve(input.FinalEntities,clientMessages,data.ic,generation, collectClientMessages, entityLogicTimeout);
+				bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
+				errors = data.localChangeSet.Evolve(input.FinalEntities,clientMessages,data.ic,generation, doSendClientMessages, entityLogicTimeout);
 				if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
 					throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");
 
