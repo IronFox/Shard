@@ -359,138 +359,6 @@ namespace Shard
 		}
 	}
 
-	/// <summary>
-	/// Abstract entity behavior descriptor.
-	/// Actual behavior is implemented in Evolve()
-	/// </summary>
-	[Serializable]
-	public abstract class EntityLogic
-	{
-		public struct Message
-		{
-			public byte[] data;
-			public Actor receiver;
-
-			public bool IsDirectedToClient { get { return !receiver.IsEntity; } }
-
-
-		}
-
-		public struct Instantiation
-		{
-			public Vec3 targetLocation;
-			public EntityAppearanceCollection appearances;
-			public EntityLogic logic;
-		}
-
-		public struct NewState
-		{
-			public Vec3 newPosition;
-			public List<byte[]> broadcasts;
-			public List<Message> messages;
-			public List<Instantiation> instantiations;
-			public List<EntityID> removals;
-			public EntityLogic newLogic;
-			public EntityAppearanceCollection newAppearances;
-
-			public NewState(Entity source)
-			{
-				newPosition = source.ID.Position;
-				broadcasts = null;
-				messages = null;
-				instantiations = null;
-				removals = null;
-				newLogic = source.LogicState;
-				newAppearances = source.Appearances?.Duplicate();
-			}
-
-
-			public void Instantiate(Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances)
-			{
-				if (instantiations == null)
-					instantiations = new List<Instantiation>();
-				instantiations.Add( new Instantiation()
-				{
-					appearances = appearances,
-					logic = logic,
-					targetLocation = targetLocation
-				});
-			}
-			public void Instantiate(Vec3 targetLocation, string assemblyName, string logicName, object[] constructorParameters, EntityAppearanceCollection appearances)
-			{
-				Instantiate(targetLocation, new DynamicCSLogic(assemblyName, logicName, constructorParameters), appearances);
-			}
-
-			public void Remove(EntityID entityID)
-			{
-				if (removals == null)
-					removals = new List<EntityID>();
-				removals.Add(entityID);
-			}
-
-			public void Add(EntityAppearance app)
-			{
-				if (newAppearances == null)
-					newAppearances = new EntityAppearanceCollection();
-				newAppearances.Add(app);
-			}
-
-			public void AddOrReplace(EntityAppearance app)
-			{
-				if (newAppearances == null)
-					newAppearances = new EntityAppearanceCollection();
-				newAppearances.AddOrReplace(app);
-			}
-
-			public void Send(Actor receiver, byte[] data)
-			{
-				Send(new Message() { receiver = receiver, data = data });
-			}
-			public void Send(Message message)
-			{
-				if (messages == null)
-					messages = new List<Message>();
-				messages.Add(message);
-			}
-			public void Broadcast(byte[] data)
-			{
-				if (broadcasts == null)
-					broadcasts = new List<byte[]>();
-				broadcasts.Add(data);
-			}
-		}
-
-
-		/// <summary>
-		/// Creates an asynchronous task that computes the next state in a separate thread
-		/// </summary>
-		/// <param name="currentState">Current entity state</param>
-		/// <param name="generation">Evolution generation index, starting from 0</param>
-		/// <param name="randomSource">Source for random values used during execution</param>
-		/// <returns></returns>
-		public async Task<NewState> EvolveAsync(Entity currentState, int generation)
-		{
-			return await Task.Run( () =>
-			{
-				EntityRandom random = new EntityRandom(currentState,generation);
-				NewState newState = new NewState(currentState);
-				Evolve(ref newState, currentState, generation, random);
-				return newState;
-			});
-		}
-
-		/// <summary>
-		/// Evolves the local state, potentially generating some modifications to the base entity.
-		/// The method must not change any local variables relevant to evolution. All entity modifications are limited to changes in.
-		/// Evolution must be deterministic.
-		/// <paramref name="newState"/>.
-		/// </summary>
-		/// <param name="newState">Modifications go here</param>
-		/// <param name="currentState">Current entity state</param>
-		/// <param name="generation">Evolution generation index, starting from 0</param>
-		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource);
-	}
 		
 
 	[Serializable]
@@ -546,30 +414,26 @@ namespace Shard
 					var newID = ID.Relocate(dest);
 					outChangeSet.Add(new EntityChange.Motion(this, newState.newLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
-					if (newState.instantiations != null)
-						foreach (var inst in newState.instantiations)
-							outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic));
-					if (newState.removals != null)
-						foreach (var rem in newState.removals)
-						{
-							if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
-								outChangeSet.Add(new EntityChange.Removal(newID, rem));
-						}
+					foreach (var inst in newState.instantiations)
+						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic));
+					foreach (var rem in newState.removals)
+					{
+						if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
+							outChangeSet.Add(new EntityChange.Removal(newID, rem));
+					}
 					int messageID = 0;
-					if (newState.messages != null)
-						foreach (var m in newState.messages)
+					foreach (var m in newState.messages)
+					{
+						if (m.IsDirectedToClient)
 						{
-							if (m.IsDirectedToClient)
-							{
-								if (maySendMessages)
-									InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data,roundNumber);
-							}
-							else
-								outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
+							if (maySendMessages)
+								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data,roundNumber);
 						}
-					if (newState.broadcasts != null)
-						foreach (var b in newState.broadcasts)
-							outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
+						else
+							outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
+					}
+					foreach (var b in newState.broadcasts)
+						outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
 				}
 				catch
 				{

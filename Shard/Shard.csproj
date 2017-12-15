@@ -157,6 +157,7 @@
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
     <Compile Include="Entity\ClientMessageQueue.cs" />
+    <Compile Include="Entity\EntityLogic.cs" />
     <Compile Include="Entity\InteractionLink.cs" />
     <Compile Include="Entity\Entity.cs" />
     <Compile Include="Entity\EntityChange.cs" />
@@ -165,6 +166,7 @@
     <Compile Include="Entity\EntityPool.cs" />
     <Compile Include="Entity\CSLogicProvider.cs" />
     <Compile Include="Entity\EntityRandom.cs" />
+    <Compile Include="LazyList.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="InconsistencyCoverage.cs" />

@@ -105,16 +105,15 @@ namespace Shard
 				if (!(newState.newLogic is DynamicCSLogic))
 					newState.newLogic = new DynamicCSLogic(provider, newState.newLogic);
 
-				if (newState.instantiations != null)
-					for (int i = 0; i < newState.instantiations.Count; i++)
+				for (int i = 0; i < newState.instantiations.Count; i++)
+				{
+					var inst = newState.instantiations[i];
+					if (inst.logic != null && !(inst.logic is DynamicCSLogic))
 					{
-						var inst = newState.instantiations[i];
-						if (inst.logic != null && !(inst.logic is DynamicCSLogic))
-						{
-							inst.logic = new DynamicCSLogic(provider, inst.logic);
-							newState.instantiations[i] = inst;
-						}
+						inst.logic = new DynamicCSLogic(provider, inst.logic);
+						newState.instantiations[i] = inst;
 					}
+				}
 			}
 			catch (ExecutionException ex)
 			{
