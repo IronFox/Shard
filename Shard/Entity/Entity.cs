@@ -399,23 +399,136 @@ namespace Shard
 			return "Entity " + ID;
 		}
 
-		public async Task EvolveAsync(EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
+		public class TimeTrace
 		{
-			if (LogicState != null)
+			private Stopwatch watch;
+
+
+			private TimeSpan begin, 
+							deserialize, 
+							evolve, 
+							reserialize,
+							end;
+
+			public TimeTrace(Stopwatch watch)
+			{
+				this.watch = watch;
+			}
+
+			public void Begin()
+			{
+				begin = watch.Elapsed;
+			}
+
+			public void SignalDeserializationDone()
+			{
+				deserialize = watch.Elapsed;
+			}
+			public void SignalEvolutionDone()
+			{
+				evolve = watch.Elapsed;
+			}
+			public void SignalReserializationDone()
+			{
+				reserialize = watch.Elapsed;
+			}
+
+			public void End()
+			{
+				end = watch.Elapsed;
+			}
+
+			public override string ToString()
+			{
+				return 
+						begin.TotalMilliseconds+" ms"
+						+ "->Des.: "+(deserialize-begin).NotNegative().TotalMilliseconds + " ms"
+						+ "->Ev.: " + (evolve - deserialize - begin).NotNegative().TotalMilliseconds + " ms"
+						+ "->Res.: " + (reserialize - evolve - deserialize - begin).NotNegative().TotalMilliseconds + " ms"
+						+ "->End: " + (end - reserialize - evolve - deserialize - begin).NotNegative().TotalMilliseconds + " ms";
+			}
+		};
+
+		public void Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
+		{
+			evolutionState.Begin();
+			if (Helper.Length(SerialLogicState) > 0)
 			{
 				try
 				{
-					var state = LogicState;
+					var state = Helper.Deserialize(SerialLogicState) as EntityLogic;
+					evolutionState.SignalDeserializationDone();
+					if (state == null)
+						throw new ExecutionException(ID, "Unable to deserialize logic");
 
 
-					var newState = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
+					var newState = new EntityLogic.NewState(this);
+					state.Evolve(ref newState,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
+					evolutionState.SignalEvolutionDone();
+
+					byte[] serialLogic = Helper.SerializeToArray(state);
+					evolutionState.SignalReserializationDone();
 
 					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
 					var newID = ID.Relocate(dest);
-					outChangeSet.Add(new EntityChange.Motion(this, newState.newLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChange.Motion(this, serialLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
 					foreach (var inst in newState.instantiations)
-						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic));
+						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
+					foreach (var rem in newState.removals)
+					{
+						if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
+							outChangeSet.Add(new EntityChange.Removal(newID, rem));
+					}
+					int messageID = 0;
+					foreach (var m in newState.messages)
+					{
+						if (m.IsDirectedToClient)
+						{
+							if (maySendMessages)
+								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data, roundNumber);
+						}
+						else
+							outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
+					}
+					foreach (var b in newState.broadcasts)
+						outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
+				}
+				catch
+				{
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID, Appearances, Vec3.Zero)));
+					throw;
+				}
+			}
+			evolutionState.End();
+
+		}
+
+		public async Task EvolveAsync(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
+		{
+			evolutionState.Begin();
+			if (Helper.Length(SerialLogicState) > 0)
+			{
+				try
+				{
+					var state = Helper.Deserialize(SerialLogicState) as EntityLogic;
+					evolutionState.SignalDeserializationDone();
+					if (state == null)
+						throw new ExecutionException(ID,"Unable to deserialize logic");
+
+
+					var newState = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
+					evolutionState.SignalEvolutionDone();
+
+					byte[] serialLogic = Helper.SerializeToArray(state);
+					evolutionState.SignalReserializationDone();
+
+					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
+					var newID = ID.Relocate(dest);
+					outChangeSet.Add(new EntityChange.Motion(this, serialLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
+					foreach (var inst in newState.instantiations)
+						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
 					foreach (var rem in newState.removals)
 					{
 						if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
@@ -441,6 +554,7 @@ namespace Shard
 					throw;
 				}
 			}
+			evolutionState.End();
 		}
 
 
@@ -449,12 +563,12 @@ namespace Shard
 			if (messages == null || messages.Count == 0)
 				return this;
 			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
-			return new Entity(ID, LogicState, Appearances, newMessages, Contacts);
+			return new Entity(ID, SerialLogicState, Appearances, newMessages, Contacts);
 		}
 
 		public readonly EntityID ID;
 		public readonly EntityAppearanceCollection Appearances;
-		public readonly EntityLogic LogicState;
+		public readonly byte[] SerialLogicState;
 		public readonly EntityMessage[] InboundMessages;
 		public readonly EntityContact[] Contacts;
 
@@ -466,15 +580,17 @@ namespace Shard
 			return null;
 		}
 
-
-		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance= null) : this(id, state, appearance, null, null)
+		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, Helper.SerializeToArray(state), appearance, null, null)
 		{ }
-		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts)
+
+		public Entity(EntityID id, byte[] state, EntityAppearanceCollection appearance= null) : this(id, state, appearance, null, null)
+		{ }
+		public Entity(EntityID id, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) : this()
 		{
 			if (!Simulation.FullSimulationSpace.Contains(id.Position))
 				throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
-			LogicState = state;
+			SerialLogicState = state;
 			Appearances = appearance;
 
 			InboundMessages = messages;
@@ -485,7 +601,7 @@ namespace Shard
 
 		internal Entity SetIncoming(EntityMessage[] messages, EntityContact[] contacts)
 		{
-			return new Entity(ID, LogicState, Appearances, messages, contacts);
+			return new Entity(ID, SerialLogicState, Appearances, messages, contacts);
 		}
 
 		public int CompareTo(Entity other)
@@ -499,11 +615,7 @@ namespace Shard
 
 		public static Entity[] Import(byte[] entities)
 		{
-			var f = new BinaryFormatter();
-			using (var ms = new MemoryStream(entities))
-			{
-				return (Entity[])f.Deserialize(ms);
-			}
+			return (Entity[])Helper.Deserialize(entities);
 		}
 
 		public static byte[] Export(Entity[] entities)
@@ -526,7 +638,7 @@ namespace Shard
 			var other = (Entity)obj;
 			return ID == other.ID &&
 				   Equals(Appearances, other.Appearances) &&
-				   Equals(LogicState, other.LogicState) &&
+				   Helper.AreEqual(SerialLogicState, other.SerialLogicState) &&
 				   Helper.AreEqual(InboundMessages, other.InboundMessages) &&
 				   Helper.AreEqual(Contacts, other.Contacts);
 		}
@@ -536,7 +648,7 @@ namespace Shard
 			return Helper.Hash(this)
 				.Add(ID)
 				.Add(Appearances)
-				.Add(LogicState)
+				.Add(SerialLogicState)
 				.Add(InboundMessages)
 				.Add(Contacts)
 				.GetHashCode();

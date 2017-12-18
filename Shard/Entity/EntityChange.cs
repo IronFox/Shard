@@ -83,12 +83,12 @@ namespace Shard.EntityChange
 	{
 		public readonly Vec3 TargetLocation;
 		public readonly EntityAppearanceCollection Appearances;
-		public readonly EntityLogic Logic;
+		public readonly byte[] SerialLogic;
 
-		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic) : base(origin)
+		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, byte[] serialLogic) : base(origin)
 		{
 			TargetLocation = targetLocation;
-			Logic = logic;
+			SerialLogic = serialLogic;
 			Appearances = appearance;
 		}
 
@@ -98,7 +98,7 @@ namespace Shard.EntityChange
 				.Add(Origin)
 				.Add(TargetLocation)
 				.Add(Appearances)
-				.Add(Logic)
+				.Add(SerialLogic)
 				.GetHashCode();
 		}
 
@@ -122,7 +122,7 @@ namespace Shard.EntityChange
 		{
 			if (!Simulation.CheckDistance("Insert", Origin.Position, TargetLocation, Simulation.M))
 				return false;
-			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Logic, Appearances));
+			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), SerialLogic, Appearances));
 		}
 
 		public override bool Affects(Box cube)
@@ -134,10 +134,10 @@ namespace Shard.EntityChange
 	[Serializable]
 	public class Motion : Instantiation
 	{
-		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic) : base(origin, targetLocation, appearance, logic)
+		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, byte[] serialLogic) : base(origin, targetLocation, appearance, serialLogic)
 		{ }
 
-		public Motion(Entity e, EntityLogic newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
+		public Motion(Entity e, byte[] newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
 		{ }
 
 
@@ -145,7 +145,7 @@ namespace Shard.EntityChange
 		{
 			get
 			{
-				return new Entity(Origin.Relocate(TargetLocation), Logic, Appearances, null, null);
+				return new Entity(Origin.Relocate(TargetLocation), SerialLogic, Appearances, null, null);
 			}
 		}
 

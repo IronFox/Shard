@@ -20,7 +20,7 @@ namespace Shard.Tests
 				[Serializable]
 				public class TestLogic : Shard.EntityLogic {
 				
-				readonly int counter = 0;
+				int counter = 0;
 				public TestLogic()	{}
 				private TestLogic(int counter)
 				{
@@ -28,36 +28,37 @@ namespace Shard.Tests
 				}
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{
-					newState.newLogic = new TestLogic(counter+1);
+					counter++;
 				}
 			};
 		";
 
-		const string disallowedField =
+		const string disallowedStructNotSerializable =
 		@"	using Shard;
 			using System;
 			[Serializable]
 			public class TestLogic : Shard.EntityLogic {
-				int someField = 3;
+				struct MyStruct
+				{
+					int i;
+				}
+				MyStruct m;
 				
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
 			};
 		";
 
-		const string disallowedProperty =
+		const string disallowedLogicNotSerializable =
 		@"	using Shard;
 			using System;
-			[Serializable]
 			public class TestLogic : Shard.EntityLogic {
-				public int SomeProperty{get;set;}	//generates a hidden field due to set
-				
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
 			};
 		";
 
-		const string disallowedNested =
+		const string disallowedClassNotSerializable =
 		@"	using Shard;
 			using System;
 			[Serializable]
@@ -83,13 +84,14 @@ namespace Shard.Tests
 			public class TestLogic : Shard.EntityLogic {
 
 				public int SomeProperty{get {return 13;}}
-				public readonly int SomeField = 12;
+				public int SomeField = 12;
 
+				[Serializable]
 				struct NestedStruct
 				{
 					public int testInt;
 				}
-				readonly NestedStruct test = new NestedStruct() {testInt = 42};
+				NestedStruct test = new NestedStruct() {testInt = 42};
 				
 				public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 				{}
@@ -126,25 +128,25 @@ namespace Shard.Tests
 		{
 			try
 			{
-				CSLogicProvider factory0 = new CSLogicProvider("DisallowedA", disallowedField);
-				Assert.Fail("The specified code has a non-readonly field. Should have triggered an exception");
+				CSLogicProvider factory0 = new CSLogicProvider("DisallowedA", disallowedStructNotSerializable);
+				Assert.Fail("The specified code has a non-serializable struct field. Should have triggered an exception");
 			}
-			catch (CSLogicProvider.InvarianceViolation)
+			catch (CSLogicProvider.SerializationException)
 			{ }
 			try
 			{
-				CSLogicProvider factory1 = new CSLogicProvider("DisallowedB", disallowedProperty);
-				Assert.Fail("The specified code has properties with set method. Should have triggered an exception");
+				CSLogicProvider factory1 = new CSLogicProvider("DisallowedB", disallowedLogicNotSerializable);
+				Assert.Fail("The specified code has a non-serializable logic. Should have triggered an exception");
 			}
-			catch (CSLogicProvider.InvarianceViolation)
+			catch (CSLogicProvider.SerializationException)
 			{ }
 
 			try
 			{
-				CSLogicProvider factory1 = new CSLogicProvider("DisallowedNested", disallowedNested);
-				Assert.Fail("The specified code has nested types with modifiable fields. Should have triggered an exception");
+				CSLogicProvider factory1 = new CSLogicProvider("DisallowedNested", disallowedClassNotSerializable);
+				Assert.Fail("The specified code has a non-serializable class field. Should have triggered an exception");
 			}
-			catch (CSLogicProvider.InvarianceViolation)
+			catch (CSLogicProvider.SerializationException)
 			{ }
 
 			CSLogicProvider factory2 = new CSLogicProvider("Allowed", allowed);
@@ -166,20 +168,18 @@ namespace Shard.Tests
 			var serialLogic = Helper.SerializeToArray(logic);
 
 			var logic2 = (DynamicCSLogic)  Helper.Deserialize(serialLogic);
-			logic2.FinishLoading(1000);
+			logic2.FinishLoading(new EntityID(), TimeSpan.FromSeconds(1));
 
 
 
-			var s2 = logic2.EvolveAsync(new Entity(), 0).Result;
-			Assert.AreEqual(s2.newLogic.GetType(), typeof(DynamicCSLogic));
-			Assert.IsFalse(s2.newLogic == logic2);
+			var changes = logic2.EvolveAsync(new Entity(), 0).Result;
 
 			var serialProvider = Helper.SerializeToArray(provider);
 			var provider2 = (CSLogicProvider)Helper.Deserialize(serialProvider);
 
 			DB.LogicLoader = scriptName => Task.Run(() => provider2);
 			var logic3 = (DynamicCSLogic)Helper.Deserialize(serialLogic);
-			logic3.FinishLoading(1000);
+			logic3.FinishLoading(new EntityID(),TimeSpan.FromSeconds(1));
 
 		}
 
@@ -220,8 +220,8 @@ namespace Shard.Tests
 			for (int i = 0; i < NumIterations; i++)
 			{
 				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, null,TimeSpan.FromMilliseconds(10));
-				ComputationTests.AssertNoErrors(comp);
+				SDS.Computation comp = new SDS.Computation(i + 1, null,TimeSpan.FromMilliseconds(1));
+				ComputationTests.AssertNoErrors(comp,i.ToString());
 				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);
 				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i+1,2));	//can never be more than 2
@@ -234,7 +234,10 @@ namespace Shard.Tests
 			}
 			Assert.AreEqual(1, stack.Size);
 			foreach (var e in stack.Last().FinalEntities)
-				Assert.IsTrue(e.LogicState is DynamicCSLogic, e.LogicState.GetType().ToString());
+			{
+				var st = Helper.Deserialize(e.SerialLogicState);
+				Assert.IsTrue(st is DynamicCSLogic, st.GetType().ToString());
+			}
 		}
 
 
@@ -320,7 +323,7 @@ namespace Shard.Tests
 			{
 				SDS temp = stack.AllocateGeneration(i + 1);
 				SDS.Computation comp = new SDS.Computation(i + 1, null,TimeSpan.FromMilliseconds(100));
-				ComputationTests.AssertNoErrors(comp);
+				ComputationTests.AssertNoErrors(comp, i.ToString());
 				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);
 				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i + 1, 2));  //can never be more than 2
@@ -333,7 +336,10 @@ namespace Shard.Tests
 			}
 			Assert.AreEqual(1, stack.Size);
 			foreach (var e in stack.Last().FinalEntities)
-				Assert.IsTrue(e.LogicState is DynamicCSLogic, e.LogicState.GetType().ToString());
+			{
+				var st = Helper.Deserialize(e.SerialLogicState);
+				Assert.IsTrue(st is DynamicCSLogic, st.GetType().ToString());
+			}
 		}
 
 

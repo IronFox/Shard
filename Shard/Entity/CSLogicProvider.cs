@@ -26,6 +26,13 @@ namespace Shard
 			public readonly byte[] SerialData;
 			public readonly object[] ConstructorParameters;
 
+			public override string ToString()
+			{
+				if (SerialData != null)
+					return provider != null ? provider.DeserializeLogic(SerialData).ToString() : AssemblyName + " [" + SerialData.Length + "]";
+				return "new " + AssemblyName + "." + LogicName;
+			}
+
 			public Constructor(string assemblyName, byte[] data)
 			{
 				AssemblyName = assemblyName;
@@ -47,7 +54,7 @@ namespace Shard
 						if (p != null)
 						{
 							if (!p.GetType().IsSerializable)
-								throw new ExecutionException("Construction of "+assemblyName+"."+logicName+": Parameter #"+at+", type '"+p.GetType()+"' is not serializable");
+								throw new IntegrityViolation("Construction of "+assemblyName+"."+logicName+": Parameter #"+at+", type '"+p.GetType()+"' is not serializable");
 						}
 						at++;
 					}
@@ -61,10 +68,10 @@ namespace Shard
 				instance = SerialData != null ? provider.DeserializeLogic(SerialData) : provider.Instantiate(LogicName, ConstructorParameters);
 			}
 
-			public void Finish(DynamicCSLogic target, int timeoutMS)
+			public void Finish(DynamicCSLogic target, EntityID parent, TimeSpan timeout)
 			{
-				if (!task.Wait(timeoutMS))
-					throw new ExecutionException(AssemblyName+": Failed to load/deserialize in time");
+				if (!task.Wait(timeout))
+					throw new ExecutionException(parent, AssemblyName+": Failed to load/deserialize in "+timeout);
 				target.provider = provider;
 				target.nestedLogic = instance;
 			}
@@ -86,11 +93,11 @@ namespace Shard
 			this.provider = provider;
 		}
 
-		public void FinishLoading(int timeoutMS)
+		public void FinishLoading(EntityID parent, TimeSpan timeout)
 		{
 			if (nestedLogic == null)
 			{
-				constructor.Finish(this, timeoutMS);
+				constructor.Finish(this, parent, timeout);
 				constructor = null;
 			}
 		}
@@ -99,11 +106,8 @@ namespace Shard
 		{
 			try
 			{
-				FinishLoading(1);
-				newState.newLogic = nestedLogic;
+				FinishLoading(currentState.ID,TimeSpan.FromMilliseconds(1));
 				nestedLogic.Evolve(ref newState, currentState, generation, randomSource);
-				if (!(newState.newLogic is DynamicCSLogic))
-					newState.newLogic = new DynamicCSLogic(provider, newState.newLogic);
 
 				for (int i = 0; i < newState.instantiations.Count; i++)
 				{
@@ -117,7 +121,7 @@ namespace Shard
 			}
 			catch (ExecutionException ex)
 			{
-				throw new ExecutionException(provider.AssemblyName + "." + nestedLogic.GetType() + ": " + ex.Message, ex);
+				throw new ExecutionException(currentState.ID, provider.AssemblyName + "." + nestedLogic.GetType() + ": " + ex.Message, ex);
 			}
 		}
 
@@ -156,6 +160,11 @@ namespace Shard
 		public DynamicCSLogic(string assemblyName, string logicName, object[] constructorParameters)
 		{
 			constructor = new Constructor(assemblyName, logicName, constructorParameters);
+		}
+
+		public override string ToString()
+		{
+			return "Dynamic CS: " + (constructor != null ? constructor.ToString() : nestedLogic.ToString());
 		}
 
 	}
@@ -207,7 +216,7 @@ namespace Shard
 						types.Add("null");
 				string parameters = string.Join(",", types);
 
-				throw new ExecutionException("Unable to find appropritate constructor for logic " + AssemblyName + "." + logicName+"("+parameters+")");
+				throw new IntegrityViolation("Unable to find appropritate constructor for logic " + AssemblyName + "." + logicName+"("+parameters+")");
 			}
 			return rs;
 		}
@@ -321,7 +330,7 @@ namespace Shard
 					var c = type.GetConstructor(Type.EmptyTypes);
 					if (c == null || !c.IsPublic)
 					{
-						throw new LogicCompositionException(AssemblyName + ": Type '" + type + "' is entity logic, but has no public constructor with no arguments");
+						throw new LogicCompositionException(this, "Type '" + type + "' is entity logic, but has no public constructor with no arguments");
 						//continue;
 					}
 					CheckType(checkedTypes, type, type.Name,true);
@@ -330,7 +339,7 @@ namespace Shard
 				}
 			}
 			if (types.Count == 0)
-				throw new LogicCompositionException(AssemblyName + ": Failed to find any entity logic in assembly");
+				throw new LogicCompositionException(this, "Failed to find any entity logic in assembly");
 		}
 
 		private void CheckType(HashSet<Type> checkedTypes, Type type, string path, bool requireSerializable)
@@ -339,7 +348,7 @@ namespace Shard
 				return;
 			checkedTypes.Add(type);
 			if (requireSerializable && !type.IsSerializable)
-				throw new InvarianceViolation(AssemblyName + ": Type '" + path + "' is entity logic or member, but not serializable");
+				throw new SerializationException(this,"Type '" + path + "' is entity logic or member, but not serializable");
 			if (requireSerializable && type.GetInterfaces().Contains(typeof(ISerializable)))
 				requireSerializable = false;
 
@@ -347,10 +356,10 @@ namespace Shard
 			foreach (var f in fields)
 			{
 				string subPath = path + "." + f.Name;// + "(" + f.FieldType + ")";
-				if (!f.IsInitOnly)
-					throw new InvarianceViolation(AssemblyName + ": Field '" + subPath + "' must be declared readonly");
+				//if (!f.IsInitOnly)
+					//throw new InvarianceViolation(AssemblyName + ": Field '" + subPath + "' must be declared readonly");
 				Type sub = f.FieldType;
-				if (sub.IsClass)
+				//if (sub.IsClass || sub.IsStr)
 					CheckType(checkedTypes, sub, subPath, requireSerializable);
 			}
 		}
@@ -399,11 +408,18 @@ namespace Shard
 
 		public class LogicCompositionException : Exception
 		{
-			public LogicCompositionException(string message) : base(message){}
+			private readonly CSLogicProvider provider;
+			public LogicCompositionException(CSLogicProvider provider, string message) : base(message){ this.provider = provider; }
+
+			public override string Message => provider.AssemblyName + ": "+ base.Message;
 		}
-		public class InvarianceViolation : Exception
+
+		public class SerializationException : LogicCompositionException
 		{
-			public InvarianceViolation(string message) : base(message) { }
+
+			public SerializationException(CSLogicProvider provider, string message) : base(provider,message)
+			{
+			}
 		}
 	}
 }

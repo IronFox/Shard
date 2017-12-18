@@ -66,67 +66,62 @@ namespace Shard.Tests
 			}
 		}
 
-		[Serializable]
-		class PongLogic : EntityLogic
-		{
-			readonly PingPacket packet;
-			public int CounterState { get { return packet != null ? packet.Counter : -1; } }
-
-			public PongLogic(PingPacket data)
-			{
-				this.packet = data;
-			}
-
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
-			{
-				PingPacket data = null;
-				if (currentState.InboundMessages != null)
-					foreach (var m in currentState.InboundMessages)
-					{
-						if (m.Sender == currentState.ID)
-							continue;
-						data = Helper.Deserialize(m.Payload) as PingPacket;
-						if (data != null)
-							break;
-					}
-				if (data == null)
-					return;
-				newState.Broadcast(Helper.SerializeToArray(data.Increment()));
-				newState.newLogic = new PongLogic(data);
-			}
-		}
-
-
+		
 		[Serializable]
 		class PingLogic : EntityLogic
 		{
-			readonly PingPacket p;
+			PingPacket p;
+			bool amPong = false;
 
 			public int CounterState { get { return p.Counter; } }
 
-			public PingLogic(PingPacket packet)
+			public PingLogic(PingPacket packet, bool amPong)
 			{
 				p = packet;
+				this.amPong = amPong;
 			}
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
-				newState.Broadcast(Helper.SerializeToArray(p.Increment()));
-				newState.newLogic = new PongLogic(p.Increment());
+				if (!amPong)
+				{
+					newState.Broadcast(Helper.SerializeToArray(p.Increment()));
+					amPong = true;
+
+					p = p.Increment();
+				}
+				else
+				{
+					PingPacket data = null;
+					if (currentState.InboundMessages != null)
+						foreach (var m in currentState.InboundMessages)
+						{
+							if (m.Sender == currentState.ID)
+								continue;
+							data = Helper.Deserialize(m.Payload) as PingPacket;
+							if (data != null)
+								break;
+						}
+					if (data == null)
+						return;
+					newState.Broadcast(Helper.SerializeToArray(data.Increment()));
+					p = data;
+
+				}
 			}
 		}
 
 
-		public static void AssertNoErrors(SDS.Computation comp)
+		public static void AssertNoErrors(SDS.Computation comp, string task)
 		{
 			var errors = comp.Errors;
 			if (errors == null)
 				return;
 
-			Exception ex = errors[0];
-			while (ex.InnerException != null && !(ex is ExecutionException))
-				ex = ex.InnerException;
+			//Exception ex = errors[0];
+			//while (ex.InnerException != null && !(ex is ExecutionException))
+			//	ex = ex.InnerException;
 
-			Assert.Fail(ex.ToString());
+			Assert.Fail(task+": "+errors[0].ToString());
 		}
 
 
@@ -142,12 +137,12 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
-						new PingLogic(new PingPacket(0)),	//check that this doesn't actually cause a fault (should get clamped)
+						new PingLogic(new PingPacket(0),false),	//check that this doesn't actually cause a fault (should get clamped)
 						null),
 
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center + new Vec3(Simulation.R)),
-						new PongLogic(null),
+						new PingLogic(new PingPacket(0),true),
 						//new EntityTest.FaultLogic.State(),
 						null),
 				}
@@ -171,7 +166,7 @@ namespace Shard.Tests
 				Assert.AreEqual(temp.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));
 				SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
-				AssertNoErrors(comp);
+				AssertNoErrors(comp,i.ToString());
 				Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
 				Assert.IsTrue(comp.Intermediate.inputConsistent);
@@ -188,9 +183,10 @@ namespace Shard.Tests
 			int sum = 0;
 			foreach (var e in stack.Last().FinalEntities)
 			{
-				if (e.LogicState is PongLogic)
+				var state = Helper.Deserialize(e.SerialLogicState) as PingLogic;
+				if (state != null)
 				{
-					int cs = ((PongLogic)e.LogicState).CounterState;
+					int cs = state.CounterState;
 					Assert.IsTrue(cs == NumIterations-2 || cs == NumIterations-1, cs.ToString());
 					sum += cs;	//one should be at counter 8, one at 9
 				}
@@ -268,7 +264,7 @@ namespace Shard.Tests
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
 			SDS.Computation comp = new SDS.Computation(1,null, TimeSpan.FromMilliseconds(10));
-			AssertNoErrors(comp);
+			AssertNoErrors(comp, "comp");
 			Assert.AreEqual(comp.Intermediate.entities.Count, 3);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
 			Assert.IsTrue(comp.Intermediate.inputConsistent);
@@ -369,7 +365,7 @@ namespace Shard.Tests
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
 			SDS.Computation comp = new SDS.Computation(1, null,TimeSpan.FromMilliseconds(10));
-			AssertNoErrors(comp);
+			AssertNoErrors(comp, "comp");
 			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
 			Assert.IsTrue(comp.Intermediate.inputConsistent);

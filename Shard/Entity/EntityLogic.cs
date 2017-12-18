@@ -35,13 +35,11 @@ namespace Shard
 			public LazyList<Message> messages;
 			public LazyList<Instantiation> instantiations;
 			public LazyList<EntityID> removals;
-			public EntityLogic newLogic;
 			public EntityAppearanceCollection newAppearances;
 
 			public NewState(Entity source) : this()
 			{
 				newPosition = source.ID.Position;
-				newLogic = source.LogicState;
 				newAppearances = source.Appearances?.Duplicate();
 			}
 

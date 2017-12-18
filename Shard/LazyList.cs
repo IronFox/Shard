@@ -45,6 +45,8 @@ namespace Shard
 
 		public int Count { get { return internalList != null ? internalList.Count : 0; } }
 
+		public List<T> InternalList { get { return internalList;  } }
+
 		public IEnumerator<T> GetEnumerator()
 		{
 			if (internalList != null)

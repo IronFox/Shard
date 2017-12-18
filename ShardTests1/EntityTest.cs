@@ -37,6 +37,7 @@ namespace ShardTests1
 
 
 
+		[Serializable]
 		private class ConsistentLogic : EntityLogic
 		{
 			public static bool IsConsistent(EntityAppearanceCollection app)
@@ -97,7 +98,7 @@ namespace ShardTests1
 			}
 		}
 
-
+		[Serializable]
 		public class RandomMotion : EntityLogic
 		{
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
@@ -116,6 +117,7 @@ namespace ShardTests1
 			}
 		}
 
+		[Serializable]
 		public class FaultLogic : EntityLogic
 		{
 			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
@@ -123,8 +125,9 @@ namespace ShardTests1
 				throw new NotImplementedException();
 			}
 		}
-		
 
+
+		[Serializable]
 		private class RandomLogic
 		{
 			private Type[] logics;
@@ -181,11 +184,13 @@ namespace ShardTests1
 				int faultyCount = 0;
 				Entity faulty = new Entity();
 				foreach (var e in pool.ToArray())
-					if (e.LogicState is FaultLogic)
+				{
+					if (Helper.Deserialize(e.SerialLogicState) is FaultLogic)
 					{
 						faultyCount++;
 						faulty = e;
 					}
+				}
 				Assert.AreEqual(faultyCount, 1);
 
 				bool doGrow = k % 2 != 0;
@@ -207,7 +212,7 @@ namespace ShardTests1
 					bool hasFaulty = false;
 					foreach (var e in entities)
 					{
-						bool isFaultOrigin = (e.LogicState is FaultLogic);
+						bool isFaultOrigin = (Helper.Deserialize(e.SerialLogicState) is FaultLogic);
 						if (isFaultOrigin)
 						{
 							faulty = e;
@@ -219,7 +224,7 @@ namespace ShardTests1
 
 					foreach (var e in entities)
 					{
-						bool isFaultOrigin = (e.LogicState is FaultLogic);
+						bool isFaultOrigin = (Helper.Deserialize(e.SerialLogicState) is FaultLogic);
 						if (!isFaultOrigin)
 						{
 							if (Simulation.GetDistance(e.ID.Position, faulty.ID.Position) <= Simulation.SensorRange)

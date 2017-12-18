@@ -153,7 +153,7 @@ namespace Shard
 			using (MemoryStream ms = new MemoryStream(serial))
 			{
 
-				return f.Deserialize(ms);
+				return f.UnsafeDeserialize(ms,null);
 			}
 		}
 
@@ -182,12 +182,14 @@ namespace Shard
 			f.Binder = new AssemblyBinder(context, ignoreAssemblyName);
 			using (MemoryStream ms = new MemoryStream(serial))
 			{
-				return f.Deserialize(ms);
+				return f.UnsafeDeserialize(ms, null);
 			}
 		}
 
 		public static MemoryStream Serialize(object obj)
 		{
+			if (obj == null)
+				return null;
 			var f = new BinaryFormatter();
 			var ms = new MemoryStream();
 			f.Serialize(ms, obj);
@@ -197,7 +199,11 @@ namespace Shard
 		public static byte[] SerializeToArray(object obj)
 		{
 			using (var ms = Serialize(obj))
+			{
+				if (ms == null)
+					return null;
 				return ms.ToArray();
+			}
 		}
 
 		internal class Comparator
@@ -346,6 +352,18 @@ namespace Shard
 			public HashCombiner Add<T>(T obj)
 			{
 				return Add(obj.GetHashCode());
+			}
+			public HashCombiner Add<T>(T[] array)
+			{
+				foreach (var item in array)
+					Add(item);
+				return this;
+			}
+			public HashCombiner Add<T>(IEnumerable<T> ar)
+			{
+				foreach (var item in ar)
+					Add(item);
+				return this;
 			}
 
 			public override int GetHashCode()

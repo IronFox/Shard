@@ -46,7 +46,7 @@ namespace Shard.Tests
 			return new Instantiation(id, inst, RandomAppearance(), RandomLogic());
 		}
 
-		private static EntityLogic RandomLogic()
+		private static byte[] RandomLogic()
 		{
 			return null;	//for now
 		}

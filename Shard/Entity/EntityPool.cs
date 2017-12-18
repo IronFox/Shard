@@ -164,7 +164,7 @@ namespace Shard
 		/// <param name="set"></param>
 		public List<EntityEvolutionException> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, bool maySendMessages, TimeSpan budget)
 		{
-			return set.Evolve(EnumerateEntities(), null,ic, roundNumber, maySendMessages,budget);
+			return set.Evolve(EnumerateEntities().ToList(), null,ic, roundNumber, maySendMessages,budget);
 		}
 
 		public IEnumerable<Entity> EnumerateEntities()
@@ -347,23 +347,16 @@ namespace Shard
 		}
 	}
 
-	[Serializable]
 	public class ExecutionException : Exception
 	{
-		public ExecutionException()
+		public readonly EntityID EntityID;
+		public ExecutionException(EntityID eID, string message, Exception nested=null):base(message,nested)
 		{
+			EntityID = eID;
 		}
 
-		public ExecutionException(string message) : base(message)
-		{
-		}
 
-		public ExecutionException(string message, Exception innerException) : base(message, innerException)
-		{
-		}
+		public override string Message => EntityID+": "+ base.Message;
 
-		protected ExecutionException(SerializationInfo info, StreamingContext context) : base(info, context)
-		{
-		}
 	}
 }

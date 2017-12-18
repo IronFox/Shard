@@ -266,7 +266,7 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public List<EntityEvolutionException> Evolve(IEnumerable<Entity> entities,
+		public List<EntityEvolutionException> Evolve(IReadOnlyList<Entity> entities,
 			Dictionary<Guid, EntityMessage[]> clientMessages,
 			InconsistencyCoverage ic, 
 			int roundNumber, 
@@ -276,11 +276,53 @@ namespace Shard
 			int numErrors = 0;
 
 			List<Task> tasks = new List<Task>();
+			List<Entity.TimeTrace> tables = new List<Entity.TimeTrace>();
 
 			EntityMessage[] clientBroadcasts = null;
 			if (clientMessages != null)
 				clientMessages.TryGetValue(Guid.Empty, out clientBroadcasts);
+			Stopwatch watch0 = new Stopwatch();
 
+			object lazyLock = new object();
+			bool exceeded = false;
+			LazyList<EntityEvolutionException> rs = new LazyList<EntityEvolutionException>();
+			Parallel.For(0, entities.Count, i =>
+			{
+				Entity e = entities[i];
+				EntityMessage[] messages = null;
+				if (clientMessages != null)
+				{
+					clientMessages.TryGetValue(e.ID.Guid, out messages);
+				}
+				var t = new Entity.TimeTrace(watch0);
+
+				//tables.Add(t);
+
+
+				try
+				{
+					if (!exceeded)
+						e.Evolve(t, this, roundNumber, maySendMessages, Helper.Concat(clientBroadcasts, messages));
+					if (exceeded || watch0.Elapsed > budget)
+					{
+						exceeded = true;
+						throw new ExecutionException(e.ID, "Failed to execute " + (EntityLogic)Helper.Deserialize(e.SerialLogicState) + " in " + budget.TotalMilliseconds + " ms");
+					}
+				}
+				catch (Exception ex)
+				{
+					lock (lazyLock)
+					rs.Add(new EntityEvolutionException(e, ex, t));
+
+					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
+
+					Interlocked.Increment(ref numErrors);
+				}
+			});
+
+/*
+
+			watch0.Start();
 			foreach (var e in entities)
 			{
 				EntityMessage[] messages = null;
@@ -288,36 +330,37 @@ namespace Shard
 				{
 					clientMessages.TryGetValue(e.ID.Guid, out messages);
 				}
-				tasks.Add(e.EvolveAsync(this, roundNumber, maySendMessages,Helper.Concat(clientBroadcasts, messages)));
+				var t = new Entity.TimeTrace(watch0);
+				tables.Add(t);
+				tasks.Add(e.EvolveAsync(t,this, roundNumber, maySendMessages,Helper.Concat(clientBroadcasts, messages)));
 			}
 			int at = 0;
 
 			Stopwatch watch = new Stopwatch();
 			watch.Start();
 
-			List<EntityEvolutionException> rs = null;
+			LazyList<EntityEvolutionException> rs = new LazyList<EntityEvolutionException>();
 
 			foreach (var e in entities)
 			{
 				try
 				{
-					
-					if (!tasks[at].Wait( (budget - watch.Elapsed).NotNegative()))
-						throw new ExecutionException("Failed to execute " + e.LogicState+" in "+budget.TotalMilliseconds+" ms");
+					var remaining = (budget - watch.Elapsed).NotNegative();
+					if (!tasks[at].Wait( remaining))
+						throw new ExecutionException(e.ID, "Failed to execute " + (EntityLogic)Helper.Deserialize(e.SerialLogicState)+" in "+remaining.TotalMilliseconds+" ms");
 				}
 				catch (Exception ex)
 				{
-					if (rs == null)
-						rs = new List<EntityEvolutionException>();
-					rs.Add(new EntityEvolutionException(e, ex ));
+					rs.Add(new EntityEvolutionException(e, ex, tables[at]));
 
 					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
 					Interlocked.Increment(ref numErrors);
 				}
 				at++;
-			}
-			return rs;
+			}*/
+
+			return rs.InternalList;
 		}
 
 		private static ICollection<OrderedEntityMessage> Combine(ConcurrentBag<OrderedEntityMessage> a, ConcurrentBag<OrderedEntityMessage> b)

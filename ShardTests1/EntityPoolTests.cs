@@ -70,7 +70,7 @@ namespace Shard.Tests
 			for (int i = 0; i < 10; i++)
 			{
 				Entity old = entities[0];
-				Entity moved = new Entity(Relocate(old.ID), old.LogicState, old.Appearances);
+				Entity moved = new Entity(Relocate(old.ID), old.SerialLogicState, old.Appearances);
 				Assert.IsTrue(pool.Contains(old.ID));
 				Assert.IsTrue(pool.UpdateEntity(entities[0], moved),"Update moved entity "+i);
 				Assert.IsFalse(pool.Contains(old.ID));

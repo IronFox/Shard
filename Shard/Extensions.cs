@@ -262,5 +262,19 @@ namespace Shard
 			return rs;
 		}
 
+
+
+
+
+
+
+
+		public static void Write(this Stream stream, string str)
+		{
+			var ar = Encoding.ASCII.GetBytes(str);
+			stream.Write(ar, 0, ar.Length);
+		}
+
+
 	}
 }
