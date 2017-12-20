@@ -193,24 +193,21 @@ namespace Shard.EntityChange
 	[Serializable]
 	public class Broadcast : Abstract
 	{
+		public readonly int Channel;
 		public readonly byte[] Payload;
 		public readonly int SentOrderID;
 
-		public Broadcast(EntityID sender, byte[] payload, int orderID) : base(sender)
-		{
-			Payload = payload;
-			SentOrderID = orderID;
-		}
 
-		protected Broadcast(EntityID origin, int sentOrderID, byte[] payload) : base(origin)
+		public Broadcast(EntityID origin, int sentOrderID, int channel, byte[] payload) : base(origin)
 		{
+			Channel = channel;
 			SentOrderID = sentOrderID;
 			Payload = payload;
 		}
 
 		public OrderedEntityMessage MakeMessage(bool isBroadcast)
 		{
-			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), isBroadcast,Payload));
+			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), isBroadcast,Channel,Payload));
 		}
 
 		public override int CompareTo(object obj)
@@ -223,6 +220,7 @@ namespace Shard.EntityChange
 			var c = new Helper.Comparator()
 					.Append(Origin, other.Origin)
 					.Append(SentOrderID, other.SentOrderID)
+					.Append(Channel,other.Channel)
 					.Append(Payload, other.Payload);
 			return c.Finish();
 		}
@@ -232,6 +230,7 @@ namespace Shard.EntityChange
 			return Helper.Hash(this)
 					.Add(Origin)
 					.Add(SentOrderID)
+					.Add(Channel)
 					.Add(Payload)
 					.GetHashCode();
 		}
@@ -254,7 +253,7 @@ namespace Shard.EntityChange
 	{
 		public readonly Guid TargetEntityID;
 
-		public Message(EntityID origin, int sentOrderID, Guid targetEntityID, byte[] payload) : base(origin, sentOrderID, payload)
+		public Message(EntityID origin, int sentOrderID, Guid targetEntityID, int channel, byte[] payload) : base(origin, sentOrderID, channel, payload)
 		{
 			TargetEntityID = targetEntityID;
 		}

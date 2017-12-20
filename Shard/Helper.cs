@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -322,6 +323,13 @@ namespace Shard
 				yield return toString(t);
 		}
 
+
+		public static string Concat(string glue, IEnumerable<object> e)
+		{
+			if (e == null)
+				return "";
+			return string.Join(glue, e);
+		}
 		public static string Concat<T>(string glue, IEnumerable<T> e, Func<T, string> toString)
 		{
 			if (e == null)
@@ -414,6 +422,51 @@ namespace Shard
 			foreach (var it in b)
 				rs[at++] = it;
 			return rs;
+		}
+
+
+
+
+
+
+
+
+
+		public class Enumerable<T> : IEnumerable<T>
+		{
+			private Enumerable() { }
+			public static readonly Enumerable<T> Empty = new Enumerable<T>();
+
+			public class NullEnumerator : IEnumerator<T>
+			{
+
+				public T Current => throw new System.NotImplementedException();
+
+				object IEnumerator.Current => throw new System.NotImplementedException();
+
+				public void Dispose()
+				{ }
+
+				public bool MoveNext()
+				{
+					return false;
+				}
+
+				public void Reset()
+				{ }
+			}
+
+			public static readonly NullEnumerator EmptyEnumerator = new NullEnumerator();
+
+			public IEnumerator<T> GetEnumerator()
+			{
+				return EmptyEnumerator;
+			}
+
+			IEnumerator IEnumerable.GetEnumerator()
+			{
+				return EmptyEnumerator;
+			}
 		}
 	}
 }

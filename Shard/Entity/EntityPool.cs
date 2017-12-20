@@ -149,20 +149,25 @@ namespace Shard
 			return rs.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 		}
 
-		public void BroadcastMessage(Vec3 senderPosition, OrderedEntityMessage message)
+		public int BroadcastMessage(Vec3 senderPosition, OrderedEntityMessage message)
 		{
+			int counter = 0;
 			foreach (var p in fullMap)
 			{
-				if (Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
+				if (p.Key.Guid != message.Message.Sender.Guid && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
+				{
 					p.Value.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
+					counter++;
+				}
 			}
+			return counter;
 		}
 
 		/// <summary>
 		/// Evolves all local entities (in parallel), and stores changes in the specified change set
 		/// </summary>
 		/// <param name="set"></param>
-		public List<EntityEvolutionException> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, bool maySendMessages, TimeSpan budget)
+		public List<EntityError> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, bool maySendMessages, TimeSpan budget)
 		{
 			return set.Evolve(EnumerateEntities().ToList(), null,ic, roundNumber, maySendMessages,budget);
 		}

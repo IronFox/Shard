@@ -76,8 +76,14 @@ namespace Shard
 
 			public float Relativate(float v)
 			{
-				return (v - Min) / (Max - Min);
+				return (v - Min) / Size;
 			}
+
+			public float DeRelativate(float v)
+			{
+				return v * Size + Min;
+			}
+
 
 			public bool Intersects(Range other)
 			{
@@ -150,6 +156,14 @@ namespace Shard
 				X.Relativate(p.X),
 				Y.Relativate(p.Y),
 				Z.Relativate(p.Z)
+				);
+		}
+		public Vec3 DeRelativate(Vec3 p)
+		{
+			return new Vec3(
+				X.DeRelativate(p.X),
+				Y.DeRelativate(p.Y),
+				Z.DeRelativate(p.Z)
 				);
 		}
 

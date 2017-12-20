@@ -16,6 +16,10 @@ namespace Shard
 
 		public EntityRandom(Entity currentState, int generation) : this(Helper.Hash(typeof(EntityRandom)).Add(generation).Add(currentState.ID).GetHashCode())
 		{}
+		public bool NextBool(float p)
+		{
+			return NextFloat() <= p;
+		}
 
 		public bool NextBool()
 		{

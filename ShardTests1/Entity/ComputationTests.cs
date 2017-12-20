@@ -20,9 +20,9 @@ namespace Shard.Tests
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
-				newState.newPosition = currentState.ID.Position + new Vec3(Simulation.R);
+				newState.NewPosition = currentState.ID.Position + new Vec3(Simulation.R);
 			}
 		}
 		
@@ -37,16 +37,16 @@ namespace Shard.Tests
 				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
-				newState.newPosition = currentState.ID.Position + Motion;
+				newState.NewPosition = currentState.ID.Position + Motion;
 			}
 		}
 
 		[Serializable]
 		class StationaryLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{}
 		}
 
@@ -80,11 +80,11 @@ namespace Shard.Tests
 				p = packet;
 				this.amPong = amPong;
 			}
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				if (!amPong)
 				{
-					newState.Broadcast(Helper.SerializeToArray(p.Increment()));
+					newState.Broadcast(0,Helper.SerializeToArray(p.Increment()));
 					amPong = true;
 
 					p = p.Increment();
@@ -103,7 +103,7 @@ namespace Shard.Tests
 						}
 					if (data == null)
 						return;
-					newState.Broadcast(Helper.SerializeToArray(data.Increment()));
+					newState.Broadcast(0,Helper.SerializeToArray(data.Increment()));
 					p = data;
 
 				}

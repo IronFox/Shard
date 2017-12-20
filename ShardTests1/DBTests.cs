@@ -110,7 +110,7 @@ namespace Shard.Tests
 
 		public static EntityMessage RandomEntityMessage()
 		{
-			return new EntityMessage(new Actor(Guid.NewGuid(), random.NextBool()), random.NextBool(), EntityChangeSetTests.RandomByteArray(true));
+			return new EntityMessage(new Actor(Guid.NewGuid(), random.NextBool()), random.NextBool(), random.Next(3), EntityChangeSetTests.RandomByteArray(true));
 		}
 
 

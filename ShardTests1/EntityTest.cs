@@ -55,7 +55,7 @@ namespace ShardTests1
 
 			}
 
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom random)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random)
 			{
 				CheckRandom(random,"started");
 				bool isConsistent = true;
@@ -90,27 +90,27 @@ namespace ShardTests1
 				{
 					CheckRandom(random, "loop "+cnt);
 					Vec3 draw = random.NextVec3(-M, M);
-					newState.newPosition = Simulation.MySpace.Clamp(currentState.ID.Position + draw);
+					newState.NewPosition = Simulation.MySpace.Clamp(currentState.ID.Position + draw);
 					if (++cnt > 1000)
 						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + M + "->"+draw+" in " + Simulation.MySpace+"; "+random.Next()+", "+random.Next()+", "+random.Next());
 				}
-				while (newState.newPosition == currentState.ID.Position);
+				while (newState.NewPosition == currentState.ID.Position);
 			}
 		}
 
 		[Serializable]
 		public class RandomMotion : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
-				while (newState.newPosition == currentState.ID.Position)
+				while (newState.NewPosition == currentState.ID.Position)
 				{
-					newState.newPosition = currentState.ID.Position + randomSource.NextVec3(-Simulation.M, Simulation.M);
-					if (!Simulation.CheckDistance("Motion", newState.newPosition, currentState, Simulation.M))
+					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-Simulation.M, Simulation.M);
+					if (!Simulation.CheckDistance("Motion", newState.NewPosition, currentState, Simulation.M))
 						throw new Exception("WTF");
 
-					newState.newPosition = Simulation.FullSimulationSpace.Clamp(newState.newPosition);
-					if (!Simulation.CheckDistance("Motion", newState.newPosition, currentState, Simulation.M))
+					newState.NewPosition = Simulation.FullSimulationSpace.Clamp(newState.NewPosition);
+					if (!Simulation.CheckDistance("Motion", newState.NewPosition, currentState, Simulation.M))
 						throw new Exception("WTF2");
 
 				}
@@ -120,7 +120,7 @@ namespace ShardTests1
 		[Serializable]
 		public class FaultLogic : EntityLogic
 		{
-			public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				throw new NotImplementedException();
 			}
@@ -198,7 +198,7 @@ namespace ShardTests1
 				{
 					EntityChangeSet set = new EntityChangeSet();
 					var errors = pool.TestEvolve(set, ic, i, false,TimeSpan.FromSeconds(1));
-					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors, error => error.Message));
+					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors));
 					Assert.AreEqual(0, set.Execute(pool));
 					//Assert.AreEqual(ic.OneCount, 1);
 
@@ -273,7 +273,7 @@ namespace ShardTests1
 			{
 				EntityChangeSet set = new EntityChangeSet();
 				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, false,TimeSpan.FromSeconds(5));
-				Assert.IsNull(errors, errors != null ? errors[0].Message : "");
+				Assert.IsNull(errors, errors != null ? errors[0].ToString() : "");
 				Assert.AreEqual(0, set.Execute(pool));
 
 				HashSet<Guid> env = new HashSet<Guid>();
@@ -320,7 +320,7 @@ namespace ShardTests1
 				var old = pool.ToArray();
 				EntityChangeSet set = new EntityChangeSet();
 				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, false,TimeSpan.FromSeconds(1));
-				Assert.IsNull(errors,errors != null ? errors[0].Message : "");
+				Assert.IsNull(errors,errors != null ? errors[0].ToString() : "");
 				Assert.AreEqual(numEntities, set.FindNamedSet("motions").Size);
 				foreach (var e in old)
 				{

@@ -102,22 +102,21 @@ namespace Shard
 			}
 		}
 
-		public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource)
+		public override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
 		{
 			try
 			{
 				FinishLoading(currentState.ID,TimeSpan.FromMilliseconds(1));
-				nestedLogic.Evolve(ref newState, currentState, generation, randomSource);
+				nestedLogic.Evolve(ref actions, currentState, generation, randomSource);
 
-				for (int i = 0; i < newState.instantiations.Count; i++)
+				actions.ReplaceInstantiations(inst =>
 				{
-					var inst = newState.instantiations[i];
 					if (inst.logic != null && !(inst.logic is DynamicCSLogic))
 					{
 						inst.logic = new DynamicCSLogic(provider, inst.logic);
-						newState.instantiations[i] = inst;
 					}
-				}
+					return inst;
+				});
 			}
 			catch (ExecutionException ex)
 			{

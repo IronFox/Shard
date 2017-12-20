@@ -266,7 +266,7 @@ namespace Shard
 			advertisements.Include(source.advertisements, targetSpace);
 		}
 
-		public List<EntityEvolutionException> Evolve(IReadOnlyList<Entity> entities,
+		public List<EntityError> Evolve(IReadOnlyList<Entity> entities,
 			Dictionary<Guid, EntityMessage[]> clientMessages,
 			InconsistencyCoverage ic, 
 			int roundNumber, 
@@ -285,7 +285,7 @@ namespace Shard
 
 			object lazyLock = new object();
 			bool exceeded = false;
-			LazyList<EntityEvolutionException> rs = new LazyList<EntityEvolutionException>();
+			var rs = new LazyList<EntityError>();
 			Parallel.For(0, entities.Count, i =>
 			{
 				Entity e = entities[i];
@@ -299,23 +299,24 @@ namespace Shard
 				//tables.Add(t);
 
 
+				EntityLogic st = null;
 				try
 				{
 					if (!exceeded)
-						e.Evolve(t, this, roundNumber, maySendMessages, Helper.Concat(clientBroadcasts, messages));
+						st = e.Evolve(t, this, roundNumber, maySendMessages, Helper.Concat(clientBroadcasts, messages));
 					if (exceeded || watch0.Elapsed > budget)
 					{
 						exceeded = true;
-						throw new ExecutionException(e.ID, "Failed to execute " + (EntityLogic)Helper.Deserialize(e.SerialLogicState) + " in " + budget.TotalMilliseconds + " ms");
+						throw new TimeBudgetException(budget, t);
 					}
 				}
 				catch (Exception ex)
 				{
+					if (st == null)
+						st = (EntityLogic)Helper.Deserialize(e.SerialLogicState);
 					lock (lazyLock)
-					rs.Add(new EntityEvolutionException(e, ex, t));
-
+						rs.Add(new EntityError(e, st,ex) );
 					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
-
 					Interlocked.Increment(ref numErrors);
 				}
 			});

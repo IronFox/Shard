@@ -13,12 +13,17 @@ namespace Shard
 	{
 		public struct Message
 		{
-			public byte[] data;
 			public Actor receiver;
+			public int channel;
+			public byte[] data;
 
 			public bool IsDirectedToClient { get { return !receiver.IsEntity; } }
+		}
 
-
+		public struct Broadcast
+		{
+			public int channel;
+			public byte[] data;
 		}
 
 		public struct Instantiation
@@ -28,19 +33,55 @@ namespace Shard
 			public EntityLogic logic;
 		}
 
-		public struct NewState
+		public struct Actions
 		{
-			public Vec3 newPosition;
-			public LazyList<byte[]> broadcasts;
-			public LazyList<Message> messages;
-			public LazyList<Instantiation> instantiations;
-			public LazyList<EntityID> removals;
-			public EntityAppearanceCollection newAppearances;
+			private readonly EntityID id;
+			public Vec3 NewPosition { get; set; }
+			private LazyList<Broadcast> broadcasts;
+			private LazyList<Message> messages;
+			private LazyList<Instantiation> instantiations;
+			private LazyList<EntityID> removals;
+			private EntityAppearanceCollection newAppearances;
 
-			public NewState(Entity source) : this()
+			public Actions(Entity source) : this()
 			{
-				newPosition = source.ID.Position;
+				id = source.ID;
+				NewPosition = source.ID.Position;
 				newAppearances = source.Appearances?.Duplicate();
+			}
+
+			public void ReplaceInstantiations(Func<Instantiation, Instantiation> replacer)
+			{
+				for (int i = 0; i < instantiations.Count; i++)
+					instantiations[i] = replacer(instantiations[i]);
+			}
+
+			public void ApplyTo(EntityChangeSet outChangeSet, byte[] serialLogic, bool maySendMessages, int roundNumber)
+			{
+				Vec3 dest = Simulation.ClampDestination("Motion", NewPosition, id, Simulation.M);
+				var newID = id.Relocate(dest);
+				outChangeSet.Add(new EntityChange.Motion(id, dest, newAppearances, serialLogic)); //motion doubles as logic-state-update
+				outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
+				foreach (var inst in instantiations)
+					outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
+				foreach (var rem in removals)
+				{
+					if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
+						outChangeSet.Add(new EntityChange.Removal(newID, rem));
+				}
+				int messageID = 0;
+				foreach (var m in messages)
+				{
+					if (m.IsDirectedToClient)
+					{
+						if (maySendMessages)
+							InteractionLink.Relay(id.Guid, m.receiver.Guid, m.channel, m.data, roundNumber);
+					}
+					else
+						outChangeSet.Add(new EntityChange.Message(id, messageID++, m.receiver.Guid, m.channel, m.data));
+				}
+				foreach (var b in broadcasts)
+					outChangeSet.Add(new EntityChange.Broadcast(id, messageID++, b.channel, b.data));
 			}
 
 
@@ -58,7 +99,7 @@ namespace Shard
 				Instantiate(targetLocation, new DynamicCSLogic(assemblyName, logicName, constructorParameters), appearances);
 			}
 
-			public void Remove(EntityID entityID)
+			public void Kill(EntityID entityID)
 			{
 				removals.Add(entityID);
 			}
@@ -70,6 +111,11 @@ namespace Shard
 				newAppearances.Add(app);
 			}
 
+			public T GetAppearance<T>() where T: EntityAppearance
+			{
+				return newAppearances?.Get<T>();
+			}
+
 			public void AddOrReplace(EntityAppearance app)
 			{
 				if (newAppearances == null)
@@ -77,17 +123,17 @@ namespace Shard
 				newAppearances.AddOrReplace(app);
 			}
 
-			public void Send(Actor receiver, byte[] data)
+			public void Send(Actor receiver, int channel, byte[] data)
 			{
-				Send(new Message() { receiver = receiver, data = data });
+				Send(new Message() { receiver = receiver, channel = channel, data = data });
 			}
 			public void Send(Message message)
 			{
 				messages.Add(message);
 			}
-			public void Broadcast(byte[] data)
+			public void Broadcast(int channel, byte[] data)
 			{
-				broadcasts.Add(data);
+				broadcasts.Add(new Broadcast() { channel = channel, data = data });
 			}
 		}
 
@@ -99,12 +145,12 @@ namespace Shard
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Source for random values used during execution</param>
 		/// <returns></returns>
-		public async Task<NewState> EvolveAsync(Entity currentState, int generation)
+		public async Task<Actions> EvolveAsync(Entity currentState, int generation)
 		{
 			return await Task.Run(() =>
 			{
 				EntityRandom random = new EntityRandom(currentState, generation);
-				NewState newState = new NewState(currentState);
+				Actions newState = new Actions(currentState);
 				Evolve(ref newState, currentState, generation, random);
 				return newState;
 			});
@@ -120,7 +166,7 @@ namespace Shard
 		/// <param name="currentState">Current entity state</param>
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		public abstract void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom randomSource);
+		public abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource);
 	}
 
 }

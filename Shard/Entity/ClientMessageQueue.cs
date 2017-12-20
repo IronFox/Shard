@@ -87,13 +87,13 @@ namespace Shard
 		/// <param name="toEntity">GUID of the targeted entity. Set to Guid.Empty to broadcast</param>
 		/// <param name="data">Data to send. May be null</param>
 		/// <param name="orderIndex">Sender message order index. The same sender must not reuse the same order index</param>
-		public void HandleIncomingMessage(Guid fromClient, Guid toEntity, byte[] data, int orderIndex)
+		public void HandleIncomingMessage(Guid fromClient, Guid toEntity, int channel, byte[] data, int orderIndex)
 		{
 			lock (newMessages)
 			{
 				if (!newMessages.ContainsKey(toEntity))
 					newMessages[toEntity] = new List<OrderedEntityMessage>();
-				newMessages[toEntity].Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient, false), toEntity == Guid.Empty, data)));
+				newMessages[toEntity].Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient, false), toEntity == Guid.Empty, channel,data)));
 			}
 		}
 

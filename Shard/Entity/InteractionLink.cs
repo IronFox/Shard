@@ -109,6 +109,11 @@ namespace Shard
 			return new Guid(ReadBytes(16));
 		}
 
+		private int NextInt()
+		{
+			return BitConverter.ToInt32(ReadBytes(4), 0);
+		}
+
 		private ShardID NextShardID()
 		{
 			byte[] raw = ReadBytes(4 * 4);
@@ -214,13 +219,14 @@ namespace Shard
 							case (uint)ChannelID.SendMessage:
 								Guid from = NextGuid();
 								Guid to = NextGuid();
+								int msgChannel = NextInt();
 								byte[] data = NextBytes();
 								if (!guids.Contains(from))
 									Error("Not registered as " + from + ". Ignoring message");
 								else
 								{
 									if (Simulation.Stack.Size > 0)
-										Simulation.ClientMessageQueue.HandleIncomingMessage(from, to, data, orderIndex++);
+										Simulation.ClientMessageQueue.HandleIncomingMessage(from, to, msgChannel,data, orderIndex++);
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;
@@ -281,7 +287,7 @@ namespace Shard
 			return null;
 		}
 
-		public void RelayMessage(Guid senderEntity, Guid receiverID, byte[] data, int generation)
+		public void RelayMessage(Guid senderEntity, Guid receiverID, int channel, byte[] data, int generation)
 		{
 			if (closed)
 				return;
@@ -299,6 +305,7 @@ namespace Shard
 					ms.Write(senderEntity.ToByteArray(), 0, 16);
 					ms.Write(receiverID.ToByteArray(), 0, 16);
 					ms.Write(BitConverter.GetBytes(generation), 0, 4);
+					ms.Write(BitConverter.GetBytes(channel), 0, 4);
 					ms.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
 					ms.Write(data, 0, data.Length);
 
@@ -340,11 +347,11 @@ namespace Shard
 		private static ConcurrentDictionary<Guid, InteractionLink> guidMap = new ConcurrentDictionary<Guid, InteractionLink>();
 
 
-		public static void Relay(Guid sender, Guid receiver, byte[] data, int generation)
+		public static void Relay(Guid sender, Guid receiver, int channel, byte[] data, int generation)
 		{
 			InteractionLink link = Lookup(receiver);
 			if (link != null)
-				link.RelayMessage(sender,receiver,data, generation);
+				link.RelayMessage(sender,receiver,channel,data, generation);
 		}
 
 		public void Dispose()

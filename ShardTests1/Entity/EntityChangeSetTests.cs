@@ -72,12 +72,12 @@ namespace Shard.Tests
 
 		public static Broadcast RandomBroadcast()
 		{
-			return new Broadcast(RandomID(), RandomByteArray(true), random.Next(16));
+			return new Broadcast(RandomID(), random.Next(16),random.Next(3), RandomByteArray(true));
 		}
 
 		public static Message RandomMessage()
 		{
-			return new Message(RandomID(), random.Next(16), Guid.NewGuid(), RandomByteArray());
+			return new Message(RandomID(), random.Next(16), Guid.NewGuid(), random.Next(3), RandomByteArray());
 		}
 
 

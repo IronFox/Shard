@@ -245,10 +245,10 @@ namespace Shard
 			IntermediateData data;
 			int generation;
 			SDS old;
-			List<EntityEvolutionException> errors;
+			List<EntityError> errors;
 			Dictionary<Guid, EntityMessage[]> clientMessages;
 
-			public List<EntityEvolutionException> Errors { get { return errors; } }
+			public List<EntityError> Errors { get { return errors; } }
 
 			public IntermediateData Intermediate { get { return data; } }
 			public int Generation { get { return generation; } }

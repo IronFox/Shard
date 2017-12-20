@@ -310,12 +310,14 @@ namespace Shard
 	public class EntityMessage
 	{
 		public readonly Actor Sender;
+		public readonly int Channel;
 		public readonly byte[] Payload;
 		public readonly bool IsBroadcast;
 
-		public EntityMessage(Actor sender, bool broadcast, byte[] payload)
+		public EntityMessage(Actor sender, bool broadcast, int channel, byte[] payload)
 		{
 			Sender = sender;
+			Channel = channel;
 			Payload = payload;
 			IsBroadcast = broadcast;
 		}
@@ -325,12 +327,12 @@ namespace Shard
 			var other = obj as EntityMessage;
 			if (other == null)
 				return false;
-			return Sender == other.Sender && Helper.AreEqual(Payload, other.Payload); 
+			return Sender == other.Sender && Channel == other.Channel && Helper.AreEqual(Payload, other.Payload); 
 		}
 
 		public override int GetHashCode()
 		{
-			return Helper.Hash(this).Add(Sender).Add(Payload).GetHashCode();
+			return Helper.Hash(this).Add(Sender).Add(Channel).Add(Payload).GetHashCode();
 		}
 
 		public override string ToString()
@@ -449,50 +451,28 @@ namespace Shard
 			}
 		};
 
-		public void Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
+		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
 		{
+			EntityLogic state = null;
 			evolutionState.Begin();
 			if (Helper.Length(SerialLogicState) > 0)
 			{
 				try
 				{
-					var state = Helper.Deserialize(SerialLogicState) as EntityLogic;
+					state = Helper.Deserialize(SerialLogicState) as EntityLogic;
 					evolutionState.SignalDeserializationDone();
 					if (state == null)
 						throw new ExecutionException(ID, "Unable to deserialize logic");
 
 
-					var newState = new EntityLogic.NewState(this);
-					state.Evolve(ref newState,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
+					var actions = new EntityLogic.Actions(this);
+					state.Evolve(ref actions,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);
 					evolutionState.SignalReserializationDone();
 
-					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
-					var newID = ID.Relocate(dest);
-					outChangeSet.Add(new EntityChange.Motion(this, serialLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
-					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
-					foreach (var inst in newState.instantiations)
-						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
-					foreach (var rem in newState.removals)
-					{
-						if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
-							outChangeSet.Add(new EntityChange.Removal(newID, rem));
-					}
-					int messageID = 0;
-					foreach (var m in newState.messages)
-					{
-						if (m.IsDirectedToClient)
-						{
-							if (maySendMessages)
-								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data, roundNumber);
-						}
-						else
-							outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
-					}
-					foreach (var b in newState.broadcasts)
-						outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
+					actions.ApplyTo(outChangeSet,serialLogic,maySendMessages,roundNumber);
 				}
 				catch
 				{
@@ -501,7 +481,7 @@ namespace Shard
 				}
 			}
 			evolutionState.End();
-
+			return state;
 		}
 
 		public async Task EvolveAsync(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
@@ -517,36 +497,13 @@ namespace Shard
 						throw new ExecutionException(ID,"Unable to deserialize logic");
 
 
-					var newState = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
+					var actions = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);
 					evolutionState.SignalReserializationDone();
 
-					Vec3 dest = Simulation.ClampDestination("Motion", newState.newPosition, ID, Simulation.M);
-					var newID = ID.Relocate(dest);
-					outChangeSet.Add(new EntityChange.Motion(this, serialLogic, newState.newAppearances, dest)); //motion doubles as logic-state-update
-					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newState.newAppearances, dest - ID.Position)));
-					foreach (var inst in newState.instantiations)
-						outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
-					foreach (var rem in newState.removals)
-					{
-						if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
-							outChangeSet.Add(new EntityChange.Removal(newID, rem));
-					}
-					int messageID = 0;
-					foreach (var m in newState.messages)
-					{
-						if (m.IsDirectedToClient)
-						{
-							if (maySendMessages)
-								InteractionLink.Relay(ID.Guid, m.receiver.Guid, m.data,roundNumber);
-						}
-						else
-							outChangeSet.Add(new EntityChange.Message(ID, messageID++, m.receiver.Guid, m.data));
-					}
-					foreach (var b in newState.broadcasts)
-						outChangeSet.Add(new EntityChange.Broadcast(ID, b, messageID++));
+					actions.ApplyTo(outChangeSet, serialLogic, maySendMessages, roundNumber);
 				}
 				catch
 				{
@@ -572,6 +529,13 @@ namespace Shard
 		public readonly EntityMessage[] InboundMessages;
 		public readonly EntityContact[] Contacts;
 
+		public IEnumerable<EntityMessage> EnumInboundEntityMessages(int channel)
+		{
+			if (InboundMessages != null)
+				foreach (var msg in InboundMessages)
+					if (msg.Sender.IsEntity && msg.Channel == channel)
+						yield return msg;
+		}
 
 		public T GetAppearance<T>() where T : EntityAppearance
 		{
