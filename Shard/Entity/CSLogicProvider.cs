@@ -102,12 +102,12 @@ namespace Shard
 			}
 		}
 
-		public override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
 		{
 			try
 			{
 				FinishLoading(currentState.ID,TimeSpan.FromMilliseconds(1));
-				nestedLogic.Evolve(ref actions, currentState, generation, randomSource);
+				nestedLogic.Execute(ref actions, currentState, generation, randomSource);
 
 				actions.ReplaceInstantiations(inst =>
 				{

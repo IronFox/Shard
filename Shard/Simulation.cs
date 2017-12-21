@@ -231,6 +231,9 @@ namespace Shard
 			R = config.r;
 			M = config.m;
 
+			MySpace =  Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
+
+
 			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / R);
 
 			if (ext.ReplicaLevel > 1)
@@ -242,6 +245,8 @@ namespace Shard
 
 		public static bool Owns(Vec3 position)
 		{
+			if (position.FloorInt3 == ID.XYZ)
+				return true;
 			return MySpace.Contains(position);
 		}
 
@@ -253,13 +258,7 @@ namespace Shard
 			}
 		}
 
-		public static Box MySpace
-		{
-			get
-			{
-				return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
-			}
-		}
+		public static Box MySpace { get; private set; } = Box.OffsetSize(Vec3.Zero, new Vec3(1), Bool3.True);
 
 		public static float SensorRange { get { return R - M; } }
 

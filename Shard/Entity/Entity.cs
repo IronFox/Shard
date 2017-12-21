@@ -361,10 +361,11 @@ namespace Shard
 		}
 	}
 
+
 		
 
 	[Serializable]
-	public struct Entity : IComparable<Entity>
+	public class Entity : IComparable<Entity>
 	{
 	
 		public int FindContact(EntityID id)
@@ -451,6 +452,13 @@ namespace Shard
 			}
 		};
 
+		internal Entity Clone()
+		{
+			var rs = new Entity(ID, transientDeserializedLogic, SerialLogicState, Appearances, null, null);
+			return rs;
+
+		}
+
 		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
 		{
 			EntityLogic state = null;
@@ -459,20 +467,21 @@ namespace Shard
 			{
 				try
 				{
-					state = Helper.Deserialize(SerialLogicState) as EntityLogic;
+					state = MyLogic;
+					transientDeserializedLogic = null;
 					evolutionState.SignalDeserializationDone();
 					if (state == null)
 						throw new ExecutionException(ID, "Unable to deserialize logic");
 
 
 					var actions = new EntityLogic.Actions(this);
-					state.Evolve(ref actions,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
+					state.Execute(ref actions,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);
 					evolutionState.SignalReserializationDone();
 
-					actions.ApplyTo(outChangeSet,serialLogic,maySendMessages,roundNumber);
+					actions.ApplyTo(outChangeSet,state, serialLogic,maySendMessages,roundNumber);
 				}
 				catch
 				{
@@ -484,50 +493,34 @@ namespace Shard
 			return state;
 		}
 
-		public async Task EvolveAsync(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
-		{
-			evolutionState.Begin();
-			if (Helper.Length(SerialLogicState) > 0)
-			{
-				try
-				{
-					var state = Helper.Deserialize(SerialLogicState) as EntityLogic;
-					evolutionState.SignalDeserializationDone();
-					if (state == null)
-						throw new ExecutionException(ID,"Unable to deserialize logic");
-
-
-					var actions = await state.EvolveAsync(AddClientMessages(clientMessages), roundNumber);
-					evolutionState.SignalEvolutionDone();
-
-					byte[] serialLogic = Helper.SerializeToArray(state);
-					evolutionState.SignalReserializationDone();
-
-					actions.ApplyTo(outChangeSet, serialLogic, maySendMessages, roundNumber);
-				}
-				catch
-				{
-					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID, Appearances, Vec3.Zero)));
-					throw;
-				}
-			}
-			evolutionState.End();
-		}
-
 
 		private Entity AddClientMessages(ICollection<EntityMessage> messages)
 		{
 			if (messages == null || messages.Count == 0)
 				return this;
 			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
-			return new Entity(ID, SerialLogicState, Appearances, newMessages, Contacts);
+			return new Entity(ID, transientDeserializedLogic,SerialLogicState, Appearances, newMessages, Contacts);
 		}
 
 		public readonly EntityID ID;
 		public readonly EntityAppearanceCollection Appearances;
 		public readonly byte[] SerialLogicState;
-		public readonly EntityMessage[] InboundMessages;
-		public readonly EntityContact[] Contacts;
+		public EntityMessage[] InboundMessages { get; private set; }
+		public EntityContact[] Contacts { get; private set; }
+		public EntityLogic MyLogic
+		{
+			get
+			{
+				if (transientDeserializedLogic != null)
+				{
+					return transientDeserializedLogic;
+				}
+				transientDeserializedLogic =(EntityLogic)Helper.Deserialize(SerialLogicState);
+				return transientDeserializedLogic;
+			}
+		}
+		[NonSerialized]
+		public EntityLogic transientDeserializedLogic;
 
 		public IEnumerable<EntityMessage> EnumInboundEntityMessages(int channel)
 		{
@@ -544,28 +537,33 @@ namespace Shard
 			return null;
 		}
 
-		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, Helper.SerializeToArray(state), appearance, null, null)
+		public Entity() { }
+
+		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, state, Helper.SerializeToArray(state), appearance, null, null)
 		{ }
 
-		public Entity(EntityID id, byte[] state, EntityAppearanceCollection appearance= null) : this(id, state, appearance, null, null)
+		public Entity(EntityID id, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance= null) : this(id, dstate, state, appearance, null, null)
 		{ }
-		public Entity(EntityID id, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) : this()
+		public Entity(EntityID id, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) //: this()
 		{
 			if (!Simulation.FullSimulationSpace.Contains(id.Position))
 				throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
 			SerialLogicState = state;
+			transientDeserializedLogic = dstate;
 			Appearances = appearance;
 
 			InboundMessages = messages;
 			Contacts = contacts;
-
 		}
 
 
 		internal Entity SetIncoming(EntityMessage[] messages, EntityContact[] contacts)
 		{
-			return new Entity(ID, SerialLogicState, Appearances, messages, contacts);
+			this.InboundMessages = messages;
+			this.Contacts = contacts;
+			return this;
+			//return new Entity(ID, transientDeserializedLogic, SerialLogicState, Appearances, messages, contacts);
 		}
 
 		public int CompareTo(Entity other)

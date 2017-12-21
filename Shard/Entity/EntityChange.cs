@@ -84,12 +84,15 @@ namespace Shard.EntityChange
 		public readonly Vec3 TargetLocation;
 		public readonly EntityAppearanceCollection Appearances;
 		public readonly byte[] SerialLogic;
+		[NonSerialized]
+		protected EntityLogic directState;
 
-		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, byte[] serialLogic) : base(origin)
+		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic directState, byte[] serialLogic) : base(origin)
 		{
 			TargetLocation = targetLocation;
 			SerialLogic = serialLogic;
 			Appearances = appearance;
+			this.directState = directState;
 		}
 
 		public override int GetHashCode()
@@ -122,7 +125,9 @@ namespace Shard.EntityChange
 		{
 			if (!Simulation.CheckDistance("Insert", Origin.Position, TargetLocation, Simulation.M))
 				return false;
-			return pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), SerialLogic, Appearances));
+			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), directState, SerialLogic, Appearances));
+			directState = null;
+			return rs;
 		}
 
 		public override bool Affects(Box cube)
@@ -134,18 +139,21 @@ namespace Shard.EntityChange
 	[Serializable]
 	public class Motion : Instantiation
 	{
-		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, byte[] serialLogic) : base(origin, targetLocation, appearance, serialLogic)
-		{ }
 
-		public Motion(Entity e, byte[] newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
-		{ }
+		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic,byte[] serialLogic) : base(origin, targetLocation, appearance, logic,serialLogic)
+		{}
+
+		//public Motion(Entity e, byte[] newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
+		//{ }
 
 
 		protected Entity Entity
 		{
 			get
 			{
-				return new Entity(Origin.Relocate(TargetLocation), SerialLogic, Appearances, null, null);
+				var rs = new Entity(Origin.Relocate(TargetLocation), directState, SerialLogic, Appearances, null, null);
+				directState = null;
+				return rs;
 			}
 		}
 

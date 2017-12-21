@@ -43,7 +43,7 @@ namespace Shard.Tests
 		{
 			var id = RandomID();
 			var inst = ClampedDestination(id.Position);
-			return new Instantiation(id, inst, RandomAppearance(), RandomLogic());
+			return new Instantiation(id, inst, RandomAppearance(), null,RandomLogic());
 		}
 
 		private static byte[] RandomLogic()
@@ -67,7 +67,7 @@ namespace Shard.Tests
 		{
 			var id = RandomID();
 			var to = ClampedDestination(id.Position);
-			return new Motion(id, to, RandomAppearance(), RandomLogic());
+			return new Motion(id, to, RandomAppearance(), null,RandomLogic());
 		}
 
 		public static Broadcast RandomBroadcast()

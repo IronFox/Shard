@@ -77,7 +77,7 @@ namespace Shard
 			return sdsList[gen - OldestSDS.Generation];
 		}
 
-		public void Insert(SDS sds)
+		public void Insert(SDS sds, bool trim = true)
 		{
 			if (sds.Generation > NewestSDSGeneration)
 			{
@@ -97,7 +97,8 @@ namespace Shard
 					throw new IntegrityViolation("Cannot insert SDS generation "+sds.Generation+", oldest = "+OldestSDSGeneration);
 				sdsList[at] = sds;
 			}
-			Trim();
+			if (trim)
+				Trim();
 		}
 
 		public int Size

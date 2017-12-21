@@ -95,6 +95,12 @@ namespace VectorMath
 					Math.Max(a.Z, b.Z)
 				);
 		}
+
+		public float[] ToArray()
+		{
+			return new float[3] { X, Y, Z };
+		}
+
 		public static Vec3 Min(Vec3 a, float b)
 		{
 			return new Vec3(

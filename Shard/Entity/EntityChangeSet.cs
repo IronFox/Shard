@@ -169,10 +169,14 @@ namespace Shard
 		public int Execute(EntityPool pool)
 		{
 			int numErrors = 0;
+			if (messages.Size > 0)
+				pool.RequireTree();
 			numErrors += messages.Execute(pool);
 			numErrors += motions.Execute(pool);
 			numErrors += removals.Execute(pool);
 			numErrors += instantiations.Execute(pool);
+			if (advertisements.Size > 0)
+				pool.RequireTree();
 			numErrors += advertisements.Execute(pool);
 			pool.DispatchAll();
 			return numErrors;
@@ -303,7 +307,11 @@ namespace Shard
 				try
 				{
 					if (!exceeded)
+					{
 						st = e.Evolve(t, this, roundNumber, maySendMessages, Helper.Concat(clientBroadcasts, messages));
+						if (entities[i].transientDeserializedLogic != null)
+							throw new IntegrityViolation("Transient deserialized logic was not whiped");
+					}
 					if (exceeded || watch0.Elapsed > budget)
 					{
 						exceeded = true;

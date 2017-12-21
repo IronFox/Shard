@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Supercluster.KDTree;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -54,15 +55,47 @@ namespace Shard
 			public ConcurrentDictionary<Guid, EntityContact> contacts = new ConcurrentDictionary<Guid, EntityContact>();
 		}
 
+		private Supercluster.KDTree.KDTree<float, Container> tree;
 		private ConcurrentDictionary<EntityID, Container> fullMap = new ConcurrentDictionary<EntityID, Container>();
 		private ConcurrentDictionary<Guid, Container> guidMap = new ConcurrentDictionary<Guid, Container>();
+
+		private static float Sqr(float x)
+		{
+			return x * x;
+		}
+
+		private KDTree<float, Container> Tree
+		{
+			get
+			{
+				lock (this)
+				{
+					var rs = tree;
+					if (rs == null)
+					{
+						var containers = fullMap.Values.ToArray();
+						float[][] points = new float[containers.Length][];
+						for (int i = 0; i < points.Length; i++)
+							points[i] = containers[i].entity.ID.Position.ToArray();
+						tree = rs = new KDTree<float, Container>(3, points, containers, (x, y) =>
+						{
+							return Simulation.GetDistance(new Vec3(x, 0), new Vec3(y, 0));
+						});
+					}
+					return rs;
+				}
+			}
+		}
 
 		public EntityPool(IEnumerable<Entity> entities)
 		{
 			if (entities != null)
 				foreach (var e in entities)
-					if (!Insert(e))
+				{
+					var c = InsertC(e);
+					if (c == null)
 						Log.Message("Failed to insert entity " + e);
+				}
 		}
 		public EntityPool()
 		{ }
@@ -106,23 +139,28 @@ namespace Shard
 			e = new Entity();
 			return false;
 		}
+
+		
+
 		public void AddContact(EntityContact c)
 		{
-			foreach (var p in fullMap)
+			var contacts = tree.RadialSearch(c.ID.Position.ToArray(), Simulation.SensorRange);
+
+			foreach (var p in contacts)
 			{
-				if (p.Key.Guid != c.ID.Guid && Simulation.GetDistance(c.ID.Position, p.Key.Position) <= Simulation.SensorRange)
+				if (p.Item2.entity.ID.Guid != c.ID.Guid)// && Simulation.GetDistance(c.ID.Position, p.Key.Position) <= Simulation.SensorRange)
 				{
-					if (!p.Value.contacts.TryAdd(c.ID.Guid, c))
+					if (!p.Item2.contacts.TryAdd(c.ID.Guid, c))
 					{
 						EntityContact existing;
 						while (true)
 						{
-							if (!p.Value.contacts.TryGetValue(c.ID.Guid, out existing))
+							if (!p.Item2.contacts.TryGetValue(c.ID.Guid, out existing))
 								throw new IntegrityViolation("Should have been able to query existing contact " + c);
 							int comp = c.CompareTo(existing);
 							if (comp >= 0)
 								break;
-							if (p.Value.contacts.TryUpdate(c.ID.Guid, c, existing))
+							if (p.Item2.contacts.TryUpdate(c.ID.Guid, c, existing))
 								break;
 						}
 					}
@@ -149,14 +187,20 @@ namespace Shard
 			return rs.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 		}
 
+		public void RequireTree()
+		{
+			var t = Tree;
+		}
+
 		public int BroadcastMessage(Vec3 senderPosition, OrderedEntityMessage message)
 		{
 			int counter = 0;
-			foreach (var p in fullMap)
+			
+			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), Simulation.R))
 			{
-				if (p.Key.Guid != message.Message.Sender.Guid && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
+				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
 				{
-					p.Value.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
+					p.Item2.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 					counter++;
 				}
 			}
@@ -251,11 +295,17 @@ namespace Shard
 
 		public bool Insert(Entity entity)
 		{
+			return InsertC(entity) != null;
+		}
+
+		private Container InsertC(Entity entity)
+		{
 			Container ctr = new Container(entity);
 			if (!guidMap.TryAdd(entity.ID.Guid, ctr))
-				return false;
+				return null;
 			fullMap.ForceAdd(entity.ID, ctr);
-			return true;
+			tree = null;
+			return ctr;
 		}
 
 		public bool UpdateEntity(Entity original, Entity updated)
@@ -265,6 +315,8 @@ namespace Shard
 			Container ctr;
 			if (!fullMap.TryRemove(original.ID, out ctr))
 				return false;
+			if (ctr.entity.ID.Position != updated.ID.Position)
+				tree = null;
 			ctr.entity = updated;
 			fullMap.ForceAdd(updated.ID, ctr);
 			return true;
@@ -284,7 +336,7 @@ namespace Shard
 		{
 			EntityPool rs = new EntityPool();
 			foreach (var e in this)
-				rs.Insert(e);
+				rs.Insert(e.Clone());
 			return rs;
 		}
 

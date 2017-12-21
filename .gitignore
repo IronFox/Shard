@@ -6,3 +6,5 @@ obj
 bin
 *.htm
 TestResults/
+*.psess
+*.vsp

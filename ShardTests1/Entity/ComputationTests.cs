@@ -20,7 +20,7 @@ namespace Shard.Tests
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				newState.NewPosition = currentState.ID.Position + new Vec3(Simulation.R);
 			}
@@ -37,7 +37,7 @@ namespace Shard.Tests
 				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				newState.NewPosition = currentState.ID.Position + Motion;
 			}
@@ -46,7 +46,7 @@ namespace Shard.Tests
 		[Serializable]
 		class StationaryLogic : EntityLogic
 		{
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{}
 		}
 
@@ -66,7 +66,18 @@ namespace Shard.Tests
 			}
 		}
 
-		
+
+		[Serializable]
+		class RoundState : EntityLogic
+		{
+			public int state = 0;
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			{
+				state++;
+			}
+		}
+
+
 		[Serializable]
 		class PingLogic : EntityLogic
 		{
@@ -80,7 +91,7 @@ namespace Shard.Tests
 				p = packet;
 				this.amPong = amPong;
 			}
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				if (!amPong)
 				{
@@ -193,6 +204,82 @@ namespace Shard.Tests
 			}
 			Assert.AreEqual(NumIterations*2-3, sum);
 		}
+
+
+		[TestMethod()]
+		public void ConsistentStateTest()
+		{
+			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
+
+			SDS.IntermediateData intermediate = new SDS.IntermediateData();
+			intermediate.entities = new EntityPool(
+				new Entity[]
+				{
+					new Entity(
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						new RoundState(),
+						null),
+				}
+			);
+			//EntityTest.RandomDefaultPool(100);
+			intermediate.ic = InconsistencyCoverage.NewCommon();
+			intermediate.inputConsistent = true;
+			intermediate.localChangeSet = new EntityChangeSet();
+
+			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
+			Assert.IsTrue(root.IsFullyConsistent);
+
+			SDSStack stack = Simulation.Stack;
+			stack.ResetToRoot(root);
+
+			foreach (var s in stack)
+			{
+				foreach (var e in s.FinalEntities)
+				{
+					RoundState st = e.MyLogic as RoundState;
+					Assert.IsNotNull(st);
+					Assert.AreEqual(s.Generation, st.state, "-1: " + s.Generation);
+				}
+			}
+
+
+			const int NumIterations = 10;
+
+			StringBuilder ks = new StringBuilder();
+			for (int i = 0; i < NumIterations; i++)
+			{
+				{
+					SDS temp = stack.AllocateGeneration(i + 1);
+					SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
+					AssertNoErrors(comp, i.ToString()+".evolve ("+ks+")");
+					SDS sds = comp.Complete();
+					stack.Insert(sds, false);
+				}
+				if (i > 1)
+				{
+					int k = random.Next(1, i - 1);
+					ks.Append(',').Append(k);
+					Console.WriteLine(k);
+					SDS.Computation comp = new SDS.Computation(k, null, TimeSpan.FromMilliseconds(10));
+					AssertNoErrors(comp, i + ".revisit (" + ks + ")");
+					SDS sds = comp.Complete();
+					stack.Insert(sds, false);
+				}
+
+				foreach (var s in stack)
+				{
+					foreach (var e in s.FinalEntities)
+					{
+						RoundState st = e.MyLogic as RoundState;
+						Assert.IsNotNull(st);
+						Assert.AreEqual(s.Generation, st.state,i+": "+s.Generation);
+					}
+				}
+
+			}
+		}
+
 
 		[TestMethod()]
 		public void NestedComputationTest()

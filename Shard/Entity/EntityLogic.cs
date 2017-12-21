@@ -42,6 +42,12 @@ namespace Shard
 			private LazyList<Instantiation> instantiations;
 			private LazyList<EntityID> removals;
 			private EntityAppearanceCollection newAppearances;
+			/// <summary>
+			/// If true, advertisements are suppressed,
+			/// and the local entity may move up to R (instead of M).
+			/// False by default
+			/// </summary>
+			public bool SuppressAdvertisements { get; set; }
 
 			public Actions(Entity source) : this()
 			{
@@ -50,20 +56,23 @@ namespace Shard
 				newAppearances = source.Appearances?.Duplicate();
 			}
 
+			
+
 			public void ReplaceInstantiations(Func<Instantiation, Instantiation> replacer)
 			{
 				for (int i = 0; i < instantiations.Count; i++)
 					instantiations[i] = replacer(instantiations[i]);
 			}
 
-			public void ApplyTo(EntityChangeSet outChangeSet, byte[] serialLogic, bool maySendMessages, int roundNumber)
+			public void ApplyTo(EntityChangeSet outChangeSet, EntityLogic logic, byte[] serialLogic, bool maySendMessages, int roundNumber)
 			{
-				Vec3 dest = Simulation.ClampDestination("Motion", NewPosition, id, Simulation.M);
+				Vec3 dest = Simulation.ClampDestination("Motion", NewPosition, id, SuppressAdvertisements ? Simulation.R : Simulation.M);
 				var newID = id.Relocate(dest);
-				outChangeSet.Add(new EntityChange.Motion(id, dest, newAppearances, serialLogic)); //motion doubles as logic-state-update
-				outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
+				outChangeSet.Add(new EntityChange.Motion(id, dest, newAppearances, logic,serialLogic)); //motion doubles as logic-state-update
+				if (!SuppressAdvertisements)
+					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
 				foreach (var inst in instantiations)
-					outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, Helper.SerializeToArray(inst.logic)));
+					outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic,Helper.SerializeToArray(inst.logic)));
 				foreach (var rem in removals)
 				{
 					if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
@@ -137,24 +146,17 @@ namespace Shard
 			}
 		}
 
+		[NonSerialized]
+		private int myGeneration;	//cannot initialize with anything explicitly. Assume is 0
 
-		/// <summary>
-		/// Creates an asynchronous task that computes the next state in a separate thread
-		/// </summary>
-		/// <param name="currentState">Current entity state</param>
-		/// <param name="generation">Evolution generation index, starting from 0</param>
-		/// <param name="randomSource">Source for random values used during execution</param>
-		/// <returns></returns>
-		public async Task<Actions> EvolveAsync(Entity currentState, int generation)
+		public void Execute(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 		{
-			return await Task.Run(() =>
-			{
-				EntityRandom random = new EntityRandom(currentState, generation);
-				Actions newState = new Actions(currentState);
-				Evolve(ref newState, currentState, generation, random);
-				return newState;
-			});
+			VerifyGeneration(generation);
+			Evolve(ref newState, currentState, generation, randomSource);
+			myGeneration = generation+2;
+			//Console.WriteLine(this + "->" + myGeneration);
 		}
+
 
 		/// <summary>
 		/// Evolves the local state, potentially generating some modifications to the base entity.
@@ -166,7 +168,13 @@ namespace Shard
 		/// <param name="currentState">Current entity state</param>
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		public abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource);
+		protected abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource);
+
+		public void VerifyGeneration(int generation)
+		{
+			if (myGeneration != 0 && myGeneration - 1 != generation)
+				throw new IntegrityViolation("Trying to evolve logic, currently in generation " + myGeneration + ", in generation " + generation);
+		}
 	}
 
 }

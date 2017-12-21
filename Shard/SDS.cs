@@ -259,9 +259,13 @@ namespace Shard
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
 				SDS input = stack.FindGeneration(generation - 1);
+				//if (input.Generation != generation-1)
+				//	throw new IntegrityViolation("Generation mismatch");
 				old = stack.FindGeneration(generation);
 				if (old == null)
 					throw new IntegrityViolation("Unable to locate original SDS at generation "+generation);
+				//if (old.Generation != generation)
+				//	throw new IntegrityViolation("Generation mismatch");
 				data.inputConsistent = input.IsFullyConsistent;
 				//output = new SDS(generation);
 				data.inputHash = input.HashDigest;
@@ -276,23 +280,8 @@ namespace Shard
 					data = old.Intermediate;
 					return;
 				}
-				//			rs.processed = input->entities;
 
 
-				//			foreach (userMessages,msg)
-				//{
-				//				Entity* e = rs.processed.FindEntity(msg->target.guid);
-				//				if (!e)
-				//					LogUnexpected("User Message: Unable to find target entity", msg->target);
-				//				else
-				//				{
-				//					auto ws = e->FindLogic(msg->targetProcess);
-				//					if (!ws)
-				//						LogUnexpected("User Message: Unable to find target logic process", msg->target);
-				//					else
-				//						ws->receiver.Append().data = msg->message;
-				//				}
-				//			}
 
 				InconsistencyCoverage untrimmed = input.IC.Grow(false);
 				if (untrimmed.Size != InconsistencyCoverage.CommonResolution + 2)

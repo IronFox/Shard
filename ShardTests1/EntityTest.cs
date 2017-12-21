@@ -55,7 +55,7 @@ namespace ShardTests1
 
 			}
 
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random)
 			{
 				CheckRandom(random,"started");
 				bool isConsistent = true;
@@ -101,7 +101,7 @@ namespace ShardTests1
 		[Serializable]
 		public class RandomMotion : EntityLogic
 		{
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				while (newState.NewPosition == currentState.ID.Position)
 				{
@@ -120,7 +120,7 @@ namespace ShardTests1
 		[Serializable]
 		public class FaultLogic : EntityLogic
 		{
-			public override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
 			{
 				throw new NotImplementedException();
 			}
@@ -278,16 +278,22 @@ namespace ShardTests1
 
 				HashSet<Guid> env = new HashSet<Guid>();
 				var state = pool.ToArray();
+				int it = 0;
 				foreach (var e in state)
 				{
-
 					env.Clear();
 					foreach (var e1 in state)
-						if (e1.ID.Guid != e.ID.Guid && Simulation.GetDistance(e.ID.Position, e1.ID.Position) <= Simulation.SensorRange)
+					{
+						float dist = Simulation.GetDistance(e.ID.Position, e1.ID.Position);
+						if (e1.ID.Guid != e.ID.Guid && dist <= Simulation.SensorRange)
 						{
+							Console.WriteLine(dist+"/"+Simulation.SensorRange);
 							env.Add(e1.ID.Guid);
 						}
-					Assert.AreEqual(env.Count, e.Contacts.Length, e.ToString());
+					}
+					Assert.AreEqual(env.Count, e.Contacts.Length, i+"."+it+": "+e);
+					if (env.Count > 0)
+						it++;
 
 					foreach (var c in e.Contacts)
 					{
