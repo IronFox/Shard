@@ -142,7 +142,60 @@ namespace Shard
 		static void Main(string[] args)
 		{
 
+			//RunStupidModel();
+			//return;
 
+			//CreateScenario();
+
+
+			if (args.Length != 2)
+			{
+				Console.Error.WriteLine("Expected 2 parameters: [db url] [my addr], found "+args.Length);
+				return;
+			}
+
+			try
+			{
+				int at = 0;
+				var dbHost = new Host(args[at++]);
+				DB.Connect(dbHost);
+				DB.PullConfig();
+				ShardID addr = ShardID.Decode(args[at++]);
+
+				if ((addr >= DB.Config.extent).Any)
+					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + DB.Config.extent);
+				if ((addr < ShardID.Zero).Any)
+					throw new ArgumentOutOfRangeException("addr", addr, "Is (partially) negative");
+
+				Simulation.Init(addr);
+			}
+			catch (Exception ex)
+			{
+				Log.Error(ex);
+			}
+		}
+
+		private static void CreateScenario()
+		{
+
+
+			string json = File.ReadAllText("scenario/test0.json");
+			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(json);
+
+			SetupScenario(new Host("localhost", 1024),
+						new DB.ConfigContainer()
+						{
+							extent = new ShardID(scenario.worldSize[0], scenario.worldSize[1], scenario.worldSize[2], 1),
+							m = scenario.M,
+							r = scenario.R
+						},
+						Translate(scenario.entities));
+			//			GenerateEntities(1000));
+
+		}
+
+		private static void RunStupidModel()
+		{
 
 
 
@@ -204,62 +257,6 @@ namespace Shard
 
 				Console.WriteLine("Population: b=" + numBugs + ", p=" + numPredators + ", c=" + numConflicts + "; Food=" + totalFood);
 
-			}
-
-
-
-
-
-
-
-
-
-
-
-			return;
-
-
-
-
-			string json = File.ReadAllText("scenario/test0.json");
-			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(json);
-
-			SetupScenario(new Host("localhost", 1024),
-						new DB.ConfigContainer()
-						{
-							extent = new ShardID(scenario.worldSize[0],scenario.worldSize[1],scenario.worldSize[2],1),
-							m = scenario.M,
-							r = scenario.R,
-							start = (DateTime.Now.ToUniversalTime() + TimeSpan.FromHours(1)).ToString()
-						},
-						Translate(scenario.entities));
-			//			GenerateEntities(1000));
-
-
-			if (args.Length != 2)
-			{
-				Console.Error.WriteLine("Expected 2 parameters: [db url] [my addr], found "+args.Length);
-				return;
-			}
-
-			try
-			{
-				int at = 0;
-				var dbHost = new Host(args[at++]);
-				DB.Connect(dbHost);
-				DB.PullConfig();
-				ShardID addr = ShardID.Decode(args[at++]);
-
-				if ((addr >= DB.Config.extent).Any)
-					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + DB.Config.extent);
-				if ((addr < ShardID.Zero).Any)
-					throw new ArgumentOutOfRangeException("addr", addr, "Is (partially) negative");
-
-				Simulation.Init(addr);
-			}
-			catch (Exception ex)
-			{
-				Log.Error(ex);
 			}
 		}
 	}

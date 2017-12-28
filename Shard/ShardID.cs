@@ -1,10 +1,12 @@
 ﻿using VectorMath;
 using System;
+using Newtonsoft.Json;
 
 namespace Shard
 {
 	public struct ShardID
 	{
+		[JsonIgnore]
 		public Int3 XYZ;
 		public int ReplicaLevel;
 

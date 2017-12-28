@@ -98,6 +98,8 @@ namespace Shard
 		{
 			//Host.Domain = ;
 			Configure(addr, DB.Config,false);
+
+			startDate = DB.Start;
 			AdvertiseOldestGeneration(0);
 
 			listener = new Listener(h => Simulation.FindLink(h.ID));
@@ -122,7 +124,6 @@ namespace Shard
 			Console.WriteLine(" done");
 			stack.Append(sds);
 
-			startDate = DateTime.Parse(DB.Config.start,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal);
 			Console.WriteLine("Start Date="+startDate);
 
 			{
@@ -147,6 +148,7 @@ namespace Shard
 				stack.Append(new SDS(nextGen));
 				stack.Insert(new SDS.Computation(nextGen, ClientMessageQueue,perComputation).Complete());
 				CheckIncoming();
+				startDate = DB.Start;
 			}
 			Console.WriteLine("done. Starting main loop...");
 
@@ -157,6 +159,7 @@ namespace Shard
 			while (true)
 			{
 				CheckIncoming();
+				startDate = DB.Start;
 
 				int timeStep = TimeStep;
 				Console.WriteLine("at " + timeStep);

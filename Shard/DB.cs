@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
@@ -23,14 +24,20 @@ namespace Shard
 			public float r = 0.5f, m=0.25f;
 			public int msPerTimeStep = 1000,   //total milliseconds per timestep
 						recoverySteps = 2;  //number of sub-steps per timestep (effectively splitting msPerTimeStep)
+		}
+
+		public class StartContainer : Entity
+		{
 			public string start = DateTime.Now.ToString();
 		}
 
 
 		public static ConfigContainer Config { get; private set; }
+
+
 		public static Host Host { get; private set; }
 
-		private static MyCouchStore sdsStore, rcsStore, logicStore;
+		private static DataBase sdsStore, rcsStore, logicStore;
 
 		public static Func<string, Task<CSLogicProvider>> LogicLoader { get; set; }
 
@@ -58,9 +65,9 @@ namespace Shard
 			url += host;
 			Host = host;
 
-			sdsStore = new MyCouchStore(url, "sds");
-			rcsStore = new MyCouchStore(url, "rcs");
-			logicStore = new MyCouchStore(url, "logic");
+			sdsStore = new DataBase(url, "sds");
+			rcsStore = new DataBase(url, "rcs");
+			logicStore = new DataBase(url, "logic");
 		}
 
 
@@ -85,17 +92,30 @@ namespace Shard
 				throw new Exception("Failed attempt");
 		}
 
+		private static ContinuousPoller<StartContainer> startPoller;
+
+		public static DateTime Start
+		{
+			get
+			{
+				return Convert.ToDateTime(startPoller.Latest.start);
+			}
+		}
+
+
 		public static void PullConfig(int numTries = 3)
 		{
-			var cfg = new MyCouchStore(url, "config");
+			var control = new DataBase(url, "control");
 			Try(() =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
-				var job = cfg.GetByIdAsync<ConfigContainer>("current");
+				var job = control.GetByIdAsync<ConfigContainer>("config");
 				Config = job.Result;
 				return Config != null;
 			}, numTries);
 
+			startPoller = new ContinuousPoller<StartContainer>();
+			startPoller.Start(control, "start", null);
 		}
 
 		public static void PutConfig(ConfigContainer container, int numTries = 3)
@@ -118,9 +138,33 @@ namespace Shard
 			public string _id, _rev;
 		}
 
+
+		class RevisionChange
+		{
+			public string rev;
+		}
+
+		class Change
+		{
+			public int seq;
+			public string id;
+			public RevisionChange[] changes;
+		}
+
+		class DataBase : MyCouchStore
+		{
+			public readonly string DBName;
+
+			public DataBase(string url, string dbName) : base(url,dbName)
+			{
+				DBName = dbName;
+			}
+		}
+
+
 		class ContinuousPoller<T> where T : Entity
 		{
-			private MyCouchStore store;
+			private DataBase store;
 			private string id;
 			T lastValue;
 			private Action<T> onChange;
@@ -140,13 +184,13 @@ namespace Shard
 				}
 			}
 
-			public void Start(MyCouchStore store, string id, Action<T> onChange)
+			public void Start(DataBase store, string id, Action<T> onChange)
 			{
 				this.onChange = onChange;
 				this.store = store;
 				this.id = id;
 
-				PollAsync();
+				PollAsync().Wait();
 
 				var getChangesRequest = new GetChangesRequest
 				{
@@ -161,28 +205,37 @@ namespace Shard
 					getChangesRequest,
 					data =>
 					{
-						var d = serial.Deserialize<T>(data);
-						sl.DoLocked(() =>
+						var d = serial.Deserialize<Change>(data);
+						if (d != null && d.id == id)
 						{
-							if (d._id == id && d._rev != lastValue._rev)
+							StringBuilder revs = new StringBuilder();
+							bool actualChange = false;
+							foreach (var ch in d.changes)
 							{
-								lastValue = d;
-								onChange?.Invoke(d);
+								revs.Append(' ').Append(ch.rev);
+								if (lastValue == null || ch.rev != lastValue._rev)
+									actualChange = true;
 							}
-						});
+							if (actualChange)
+							{
+								Log.Message("Update detected on " + store.DBName + "['" + id + "']:" + revs + ". Polling");
+								PollAsync().Wait();
+							}
+						}
 					},
 					cancellation.Token);
 
 			}
 
-			private async void PollAsync()
+			private async Task PollAsync()
 			{
 				var header = await store.GetHeaderAsync(id);
-				if (header.Rev != lastValue._rev)
+				if (lastValue == null || header.Rev != lastValue._rev)
 				{
 					var data = await store.GetByIdAsync<T>(id);
 					sl.DoLocked(()=>
 					{
+						Log.Message("Got new data on " + store.DBName + "['" + id+"']: rev "+header.Rev);
 						lastValue = data;
 						onChange?.Invoke(data);
 					});
