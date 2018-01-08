@@ -227,7 +227,7 @@ namespace Shard
 			{
 				//Assert.IsNotNull(stack.NewestSDS.FinalEntities, i.ToString());
 				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
+				SDS.Computation comp = new SDS.Computation(i + 1,new DateTime(), null, TimeSpan.FromMilliseconds(10));
 				//ComputationTests.AssertNoErrors(comp, "comp");
 				//Assert.IsTrue(comp.Intermediate.inputConsistent);
 

@@ -9,6 +9,97 @@ using System.Collections.Concurrent;
 
 namespace Shard
 {
+	public struct TimingInfo
+	{
+		public readonly int StepsPerGeneration, StartGeneration, MaxGeneration;
+		public readonly TimeSpan
+							GenerationTimeWindow,
+							StepTimeWindow,
+							StepComputationTimeWindow;
+		public readonly DateTime
+							Start;
+
+		public TimingInfo(DB.TimingContainer t)
+		{
+			StepsPerGeneration = 1 + t.recoverySteps;
+			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msStep * StepsPerGeneration);
+			StepTimeWindow = TimeSpan.FromMilliseconds(t.msStep);
+			StepComputationTimeWindow = TimeSpan.FromMilliseconds(t.msComputation);
+			Start = Convert.ToDateTime(t.startTime);
+			StartGeneration = t.startGeneration;
+			MaxGeneration = t.maxGeneration;
+		}
+
+		public static TimingInfo Current
+		{
+			get
+			{
+				return new TimingInfo(DB.Timing);
+			}
+		}
+
+		public int TopLevelGeneration
+		{
+			get
+			{
+				var rs = StartGeneration + Math.Max(0, (int)(SimulationTime.TotalSeconds / GenerationTimeWindow.TotalSeconds));
+				if (MaxGeneration >= 0)
+					rs = Math.Min(rs, MaxGeneration);
+				return rs;
+			}
+		}
+
+		public TimeSpan SimulationTime
+		{
+			get
+			{
+				return Clock.Now - Start;
+			}
+		}
+
+		public DateTime LatestGenerationStart
+		{
+			get
+			{
+				return Start + TimeSpan.FromTicks(GenerationTimeWindow.Ticks * TopLevelGeneration);
+			}
+		}
+
+		public TimeSpan LatestGenerationElapsed
+		{
+			get
+			{
+				return Clock.Now - LatestGenerationStart;
+			}
+		}
+
+		public DateTime NextStepDeadline
+		{
+			get
+			{
+				var remainingRelative = 1.0 - Helper.Frac(SimulationTime.TotalSeconds / StepTimeWindow.TotalSeconds);
+				return Clock.Now + TimeSpan.FromTicks((long)( remainingRelative * StepTimeWindow.Ticks ));
+			}
+		}
+
+		/// <summary>
+		/// Determines the generation step.
+		/// 0 indicates the main processing step, >0 a recovery step.
+		/// Note that this index can exceed the configured number of recovery steps
+		/// if the simulation has reached the maximum generation
+		/// </summary>
+		public int LatestStepIndex
+		{
+			get
+			{
+				return LatestGenerationElapsed.FloorDiv(StepTimeWindow);
+			}
+		}
+
+	}
+
+
+
 	public static class Simulation
 	{
 		public static ShardID ID { get; private set; }
@@ -20,7 +111,6 @@ namespace Shard
 									siblings;
 
 		private static Listener listener;
-		private static DateTime startDate;
 
 		private static SDSStack stack = new SDSStack();
 
@@ -54,28 +144,6 @@ namespace Shard
 
 
 
-		public static int TimeStep
-		{
-			get
-			{
-				return Math.Max(0, MSIntoSimulation / DB.Config.msPerTimeStep);
-			}
-		}
-		public static int MSIntoSimulation
-		{
-			get
-			{
-				return (int)((Clock.Now - startDate).TotalMilliseconds);
-			}
-		}
-
-		public static int MSToSimulationStart
-		{
-			get
-			{
-				return -MSIntoSimulation;
-			}
-		}
 
 		public static SDSStack Stack
 		{
@@ -99,7 +167,6 @@ namespace Shard
 			//Host.Domain = ;
 			Configure(addr, DB.Config,false);
 
-			startDate = DB.Start;
 			AdvertiseOldestGeneration(0);
 
 			listener = new Listener(h => Simulation.FindLink(h.ID));
@@ -116,7 +183,7 @@ namespace Shard
 					sds = new SDS(data);
 					break;
 				}
-				CheckIncoming();
+				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
 				Thread.Sleep(1000);
 				Console.Write('.');
 				Console.Out.Flush();
@@ -124,81 +191,71 @@ namespace Shard
 			Console.WriteLine(" done");
 			stack.Append(sds);
 
-			Console.WriteLine("Start Date="+startDate);
+			Console.WriteLine("Start Date="+DB.Timing.startTime);
 
 			{
-				int timeStep = TimeStep;
-				Console.WriteLine("Starting at " + timeStep);
-
 				foreach (var link in neighbors)
 					DB.BeginFetch(link.InboundRCS);
 			}
 
-			int msPerSubStep = DB.Config.msPerTimeStep / (1 + DB.Config.recoverySteps);
-			int msComputation = msPerSubStep / 2;
-			TimeSpan perComputation = TimeSpan.FromMilliseconds(msComputation);
 
 			Console.Write("Catching up...");
 			Console.Out.Flush();
-			while (stack.NewestSDSGeneration < TimeStep)
+			while (stack.NewestSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
 				Console.Write(".");
 				Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen, ClientMessageQueue,perComputation).Complete());
-				CheckIncoming();
-				startDate = DB.Start;
+				stack.Insert(new SDS.Computation(nextGen, Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow).Complete());
+				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
 			}
 			Console.WriteLine("done. Starting main loop...");
 
 
-			TimeSpan perSubStep = TimeSpan.FromMilliseconds(msPerSubStep);
-
 			SDS.Computation comp = null;
+
 			while (true)
 			{
-				CheckIncoming();
-				startDate = DB.Start;
+				var timing = TimingInfo.Current;
+				CheckIncoming(timing.TopLevelGeneration);
+				Log.Message("TLG "+stack.NewestSDSGeneration+"/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 
-				int timeStep = TimeStep;
-				Console.WriteLine("at " + timeStep);
-				int wait = MSToSimulationStart;
-				if (wait > 0)
+				if (comp != null)
 				{
-					Console.WriteLine("Must wait "+wait+" more MS...");
-					Thread.Sleep(Math.Min(1000, MSToSimulationStart));
-					continue;
+					if (Clock.Now >= comp.Deadline)
+					{
+						Log.Message("Completing g"+comp.Generation);
+						stack.Insert(comp.Complete());
+						comp = null;
+					}
+					else
+					{
+						Clock.SleepUntil(comp.Deadline);
+						continue;
+					}
 				}
 
-				DateTime stepStart = startDate + TimeSpan.FromMilliseconds( DB.Config.msPerTimeStep * timeStep);
-				TimeSpan elapsed = Clock.Now - stepStart;
-
-				int recoveryIndex = elapsed.FloorDiv(perSubStep);
-				DateTime subStart = stepStart + TimeSpan.FromMilliseconds(recoveryIndex * msPerSubStep);
-				TimeSpan subElapsed = Clock.Now - subStart;
-				TimeSpan subRemaining = perSubStep - subElapsed;
-				TimeSpan subCompRemaining = perComputation - subElapsed;
-
-
-				if (timeStep != stack.NewestSDSGeneration)
+				int newestSDSGeneration = stack.NewestSDSGeneration;
+				if (timing.TopLevelGeneration > newestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
-					int nextGen = stack.NewestSDSGeneration + 1;
+					int nextGen = newestSDSGeneration + 1;
+					Log.Message("Processing next TLG g" + nextGen);
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation(nextGen+1, ClientMessageQueue, subCompRemaining);
+					comp = new SDS.Computation (nextGen,timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow);
 				}
 				else
 				{
 					//see if we can recover something
-
-					int at = stack.NewestConsistentSDSIndex + 1;
-					if (at < stack.Size)
+					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;	//must be > 0
+					if (oldestInconsistentSDSIndex < stack.Size)
 					{
-						int currentGen = stack[at].Generation;
-						for (; at < stack.Size; at++)
+						int recoverAtIndex = oldestInconsistentSDSIndex;
+						int currentGen = stack[recoverAtIndex].Generation;
+						for (; recoverAtIndex < stack.Size; recoverAtIndex++)
 						{
-							SDS current = stack[at];
+							SDS current = stack[recoverAtIndex];
 							if (current.SignificantInboundChange)
 								break;
 
@@ -207,21 +264,21 @@ namespace Shard
 							if (check.ShouldRecoverThis)
 								break;
 						}
-						if (at < stack.Size)
-							comp = new SDS.Computation(stack[at].Generation, ClientMessageQueue, perComputation);
+						if (recoverAtIndex < stack.Size)
+						{
+							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
+							//precompute:
+							comp = new SDS.Computation(stack[recoverAtIndex].Generation, timing.NextStepDeadline, ClientMessageQueue, timing.StepComputationTimeWindow);
+							//now wait for remote RCS...
+						}
+					}
+					if (comp == null)
+					{
+						//nothing to recover
+						Log.Message("Nothing to do");
+						Clock.SleepUntil(timing.NextStepDeadline);
 					}
 				}
-
-				if (subCompRemaining.TotalSeconds <= 0 && comp != null)
-				{
-					stack.Insert(comp.Complete());
-					comp = null;
-				}
-
-				if (comp != null)
-					Clock.Sleep(subCompRemaining);
-				else
-					Clock.Sleep(subRemaining);
 			}
 
 
@@ -315,7 +372,7 @@ namespace Shard
 			incoming.Add(new Tuple<Link, object>(lnk, obj));
 		}
 
-		private static void CheckIncoming()
+		private static void CheckIncoming(int currentTLG)
 		{
 			Tuple<Link, object> pair;
 			while (incoming.TryTake(out pair))
@@ -333,19 +390,17 @@ namespace Shard
 					}
 					if (gen > lnk.OldestGeneration)
 					{
-						lnk.OldestGeneration = gen;
+						lnk.SetOldestGeneration(gen, currentTLG);
+						lnk.Filter((id, o) =>
 						{
-							lnk.Filter((id, o) =>
-							{
-								SDS.Serial sds = o as SDS.Serial;
-								if (sds != null)
-									return sds.Generation >= gen;
-								RCS.Serial rcs = o as RCS.Serial;
-								if (rcs != null)
-									return rcs.Generation >= gen;
-								return true;
-							});
-						}
+							SDS.Serial sds = o as SDS.Serial;
+							if (sds != null)
+								return sds.Generation >= gen;
+							RCS.Serial rcs = o as RCS.Serial;
+							if (rcs != null)
+								return rcs.Generation >= gen;
+							return true;
+						});
 					}
 					return;
 				}

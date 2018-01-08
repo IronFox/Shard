@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
 
 namespace Shard
 {
@@ -87,6 +88,26 @@ namespace Shard
 					return false;
 			return true;
 		}
+
+		public static double Frac(double value)
+		{
+			return value - Math.Truncate(value);
+		}
+
+		public static void Enter(ref SpinLock lck)
+		{
+			bool amIn = false;
+			for (int i = 0; i < 10; i++)
+			{
+				lck.Enter(ref amIn);
+				if (amIn)
+					return;
+				Thread.Sleep(10);
+			}
+			throw new IntegrityViolation("Could not enter spinlock after 100 ms");
+		}
+
+
 		public static bool AreEqual<T, K>(Dictionary<T, K[]> a, Dictionary<T, K[]> b)
 		{
 			bool emptyA = a == null || a.Count == 0;

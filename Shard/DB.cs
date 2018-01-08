@@ -1,5 +1,6 @@
 ﻿using MyCouch;
 using MyCouch.Requests;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -22,14 +23,18 @@ namespace Shard
 		{
 			public ShardID extent = new ShardID(Int3.One,1);
 			public float r = 0.5f, m=0.25f;
-			public int msPerTimeStep = 1000,   //total milliseconds per timestep
-						recoverySteps = 2;  //number of sub-steps per timestep (effectively splitting msPerTimeStep)
 		}
 
-		public class StartContainer : Entity
+		public class TimingContainer : Entity
 		{
-			public string start = DateTime.Now.ToString();
+			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) step comprise a top level generation
+			public int msComputation = 500; //total milliseconds per step dedicated to computation. Must be less than msStep. Any extra time is used for communication
+			public string startTime = DateTime.Now.ToString();  //starting time of the computation of generation #0
+			public int recoverySteps = 2;  //number of steps per generation dedicated to recovery. The total number of steps per top level generation equals 1+recoverySteps
+			public int maxGeneration = -1;  //maximum top level generation. Negative when disabled
+			public int startGeneration = 0; //generation effective at startTime
 		}
+
 
 
 		public static ConfigContainer Config { get; private set; }
@@ -92,15 +97,16 @@ namespace Shard
 				throw new Exception("Failed attempt");
 		}
 
-		private static ContinuousPoller<StartContainer> startPoller;
+		private static ContinuousPoller<TimingContainer> timingPoller;
 
-		public static DateTime Start
+		public static TimingContainer Timing
 		{
 			get
 			{
-				return Convert.ToDateTime(startPoller.Latest.start);
+				return timingPoller.Latest;
 			}
 		}
+
 
 
 		public static void PullConfig(int numTries = 3)
@@ -114,8 +120,8 @@ namespace Shard
 				return Config != null;
 			}, numTries);
 
-			startPoller = new ContinuousPoller<StartContainer>();
-			startPoller.Start(control, "start", null);
+			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer());
+			timingPoller.Start(control, "start", null);
 		}
 
 		public static void PutConfig(ConfigContainer container, int numTries = 3)
@@ -141,14 +147,14 @@ namespace Shard
 
 		class RevisionChange
 		{
-			public string rev;
+			public string rev = null;
 		}
 
 		class Change
 		{
-			public int seq;
-			public string id;
-			public RevisionChange[] changes;
+			public int seq = 0;
+			public string id = null;
+			public RevisionChange[] changes = null;
 		}
 
 		class DataBase : MyCouchStore
@@ -171,8 +177,9 @@ namespace Shard
 			SpinLock sl = new SpinLock();
 			CancellationTokenSource cancellation;
 
-			public ContinuousPoller()
+			public ContinuousPoller(T initial)
 			{
+				lastValue = initial;
 			}
 
 
@@ -261,7 +268,7 @@ namespace Shard
 				return;
 			if (rcsStore == null)
 				return;
-			ContinuousPoller<SerialRCSStack> poller = new ContinuousPoller<SerialRCSStack>();
+			ContinuousPoller<SerialRCSStack> poller = new ContinuousPoller<SerialRCSStack>(null);
 			if (!rcsRequests.TryAdd(id, poller))
 				return;
 			poller.Start(rcsStore, id.ToString(),null);

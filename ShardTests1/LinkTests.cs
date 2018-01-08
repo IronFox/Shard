@@ -311,7 +311,7 @@ namespace Shard.Tests
 					SDS temp = stack.AllocateGeneration(i + 1);
 					Assert.AreEqual(temp.Generation, i + 1);
 					Assert.IsNotNull(stack.FindGeneration(i + 1));
-					SDS.Computation comp = new SDS.Computation(i + 1, Simulation.ClientMessageQueue, TimeSpan.FromSeconds(30));
+					SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), Simulation.ClientMessageQueue, TimeSpan.FromSeconds(30));
 					ComputationTests.AssertNoErrors(comp, i.ToString());
 					Assert.AreEqual(comp.Intermediate.entities.Count, 1);
 					Assert.IsTrue(comp.Intermediate.inputConsistent);

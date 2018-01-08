@@ -27,18 +27,6 @@ namespace Shard
 			return dict.TryRemove(key, out temp);
 		}
 
-		public static void Enter(ref SpinLock lck)
-		{
-			bool amIn = false;
-			for (int i = 0; i < 10; i++)
-			{
-				lck.Enter(ref amIn);
-				if (amIn)
-					return;
-				Thread.Sleep(10);
-			}
-			throw new IntegrityViolation("Could not enter spinlock after 100 ms");
-		}
 
 		public static async Task DoLockedAsync(this SemaphoreSlim sem, Func<Task> action)
 		{
@@ -71,7 +59,7 @@ namespace Shard
 
 		public static void DoLocked(this SpinLock lck, Action action)
 		{
-			Enter(ref lck);    //if fails, throws exception, not locked, all good
+			Helper.Enter(ref lck);    //if fails, throws exception, not locked, all good
 			try
 			{
 				action();

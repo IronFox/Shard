@@ -253,9 +253,15 @@ namespace Shard
 			public IntermediateData Intermediate { get { return data; } }
 			public int Generation { get { return generation; } }
 
+			/// <summary>
+			/// Time at which this computation will be completed.
+			/// Ignored during tests
+			/// </summary>
+			public readonly DateTime Deadline;
 
-			public Computation(int generation, ClientMessageQueue freshClientMessages, TimeSpan entityLogicTimeout)
+			public Computation(int generation, DateTime stepDeadline, ClientMessageQueue freshClientMessages, TimeSpan entityLogicTimeout)
 			{
+				Deadline = stepDeadline;
 				SDSStack stack = Simulation.Stack;
 				this.generation = generation;
 				SDS input = stack.FindGeneration(generation - 1);

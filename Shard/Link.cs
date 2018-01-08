@@ -319,20 +319,23 @@ namespace Shard
 		public bool IsResponsive { get { return ConnectionIsActive; } }
 
 		private int oldestGeneration = 0;
-		public int OldestGeneration {
+		public int OldestGeneration
+		{
 			get
 			{
 				return oldestGeneration;
 			}
-			internal set
-			{
-				if (oldestGeneration == value)
-					return;
-				oldestGeneration = value;
-				if (OutStack != null)
-					OutStack.SignalOldestGenerationUpdateAsync(Simulation.ID.ReplicaLevel, value, Simulation.TimeStep).Wait();
-			}
 		}
+
+		public void SetOldestGeneration(int newOldestGeneration, int currentTLG)
+		{
+			if (oldestGeneration == newOldestGeneration)
+				return;
+			oldestGeneration = newOldestGeneration;
+			if (OutStack != null)
+				OutStack.SignalOldestGenerationUpdateAsync(Simulation.ID.ReplicaLevel, newOldestGeneration, currentTLG).Wait();
+		}
+
 		public bool ConnectionIsActive
 		{
 			get

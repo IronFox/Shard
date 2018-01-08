@@ -176,7 +176,7 @@ namespace Shard.Tests
 				SDS temp = stack.AllocateGeneration(i + 1);
 				Assert.AreEqual(temp.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));
-				SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
+				SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
 				AssertNoErrors(comp,i.ToString());
 				Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
@@ -251,7 +251,7 @@ namespace Shard.Tests
 			{
 				{
 					SDS temp = stack.AllocateGeneration(i + 1);
-					SDS.Computation comp = new SDS.Computation(i + 1, null, TimeSpan.FromMilliseconds(10));
+					SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
 					AssertNoErrors(comp, i.ToString()+".evolve ("+ks+")");
 					SDS sds = comp.Complete();
 					stack.Insert(sds, false);
@@ -261,7 +261,7 @@ namespace Shard.Tests
 					int k = random.Next(1, i - 1);
 					ks.Append(',').Append(k);
 					Console.WriteLine(k);
-					SDS.Computation comp = new SDS.Computation(k, null, TimeSpan.FromMilliseconds(10));
+					SDS.Computation comp = new SDS.Computation(k, new DateTime(), null, TimeSpan.FromMilliseconds(10));
 					AssertNoErrors(comp, i + ".revisit (" + ks + ")");
 					SDS sds = comp.Complete();
 					stack.Insert(sds, false);
@@ -350,7 +350,7 @@ namespace Shard.Tests
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1,null, TimeSpan.FromMilliseconds(10));
+			SDS.Computation comp = new SDS.Computation(1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
 			AssertNoErrors(comp, "comp");
 			Assert.AreEqual(comp.Intermediate.entities.Count, 3);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
@@ -451,7 +451,7 @@ namespace Shard.Tests
 			SDS temp = stack.AllocateGeneration(1);
 			Assert.AreEqual(temp.Generation, 1);
 			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1, null,TimeSpan.FromMilliseconds(10));
+			SDS.Computation comp = new SDS.Computation(1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
 			AssertNoErrors(comp, "comp");
 			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
 			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
