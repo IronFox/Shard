@@ -89,14 +89,17 @@ namespace Shard
 		}
 
 
-		static Thread ntpThread;
-		static DateTime ntpTime = DateTime.Now;
-		static long ntpQueryStamp = Stopwatch.GetTimestamp();
-		static SpinLock timeLock = new SpinLock();
-		static IPEndPoint ntpHost;
+		private static Thread ntpThread;
+		private static DateTime ntpTime = DateTime.Now;
+		private static long ntpQueryStamp = GetTimestamp();
+		private static SpinLock timeLock = new SpinLock();
+		private static IPEndPoint ntpHost;
 
 
 		public const int NTPPort = 123;//The UDP port number assigned to NTP is 123
+
+		private static int numQueries = 0;
+		public static int NumQueries { get { return numQueries; } }
 
 
 		/// <summary>
@@ -109,6 +112,7 @@ namespace Shard
 			set
 			{
 				ntpHost = ResolveNTPHost(value);
+				numQueries = 0;
 				if (ntpThread == null || !ntpThread.IsAlive)
 				{
 					ntpThread = new Thread(new ThreadStart(NTPThread));
@@ -118,19 +122,27 @@ namespace Shard
 
 		}
 
-		static void NTPThread()
+
+		private static long GetTimestamp()
+		{
+			return Stopwatch.GetTimestamp();
+			//return watch.ElapsedTicks;
+		}
+
+		private static void NTPThread()
 		{
 			try
 			{
 				while (true)
 				{
 					DateTime newNTPTime = GetNetworkTime(ntpHost);
-					long ntpStamp = Stopwatch.GetTimestamp();
+					long ntpStamp = GetTimestamp();
 					timeLock.DoLocked(() =>
 					{
 						ntpTime = newNTPTime;
 						ntpQueryStamp = ntpStamp;
 					});
+					Interlocked.Increment(ref numQueries);
 					Thread.Sleep(TimeSpan.FromMinutes(2));
 				}
 			}
@@ -141,7 +153,50 @@ namespace Shard
 		}
 
 
+		public struct Sample
+		{
+			public readonly DateTime Now;
+			public readonly TimeSpan NTPReplyAge;
+			public readonly int	NTPReplyNumber;
 
+			public Sample(DateTime now, TimeSpan ntpAge)
+			{
+				Now = now;
+				NTPReplyAge = ntpAge;
+				NTPReplyNumber = numQueries;
+			}
+		}
+
+		private static TimeSpan ConvertSWTicks(long ticks)
+		{
+			//var rs0 = TimeSpan.FromSeconds((double)ticks / Stopwatch.Frequency);
+			//var rs = TimeSpan.FromMilliseconds((double)ticks / Stopwatch.Frequency * 1000.0);
+			var rs = TimeSpan.FromTicks(ticks * 10000000 / Stopwatch.Frequency);
+
+			return rs;
+		}
+
+		public static Sample GetSample()
+		{
+			DateTime now = new DateTime();
+			TimeSpan age = new TimeSpan();
+			timeLock.DoLocked(() =>
+			{
+				var a = ConvertSWTicks(GetTimestamp() - ntpQueryStamp);
+				now = ntpTime + a;
+				age = a;
+			});
+			return new Sample(now, age);
+		}
+
+		private static DateTime CalculateTime()
+		{
+			return ntpTime + ConvertSWTicks(GetTimestamp() - ntpQueryStamp);
+		}
+
+		/// <summary>
+		/// Queries the current time stamp using local and/or server-queried time data, as available
+		/// </summary>
 		public static DateTime Now
 		{
 			get
@@ -149,7 +204,7 @@ namespace Shard
 				DateTime rs = new DateTime();
 				timeLock.DoLocked(() =>
 				{
-					rs = ntpTime + TimeSpan.FromSeconds((double)(Stopwatch.GetTimestamp() - ntpQueryStamp) / Stopwatch.Frequency);
+					rs = CalculateTime();
 				});
 				return rs;
 			}

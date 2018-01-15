@@ -92,6 +92,7 @@
   <ItemGroup>
     <Compile Include="BitCubeTests.cs" />
     <Compile Include="ByteBufferTests.cs" />
+    <Compile Include="ClockTest.cs" />
     <Compile Include="Entity\ComputationTests.cs" />
     <Compile Include="EntityPoolTests.cs" />
     <Compile Include="Entity\EntityRandomTests.cs" />
