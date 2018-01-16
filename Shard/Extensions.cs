@@ -21,6 +21,20 @@ namespace Shard
 	public static class Extensions
 	{
 
+		public static T[] Subarray<T>(this T[] array, int offset)
+		{
+			if (array == null)
+				return null;
+			if (array.Length == 0 || offset <= 0)
+				return array;
+			if (offset >= array.Length)
+				return new T[0];
+			T[] rs = new T[array.Length - offset];
+			for (int i = offset; i < array.Length; i++)
+				rs[i - offset] = array[i];
+			return rs;
+		}
+
 		public static bool TryRemove<K, T>(this ConcurrentDictionary<K, T> dict, K key)
 		{
 			T temp;

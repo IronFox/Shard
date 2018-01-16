@@ -37,10 +37,10 @@ namespace Shard
 			}
 		}
 
-		static void SetupScenario(Host dbHost, DB.ConfigContainer cfg, IEnumerable<Entity> entities)
+		static void SetupScenario(DB.ConfigContainer cfg, IEnumerable<Entity> entities)
 		{
-			DB.Connect(dbHost);
-			DB.PutConfig(cfg);
+			DB.PutConfigAsync(cfg).Wait();
+			Simulation.Configure(new ShardID(), cfg, true);
 
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
@@ -62,7 +62,7 @@ namespace Shard
 			int idx = 0;
 			foreach (var factory in grid)
 			{
-				tasks[idx++] = DB.PutAsyncTask(factory.Finish(),true);
+				tasks[idx++] = DB.PutAsync(factory.Finish(),true);
 			}
 
 			Task.WaitAll(tasks);
@@ -82,10 +82,13 @@ namespace Shard
 		}
 
 		static Random random = new Random();
-		static IEnumerable<Entity> Translate(IEnumerable<ScenarioEntity> e)
+		static IEnumerable<Entity> Translate(IEnumerable<ScenarioEntity> e, Dictionary<string, Task<CSLogicProvider>> providerMap)
 		{
 			foreach (var se in e)
 			{
+				LogicInstantiation inst = new LogicInstantiation(se.logic);
+				var provider = providerMap[inst.AssemblyName].Result;
+
 				for (int i = 0; i < se.instances; i++)
 				{
 					Vec3 pos = Vec3.Zero;
@@ -101,9 +104,8 @@ namespace Shard
 						throw new Exception("Invalid position declaration: " + se.position);
 
 					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
-					
-
-					yield return new Entity(new EntityID(pos), new DynamicCSLogic(GetProvider(se.logic), null,null), appearances);
+					DynamicCSLogic logic = new DynamicCSLogic(provider, inst.LogicName, inst.Parameters);
+					yield return new Entity(new EntityID(pos), logic, appearances);
 				}
 				
 			}
@@ -116,6 +118,7 @@ namespace Shard
 			public float R=0, M=0;
 			public ScenarioEntity[] entities = null;
 		}
+
 
 		public class ScenarioEntity
 		{
@@ -145,12 +148,11 @@ namespace Shard
 			//RunStupidModel();
 			//return;
 
-			//CreateScenario();
 
 
-			if (args.Length != 2)
+			if (args.Length < 2)
 			{
-				Console.Error.WriteLine("Expected 2 parameters: [db url] [my addr], found "+args.Length);
+				Console.Error.WriteLine("Usage: shard <db url> <my addr> | shard <db url> --setup");
 				return;
 			}
 
@@ -159,6 +161,16 @@ namespace Shard
 				int at = 0;
 				var dbHost = new Host(args[at++]);
 				DB.Connect(dbHost);
+
+				if (args[at] == "setup")
+				{
+					CreateScenario();
+					Log.Message("Scenario set up. Shutting down");
+					return;
+				}
+
+
+
 				DB.PullConfig();
 				ShardID addr = ShardID.Decode(args[at++]);
 
@@ -178,18 +190,34 @@ namespace Shard
 		private static void CreateScenario()
 		{
 
+			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(File.ReadAllText("scenario/test0.json"));
 
-			string json = File.ReadAllText("scenario/test0.json");
-			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(json);
 
-			SetupScenario(new Host("localhost", 1024),
-						new DB.ConfigContainer()
+			var providerMap = new Dictionary<string, Task<CSLogicProvider>>();
+
+			foreach (var e in scenario.entities)
+			{
+				LogicInstantiation inst = new LogicInstantiation(e.logic);
+
+
+
+
+				Task<CSLogicProvider> prov;
+				if (!providerMap.TryGetValue(inst.AssemblyName, out prov))
+				{
+					string code = File.ReadAllText("scenario/Logic/" + inst.AssemblyName + ".cs");
+					prov = DB.PutCompiledLogicProviderAsync(inst.AssemblyName, code);
+					providerMap[inst.AssemblyName] = prov;
+				}
+			}
+
+			SetupScenario(new DB.ConfigContainer()
 						{
 							extent = new ShardID(scenario.worldSize[0], scenario.worldSize[1], scenario.worldSize[2], 1),
 							m = scenario.M,
 							r = scenario.R
 						},
-						Translate(scenario.entities));
+						Translate(scenario.entities,providerMap));
 			//			GenerateEntities(1000));
 
 		}
@@ -258,6 +286,36 @@ namespace Shard
 				Console.WriteLine("Population: b=" + numBugs + ", p=" + numPredators + ", c=" + numConflicts + "; Food=" + totalFood);
 
 			}
+		}
+	}
+
+	internal struct LogicInstantiation
+	{
+		public readonly string AssemblyName;
+		public readonly string LogicName;
+		public readonly string[] Parameters;
+
+		/// <summary>
+		/// Constructs instantiation parameters in the form
+		/// assembly[:logic][,p0[,p1[,...
+		/// </summary>
+		/// <param name="str">String to parse</param>
+		public LogicInstantiation(string str)
+		{
+			string[] parts = str.Split(',');
+
+			AssemblyName = parts[0];
+			LogicName = null;
+
+
+
+			int colonAt = AssemblyName.IndexOf(':');
+			if (colonAt != -1)
+			{
+				LogicName = AssemblyName.Substring(colonAt + 1);
+				AssemblyName = AssemblyName.Remove(colonAt);
+			}
+			Parameters = parts.Subarray(1);
 		}
 	}
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using VectorMath;
 
@@ -11,6 +12,25 @@ namespace Shard
 		public const int BytesPerEntry = 4;
 		public const int BitsPerEntry = BytesPerEntry*8;
 		public const uint HighestBit = (1u << (BitsPerEntry - 1));
+
+		public struct DBSerial
+		{
+			public int width, height, depth;
+			public byte[] data;
+			[JsonIgnore]
+			public bool IsEmpty { get { return width == 0; } }
+
+			public override bool Equals(object obj)
+			{
+				if (!(obj is DBSerial))
+					return false;
+				DBSerial other = (DBSerial)obj;
+				return width == other.width 
+					&& height == other.height 
+					&& depth == other.depth 
+					&& Helper.AreEqual(data, other.data);
+			}
+		}
 
 		/// <summary>
 		/// Number of cells (bits) that contain a 1. -1 if currently unknown
@@ -95,29 +115,46 @@ namespace Shard
 			return size.GetHashCode() * 17 + (grid != null ? grid.GetHashCode() : 0);
 		}
 
-		public byte[] ToByteArray()
+		public DBSerial Export()
 		{
-			ByteBuffer stream = new ByteBuffer();
-			stream.Add(size);
-			stream.Add(grid);
-			return stream.ToArray();
+			DBSerial rs = new DBSerial();
+			rs.width = size.X;
+			rs.height = size.Y;
+			rs.depth = size.Z;
+			int ones = this.OneCount;
+			if (ones == 0)
+				rs.data = null;
+			else if (ones == size.Product)
+				rs.data = new byte[] { 255 };
+			else
+			{
+				int len = grid.Length * 4;
+				rs.data = new byte[len];
+				Buffer.BlockCopy(grid, 0, rs.data, 0, len);
+			}
+			return rs;
 		}
 
-		public BitCube(byte[] data)
+		public BitCube(DBSerial serial)
 		{
-			if (data == null || data.Length < 12)
+			UpdateSize(new Int3(serial.width,serial.height,serial.depth));
+			if (serial.data != null)
 			{
-				return;
+				if (serial.data.Length == 1)
+				{
+					//all ones
+					this.SetAllOne();
+				}
+				else
+				{
+					if (GridSize.Product * 4 != (serial.data.Length))
+						throw new ArgumentOutOfRangeException("Got " + (serial.data.Length) + " byte(s), but needed " + GridSize + "*4 = " + GridSize.Product * 4);
+					Buffer.BlockCopy(serial.data, 0, grid, 0, serial.data.Length);
+				}
 			}
-			Int3 size;
-			size.X = BitConverter.ToInt32(data, 0);
-			size.Y = BitConverter.ToInt32(data, 4);
-			size.Z = BitConverter.ToInt32(data, 8);
-			UpdateSize(size);
-			if (GridSize.Product * 4 != (data.Length - 12))
-				throw new ArgumentOutOfRangeException("Got extra "+ (data.Length - 12)+" byte(s), but needed "+GridSize+"*4 = "+GridSize.Product*4);
-			Buffer.BlockCopy(data, 12, grid, 0, data.Length - 12);
 		}
+
+		
 
 		protected BitCube(BitCube source)
 		{

@@ -42,12 +42,41 @@ namespace Shard
 
 		public static Host Host { get; private set; }
 
-		private static DataBase sdsStore, rcsStore, logicStore;
+		private static DataBase sdsStore, rcsStore, logicStore,controlStore;
 
 		public static Func<string, Task<CSLogicProvider>> LogicLoader { get; set; }
 
 
-		
+		public static async Task<CSLogicProvider> PutCompiledLogicProviderAsync(string name, string sourceCode)
+		{
+			var provider = await
+				Task.Run(() =>
+				{
+					return new CSLogicProvider(name, sourceCode);
+				});
+			await PutLogicProviderAsync(provider);
+			return provider;
+		}
+
+		public static Task PutLogicProviderAsync(CSLogicProvider provider)
+		{
+			return PutLogicProviderAsync(provider.Export());
+		}
+
+		public static Task PutLogicProviderAsync(string name, string sourceCode)
+		{
+			var serial = new CSLogicProvider.DBSerial() { sourceCode = sourceCode, _id = name };
+
+			return PutLogicProviderAsync(serial);
+		}
+
+		public static async Task PutLogicProviderAsync(CSLogicProvider.DBSerial data)
+		{
+			if (logicStore == null)
+				return;// Task.FromResult<object>(null);
+			string serial = logicStore.Client.Serializer.Serialize(data);
+			await logicStore.SetAsync(data._id, serial);
+		}
 
 		public static async Task<CSLogicProvider> GetLogicProviderAsync(string scriptName)
 		{
@@ -73,6 +102,7 @@ namespace Shard
 			sdsStore = new DataBase(url, "sds");
 			rcsStore = new DataBase(url, "rcs");
 			logicStore = new DataBase(url, "logic");
+			controlStore = new DataBase(url, "control");
 		}
 
 
@@ -93,11 +123,31 @@ namespace Shard
 					Thread.Sleep(msBetweenRetries);
 				}
 			}
-			if (Config == null)
-				throw new Exception("Failed attempt");
 		}
 
+		private static async Task<bool> TryAsync(Func<Task<bool>> f, int numTries, int msBetweenRetries = 5000)
+		{
+			for (int i = 0; i < numTries; i++)
+			{
+				try
+				{
+					if (await f())
+						return true;
+				}
+				catch
+				{ }
+				if (i + 1 < numTries)
+				{
+					Log.Message("No luck. Sleeping " + msBetweenRetries + " mseconds...");
+					await Task.Delay(msBetweenRetries);
+				}
+			}
+			return false;
+		}
+
+
 		private static ContinuousPoller<TimingContainer> timingPoller;
+		private static ContinuousPoller<SDS.Serial> sdsPoller;
 
 		public static TimingContainer Timing
 		{
@@ -111,37 +161,42 @@ namespace Shard
 
 		public static void PullConfig(int numTries = 3)
 		{
-			var control = new DataBase(url, "control");
 			Try(() =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
-				var job = control.GetByIdAsync<ConfigContainer>("config");
+				var job = controlStore.GetByIdAsync<ConfigContainer>("config");
 				Config = job.Result;
 				return Config != null;
 			}, numTries);
 
 			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer());
-			timingPoller.Start(control, "start", null);
+			timingPoller.Start(controlStore, "timing");
 		}
 
-		public static void PutConfig(ConfigContainer container, int numTries = 3)
+		public static async Task PutConfigAsync(ConfigContainer container, int numTries = 3)
 		{
-			var cfg = new MyCouchStore(url, "config");
 			Config = container;
-			Config._id = "current";
+			Config._id = "config";
 			Config._rev = null;
-			Try(() =>
+			string doc = controlStore.Client.Serializer.Serialize(Config);
+			bool success = await TryAsync(async () =>
 			{
 				Log.Message("Storing simulation configuration on " + Host + " ...");
-				Config = cfg.StoreAsync(Config).Result;
+				var header = await controlStore.SetAsync("config", doc);
+				Config = await controlStore.GetByIdAsync<ConfigContainer>(header.Id);
 				return Config != null;
 			}, numTries);
+			if (success)
+				Log.Message("Done");
+			else
+				Log.Error("Failed to upload config to server");
 
 		}
 
 		public class Entity
 		{
 			public string _id, _rev;
+			//public string EntityId, _rev;
 		}
 
 
@@ -173,7 +228,7 @@ namespace Shard
 			private DataBase store;
 			private string id;
 			T lastValue;
-			private Action<T> onChange;
+			public Action<T> OnChange { get; set; }
 			SpinLock sl = new SpinLock();
 			CancellationTokenSource cancellation;
 
@@ -191,9 +246,9 @@ namespace Shard
 				}
 			}
 
-			public void Start(DataBase store, string id, Action<T> onChange)
+			public void Start(DataBase store, string id)
 			{
-				this.onChange = onChange;
+				//this.onChange = onChange;
 				this.store = store;
 				this.id = id;
 
@@ -236,31 +291,42 @@ namespace Shard
 
 			private async Task PollAsync()
 			{
-				var header = await store.GetHeaderAsync(id);
-				if (lastValue == null || header.Rev != lastValue._rev)
+				for (int i = 0; i < 3; i++)
 				{
-					var data = await store.GetByIdAsync<T>(id);
-					sl.DoLocked(()=>
+					try
 					{
-						Log.Message("Got new data on " + store.DBName + "['" + id+"']: rev "+header.Rev);
-						lastValue = data;
-						onChange?.Invoke(data);
-					});
+						var header = await store.GetHeaderAsync(id);
+						if (lastValue == null || header.Rev != lastValue._rev)
+						{
+							var data = await store.GetByIdAsync<T>(id);
+							sl.DoLocked(() =>
+							{
+								Log.Message("Got new data on " + store.DBName + "['" + id + "']: rev " + header.Rev);
+								lastValue = data;
+								OnChange?.Invoke(data);
+							});
+						}
+						return;
+					}
+					catch (TaskCanceledException)
+					{}
 				}
 			}
 		}
 
 
-		public static SDS.Serial LoadLatest(Int3 myID)
+		public static SDS.Serial Begin(Int3 myID)
 		{
-			//sdsStore.QueryAsync(new Query(new ViewIdentity()))
-			return sdsStore.GetByIdAsync<SDS.Serial>(myID.Encoded).Result;
+			sdsPoller = new ContinuousPoller<SDS.Serial>(null);
+			sdsPoller.Start(sdsStore, myID.Encoded);
+			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
+			return sdsPoller.Latest;
 		}
 
 
 
 		private static ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>> rcsRequests = new ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>>();
-		private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
+		//private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
 
 		public static void BeginFetch(RCS.ID id)
 		{
@@ -271,7 +337,7 @@ namespace Shard
 			ContinuousPoller<SerialRCSStack> poller = new ContinuousPoller<SerialRCSStack>(null);
 			if (!rcsRequests.TryAdd(id, poller))
 				return;
-			poller.Start(rcsStore, id.ToString(),null);
+			poller.Start(rcsStore, id.ToString());
 		}
 
 		public static SerialRCSStack TryGet(RCS.ID id)
@@ -451,18 +517,25 @@ namespace Shard
 			}, 3);
 		}
 
-		public static Task PutAsyncTask(SDS.Serial serial, bool forceReplace)
-		{
-			return PutAsync(null, sdsStore, serial, forceReplace);
-		}
-		public static async void PutAsync(SDS.Serial serial, bool forceReplace)
+		private static SDS.Serial latestPut = null;
+		public static async Task PutAsync(SDS.Serial serial, bool forceReplace)
 		{
 			if (sdsStore == null)
 				return;	//tests
 			try
 			{
 				Log.Message("Storing serial SDS in DB: g" + serial.Generation);
-				await PutAsyncTask(serial, forceReplace);
+				var latest = sdsPoller.Latest;
+				if (latestPut != null && latestPut.Generation > latest.Generation)
+					latest = latestPut;
+				if (serial.Generation <= latest.Generation)
+				{
+					Log.Message("Newer already online. Rejecting update");
+					return; //nothing to do
+				}
+				serial._rev = latest._rev;
+				await PutAsync(null, sdsStore, serial, forceReplace);
+				latestPut = serial;
 				Log.Message("Stored serial SDS in DB: g" + serial.Generation);
 			}
 			catch (Exception ex)
@@ -474,13 +547,21 @@ namespace Shard
 
 		private static async Task PutAsync(Link lnk, MyCouchStore store, Entity e, bool forceReplace)
 		{
+			string doc = store.Client.DocumentSerializer.Serialize(e);
+
 			if (forceReplace)
 			{
-				await store.DeleteAsync(e._id);
+				await store.SetAsync(e._id, doc);
+				return;
+
+				//await store.DeleteAsync(e._id);
 			}
 			try
 			{
-				var header = await store.StoreAsync(e._id, e._rev, store.Client.DocumentSerializer.Serialize(e));
+				var header = e._rev != null?
+					await store.StoreAsync(e._id, e._rev, doc):
+					await store.StoreAsync(e._id, doc);
+
 				e._rev = header.Rev;
 			}
 			catch (MyCouchResponseException)

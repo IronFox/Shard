@@ -276,7 +276,7 @@ namespace Shard.Tests
 			for (int i = 0; i < 100; i++)
 			{
 				BitCube cube = MakeRandomCube();
-				BitCube decoded = new BitCube(cube.ToByteArray());
+				BitCube decoded = new BitCube(cube.Export());
 				Assert.IsTrue(cube.Equals( decoded ),i.ToString());
 			}
 		}

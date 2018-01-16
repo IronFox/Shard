@@ -177,7 +177,7 @@ namespace Shard
 			SDS sds;
 			while (true)
 			{
-				var data = DB.LoadLatest(addr.XYZ);
+				var data = DB.Begin(addr.XYZ);
 				if (data != null)
 				{
 					sds = new SDS(data);
@@ -188,7 +188,16 @@ namespace Shard
 				Console.Write('.');
 				Console.Out.Flush();
 			}
-			Console.WriteLine(" done");
+			Log.Message(" done. Waiting for logic assemblies to finish loading...");
+
+			foreach (var e in sds.FinalEntities)
+			{
+				var logic = e.MyLogic as DynamicCSLogic;
+				if (logic != null)
+					logic.FinishLoading(e.ID, TimeSpan.FromMinutes(5));
+			}
+			Log.Message(" done");
+
 			stack.Append(sds);
 
 			Console.WriteLine("Start Date="+DB.Timing.startTime);
@@ -198,13 +207,12 @@ namespace Shard
 					DB.BeginFetch(link.InboundRCS);
 			}
 
-
-			Console.Write("Catching up...");
-			Console.Out.Flush();
+//			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
-				Console.Write(".");
-				Console.Out.Flush();
+				Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
+//				Console.Write(".");
+	//			Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
 				stack.Append(new SDS(nextGen));
 				stack.Insert(new SDS.Computation(nextGen, Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow).Complete());

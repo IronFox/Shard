@@ -330,7 +330,7 @@ namespace Shard
 		public struct SerialData
 		{
 			public byte[] CS { get; set; }
-			public InconsistencyCoverage.Serial IC { get; set; }
+			public BitCube.DBSerial IC { get; set; }
 
 			public override bool Equals(object obj)
 			{
@@ -347,7 +347,7 @@ namespace Shard
 
 			public bool IsUndefined()
 			{
-				return CS == null || IC == null;
+				return CS == null || IC.IsEmpty;
 			}
 			public bool IsDefined()
 			{

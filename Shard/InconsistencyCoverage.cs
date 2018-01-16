@@ -15,47 +15,10 @@ namespace Shard
 		public InconsistencyCoverage(Int3 size) : base(size)
 		{}
 
-		public InconsistencyCoverage(Serial serial) : base(serial?.Data)
+		public InconsistencyCoverage(DBSerial serial) : base(serial)
 		{}
 
-
-		public class Serial
-		{
-			public byte[] Data { get; set; }
-
-			public Serial(BitCube cube)
-			{
-				Data = cube.ToByteArray();
-			}
-			public Serial()
-			{ }
-
-			public BitCube Export()
-			{
-				return new BitCube(Data);
-			}
-
-			public override string ToString()
-			{
-				return "IC[" + Helper.Length(Data) + " byte(s)]";
-			}
-
-			public override bool Equals(object obj)
-			{
-				Serial other = obj as Serial;
-				return Helper.AreEqual(Data, other.Data);
-			}
-
-			public override int GetHashCode()
-			{
-				return Data.GetHashCode();
-			}
-		}
-
-		public Serial Export()
-		{
-			return new Serial(this);
-		}
+		
 
 		public InconsistencyCoverage Grow(bool trimToLocalSize)
 		{

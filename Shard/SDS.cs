@@ -18,7 +18,7 @@ namespace Shard
 		public class Serial : SerialGenerationObject
 		{
 			public byte[] SerialEntities { get; set; }
-			public InconsistencyCoverage.Serial IC { get; set; }
+			public InconsistencyCoverage.DBSerial IC { get; set; }
 			public byte[] SerialMessages { get; set; }
 
 			public override bool Equals(object obj)
@@ -345,7 +345,7 @@ namespace Shard
 
 				if (!ic.AnySet)
 				{
-					DB.PutAsync(rs.Export(),false);
+					DB.PutAsync(rs.Export(),false).Wait();
 				}
 				return rs;
 			}
