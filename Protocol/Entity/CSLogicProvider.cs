@@ -10,12 +10,14 @@ using System.Threading.Tasks;
 
 namespace Shard
 {
+
 	[Serializable]
 	public class DynamicCSLogic : EntityLogic, ISerializable
 	{
 		private EntityLogic nestedLogic;
 		private CSLogicProvider provider;
 		private Constructor constructor;
+
 
 		class Constructor
 		{
@@ -38,6 +40,7 @@ namespace Shard
 				AssemblyName = assemblyName;
 				SerialData = data;
 				LogicName = null;
+
 				task = Load();
 			}
 			public Constructor(string assemblyName, string logicName, object[] constructorParameters)
@@ -64,7 +67,7 @@ namespace Shard
 
 			private async Task Load()
 			{
-				provider = await DB.GetLogicProviderAsync(AssemblyName);
+				provider = await CSLogicProvider.AsyncFactory(AssemblyName);
 				instance = SerialData != null ? provider.DeserializeLogic(SerialData) : provider.Instantiate(LogicName, ConstructorParameters);
 			}
 
@@ -172,11 +175,7 @@ namespace Shard
 	public class CSLogicProvider : ISerializable
 	{
 
-		public class DBSerial : DB.Entity
-		{
-			public byte[] compiledAssembly;
-			public string sourceCode;
-		}
+		public static Func<string,Task<CSLogicProvider>> AsyncFactory { get; set; }
 
 
 		//CompilerResults result;
@@ -225,12 +224,13 @@ namespace Shard
 			return (EntityLogic)Helper.Deserialize(serialData, Assembly, FromScript);
 		}
 
-		public CSLogicProvider(DBSerial serial)
+
+		public CSLogicProvider(string assemblyName, string sourceCode, byte[] compiledAssembly)
 		{
-			FromScript = serial.compiledAssembly == null || serial.compiledAssembly.Length == 0;
-			AssemblyName = serial._id;
-			SourceCode = serial.sourceCode;
-			BinaryAssembly = serial.compiledAssembly;
+			FromScript = compiledAssembly == null || compiledAssembly.Length == 0;
+			AssemblyName = assemblyName;
+			SourceCode = sourceCode;
+			BinaryAssembly = compiledAssembly;
 
 			if (FromScript)
 				Assembly = Compile(SourceCode, out BinaryAssembly);
@@ -239,17 +239,6 @@ namespace Shard
 
 			CheckAssembly(types);
 		}
-
-		public DBSerial Export()
-		{
-			return new DBSerial()
-			{
-				compiledAssembly = BinaryAssembly,
-				_id = AssemblyName,
-				sourceCode = SourceCode
-			};
-		}
-
 
 		public CSLogicProvider(string assemblyName, byte[] binaryAssembly)
 		{
@@ -297,6 +286,7 @@ namespace Shard
 			// the "script"
 			options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
 			options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
+			options.ReferencedAssemblies.Add(typeof(EntityAppearance).Assembly.Location);
 			// Compile our code
 			var result = csProvider.CompileAssemblyFromSource(options, code);
 			if (result.Errors.HasErrors)

@@ -10,7 +10,7 @@ namespace Shard.Tests
 	using Shard;
 	using System;
 	using Microsoft.VisualStudio.TestTools.UnitTesting;
-
+	using static Shard.Tests.ComputationTests;
 
 	[TestClass()]
 	public class StupidModel
@@ -36,42 +36,24 @@ namespace Shard.Tests
 								//hence R = 4 / gridRes
 			float r = 4.5f / gridRes;
 
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r*0.5f };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
-			Vec3 outlierCoords = Simulation.MySpace.Min;
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r * 0.5f },
+				new ShardID(Int3.Zero, 0),
+				MakeGrid2D(gridRes));
 
-			SDS.IntermediateData intermediate0 = new SDS.IntermediateData();
-			intermediate0.entities = new EntityPool(MakeGrid2D(gridRes));
-			//EntityTest.RandomDefaultPool(100);
-			intermediate0.ic = InconsistencyCoverage.NewCommon();
-			intermediate0.inputConsistent = true;
-			intermediate0.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, intermediate0, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
-
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
 
 			for (int i = 0; i < 13; i++)
 			{
-				Assert.IsNotNull(stack.NewestSDS.FinalEntities,i.ToString());
-				SDS temp = stack.AllocateGeneration(i+1);
-				SDS.Computation comp = new SDS.Computation(i+1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-				ComputationTests.AssertNoErrors(comp, "comp");
-				Assert.IsTrue(comp.Intermediate.inputConsistent);
+				var sds = run.AdvanceTLG(true, true);
 
-				SDS sds = comp.Complete();
-				stack.Insert(sds);
-				Assert.IsTrue(sds.IsFullyConsistent);
-
-				Assert.AreEqual(sds.FinalEntities.Length, gridRes * gridRes);
+				Assert.AreEqual(sds.SDS.FinalEntities.Length, gridRes * gridRes);
 
 				int numBugs = 0;
 				int numPredators = 0;
 				int numConflicts = 0;
 				float totalFood = 0;
-				foreach (var e in sds.FinalEntities)
+				foreach (var e in sds.SDS.FinalEntities)
 				{
 					Habitat h = (Habitat)Helper.Deserialize(e.SerialLogicState);
 					if (h.bug.HasAnimal)

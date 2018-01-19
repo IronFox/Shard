@@ -76,7 +76,7 @@ namespace Shard.Tests
 
 		public static SDS RandomSDS()
 		{
-			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), RandomIntermediate(), RandomOutboundRCSs(), RandomClientMessages());
+			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), RandomClientMessages());
 		}
 
 		public static RCS[] RandomOutboundRCSs()
@@ -127,10 +127,10 @@ namespace Shard.Tests
 			return new RCS(EntityChangeSetTests.RandomSet(), forceConsistent ? InconsistencyCoverage.NewCommon() : BitCubeTests.RandomIC());
 		}
 
-		public static SDS.IntermediateData RandomIntermediate()
+		public static IntermediateSDS RandomIntermediate(EntityChange.ExecutionContext ctx)
 		{
-			SDS.IntermediateData rs = new SDS.IntermediateData();
-			rs.entities = EntityPoolTests.RandomPool(random.Next(16));
+			IntermediateSDS rs = new IntermediateSDS();
+			rs.entities = EntityPoolTests.RandomPool(random.Next(16),ctx);
 			rs.ic = BitCubeTests.RandomIC();
 			rs.inputConsistent = random.NextBool();
 			rs.localChangeSet = EntityChangeSetTests.RandomSet();
@@ -160,11 +160,11 @@ namespace Shard.Tests
 			for (int i = 0; i < 100; i++)
 			{
 				SDS sds = RandomSDS();
-				var s = sds.Export();
+				var s = new SerialSDS( sds );
 				string json = serializer.Serialize(s);
-				var reverse = serializer.Deserialize<SDS.Serial>(json);
+				var reverse = serializer.Deserialize<SerialSDS>(json);
 				Assert.AreEqual(s, reverse);
-				SDS rev2 = new SDS(reverse);
+				SDS rev2 = reverse.Deserialize();
 				Assert.IsTrue(sds.ICMessagesAndEntitiesAreEqual(rev2));
 			}
 		}

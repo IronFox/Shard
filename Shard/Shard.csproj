@@ -63,6 +63,12 @@
     <Reference Include="Ensure.That, Version=7.1.0.55, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Ensure.That.7.1.0\lib\net451\Ensure.That.dll</HintPath>
     </Reference>
+    <Reference Include="KdTreeLib, Version=1.3.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\KdTree.1.3.0\lib\net45\KdTreeLib.dll</HintPath>
+    </Reference>
+    <Reference Include="LZ4, Version=1.0.15.93, Culture=neutral, PublicKeyToken=62e1b5ec1eec9bdd, processorArchitecture=MSIL">
+      <HintPath>..\packages\lz4net.1.0.15.93\lib\net4-client\LZ4.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Win32.Primitives, Version=4.0.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Win32.Primitives.4.3.0\lib\net46\Microsoft.Win32.Primitives.dll</HintPath>
     </Reference>
@@ -156,31 +162,21 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BitCube.cs" />
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
+    <Compile Include="DB\SerialCSLogicProvider.cs" />
     <Compile Include="Entity\ClientMessageQueue.cs" />
-    <Compile Include="Entity\EntityError.cs" />
-    <Compile Include="Entity\EntityLogic.cs" />
     <Compile Include="Entity\InteractionLink.cs" />
-    <Compile Include="Entity\Entity.cs" />
-    <Compile Include="Entity\EntityChange.cs" />
-    <Compile Include="Entity\EntityChangeSet.cs" />
-    <Compile Include="Entity\EntityPool.cs" />
-    <Compile Include="Entity\CSLogicProvider.cs" />
-    <Compile Include="Entity\EntityRandom.cs" />
-    <Compile Include="Entity\TimeBudgetException.cs" />
-    <Compile Include="LazyList.cs" />
-    <Compile Include="Extensions.cs" />
-    <Compile Include="Helper.cs" />
-    <Compile Include="InconsistencyCoverage.cs" />
     <Compile Include="IntArray.cs" />
+    <Compile Include="IntermediateSDS.cs" />
     <Compile Include="Log.cs" />
     <Compile Include="Neighborhood.cs" />
     <Compile Include="RCS.cs" />
-    <Compile Include="SDS.cs" />
+    <Compile Include="SDSComputation.cs" />
     <Compile Include="SDSStack.cs" />
-    <Compile Include="SerialGenerationObject.cs" />
+    <Compile Include="DB\SerialGenerationObject.cs" />
+    <Compile Include="DB\SerialRCSStack.cs" />
+    <Compile Include="SerialSDS.cs" />
     <Compile Include="ShardID.cs" />
     <Compile Include="DB.cs" />
     <Compile Include="Host.cs" />
@@ -189,7 +185,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Simulation.cs" />
-    <Compile Include="Box.cs" />
+    <Compile Include="SimulationContext.cs" />
     <Compile Include="StupidModel.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -200,6 +196,10 @@
     <ProjectReference Include="..\Math\VectorMath.csproj">
       <Project>{8b82845e-874b-4b7c-9ea6-85c968b73986}</Project>
       <Name>VectorMath</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Protocol\ShardBase.csproj">
+      <Project>{8247ae53-9109-4d16-aaef-74b27f63df39}</Project>
+      <Name>ShardBase</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

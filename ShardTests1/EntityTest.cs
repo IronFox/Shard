@@ -70,6 +70,8 @@ namespace ShardTests1
 				{
 					foreach (var c in currentState.Contacts)
 					{
+						var dist = Vec3.GetChebyshevDistance(c.ID.Position, currentState.ID.Position);
+						Assert.IsTrue(dist <= Simulation.SensorRange);
 						if (!IsConsistent(c.Appearances))
 						{
 							isConsistent = false;
@@ -106,13 +108,12 @@ namespace ShardTests1
 				while (newState.NewPosition == currentState.ID.Position)
 				{
 					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-Simulation.M, Simulation.M);
-					if (!Simulation.CheckDistance("Motion", newState.NewPosition, currentState, Simulation.M))
-						throw new Exception("WTF");
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > Simulation.M) 
+						throw new Exception("Pre-clamp motion range exceeded");
 
 					newState.NewPosition = Simulation.FullSimulationSpace.Clamp(newState.NewPosition);
-					if (!Simulation.CheckDistance("Motion", newState.NewPosition, currentState, Simulation.M))
-						throw new Exception("WTF2");
-
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > Simulation.M)
+						throw new Exception("Post-clamp motion range exceeded");
 				}
 			}
 		}
@@ -148,15 +149,17 @@ namespace ShardTests1
 		[TestMethod]
 		public void SimpleEntityFaultTest()
 		{
+			var ctx = new SimulationContext();
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, 
-				new RandomLogic(new Type[] { typeof(ConsistentLogic), typeof(FaultLogic) }).Instantiate));
+				new RandomLogic(new Type[] { typeof(ConsistentLogic), typeof(FaultLogic) }).Instantiate),ctx);
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 			int any = -1;
 			for (int i = 0; i < 8; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				var errors = pool.TestEvolve(set,ic,i,false,TimeSpan.FromSeconds(1));
+				ctx.SetGeneration(i);
+				var errors = pool.TestEvolve(set,ic,i,TimeSpan.FromSeconds(1));
 				if (errors != null)
 				{
 					Assert.IsTrue(ic.OneCount > 0);
@@ -175,11 +178,13 @@ namespace ShardTests1
 		{
 			int mismatched = 0;
 
+			var ctx = new SimulationContext();
+
 			for (int k = 0; k < 20; k++)
 			{
 				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 
-				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())));
+				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())),ctx);
 
 				int faultyCount = 0;
 				Entity faulty = new Entity();
@@ -197,9 +202,10 @@ namespace ShardTests1
 				for (int i = 0; i < InconsistencyCoverage.CommonResolution; i++)	//no point going further than current resolution
 				{
 					EntityChangeSet set = new EntityChangeSet();
-					var errors = pool.TestEvolve(set, ic, i, false,TimeSpan.FromSeconds(1));
+					ctx.SetGeneration(i);
+					var errors = pool.TestEvolve(set, ic, i, TimeSpan.FromSeconds(1));
 					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors));
-					Assert.AreEqual(0, set.Execute(pool));
+					Assert.AreEqual(0, set.Execute(pool,ctx));
 					//Assert.AreEqual(ic.OneCount, 1);
 
 					if (doGrow)
@@ -227,7 +233,7 @@ namespace ShardTests1
 						bool isFaultOrigin = (Helper.Deserialize(e.SerialLogicState) is FaultLogic);
 						if (!isFaultOrigin)
 						{
-							if (Simulation.GetDistance(e.ID.Position, faulty.ID.Position) <= Simulation.SensorRange)
+							if (ctx.GetDistance(e.ID.Position, faulty.ID.Position) <= Simulation.SensorRange)
 							{
 								Assert.IsTrue(e.HasContact(faulty.ID.Guid));
 								Assert.IsTrue(e.HasContact(faulty.ID));
@@ -260,21 +266,23 @@ namespace ShardTests1
 		}
 
 
-		public static EntityPool RandomDefaultPool(int numEntities)
+		public static EntityPool RandomDefaultPool(int numEntities, Shard.EntityChange.ExecutionContext ctx)
 		{
-			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentLogic()));
+			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentLogic()),ctx);
 		}
 
 		[TestMethod]
 		public void StateAdvertisementTest()
 		{
-			EntityPool pool = RandomDefaultPool(100);
+			var ctx = new SimulationContext();
+			EntityPool pool = RandomDefaultPool(100,ctx);
 			for (int i = 0; i < 100; i++)
 			{
 				EntityChangeSet set = new EntityChangeSet();
-				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, false,TimeSpan.FromSeconds(5));
+				ctx.SetGeneration(i);
+				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(5));
 				Assert.IsNull(errors, errors != null ? errors[0].ToString() : "");
-				Assert.AreEqual(0, set.Execute(pool));
+				Assert.AreEqual(0, set.Execute(pool,ctx));
 
 				HashSet<Guid> env = new HashSet<Guid>();
 				var state = pool.ToArray();
@@ -284,7 +292,7 @@ namespace ShardTests1
 					env.Clear();
 					foreach (var e1 in state)
 					{
-						float dist = Simulation.GetDistance(e.ID.Position, e1.ID.Position);
+						float dist = ctx.GetDistance(e.ID.Position, e1.ID.Position);
 						if (e1.ID.Guid != e.ID.Guid && dist <= Simulation.SensorRange)
 						{
 							Console.WriteLine(dist+"/"+Simulation.SensorRange);
@@ -297,7 +305,7 @@ namespace ShardTests1
 
 					foreach (var c in e.Contacts)
 					{
-						float dist = Simulation.GetDistance(c.ID.Position, e.ID.Position);
+						float dist = ctx.GetDistance(c.ID.Position, e.ID.Position);
 						Assert.IsTrue(dist <= Simulation.SensorRange, dist + " <= " + Simulation.SensorRange);
 						Assert.AreNotEqual(c.ID.Guid, e.ID.Guid);
 						Assert.IsTrue(env.Contains(c.ID.Guid));
@@ -319,13 +327,15 @@ namespace ShardTests1
 		public void EntityMotionTest()
 		{
 			int numEntities = 100;
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()));
+			var ctx = new SimulationContext();
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()),ctx);
 
 			for (int i = 0; i < 100; i++)
 			{
 				var old = pool.ToArray();
 				EntityChangeSet set = new EntityChangeSet();
-				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, false,TimeSpan.FromSeconds(1));
+				ctx.SetGeneration(i);
+				var errors = pool.TestEvolve(set,InconsistencyCoverage.NewCommon(),i, TimeSpan.FromSeconds(1));
 				Assert.IsNull(errors,errors != null ? errors[0].ToString() : "");
 				Assert.AreEqual(numEntities, set.FindNamedSet("motions").Size);
 				foreach (var e in old)
@@ -337,7 +347,7 @@ namespace ShardTests1
 					Assert.IsTrue(Simulation.MySpace.Contains(m.TargetLocation));
 				}
 
-				Assert.AreEqual(0, set.Execute(pool));
+				Assert.AreEqual(0, set.Execute(pool,ctx));
 				Assert.AreEqual(numEntities, pool.Count);
 				Entity e1;
 				foreach (var e in old)

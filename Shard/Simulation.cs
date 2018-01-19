@@ -154,6 +154,23 @@ namespace Shard
 		}
 
 
+		public static void FetchNeighborUpdate(SDSStack.Entry target, Link neighbor, RCS.SerialData data)
+		{
+			var candidate = new RCS(data);
+			var existing = target.InboundRCS[neighbor.LinearIndex];
+			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
+			if (existing != null && candidate.IC.OneCount > existing.IC.OneCount)
+			{
+				Console.Error.WriteLine("Unable to incorportate RCS from " + neighbor + ": RCS at generation " + target.Generation + " is worse than known");
+				return;
+			}
+			target.InboundRCS[neighbor.LinearIndex] = candidate;
+			if (significant)
+				target.SignificantInboundChange = true;
+		}
+
+
+
 
 
 		public static int NeighborCount { get { return neighbors != null ? neighbors.Count : 0; } }
@@ -180,7 +197,7 @@ namespace Shard
 				var data = DB.Begin(addr.XYZ);
 				if (data != null)
 				{
-					sds = new SDS(data);
+					sds = data.Deserialize();
 					break;
 				}
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
@@ -207,6 +224,8 @@ namespace Shard
 					DB.BeginFetch(link.InboundRCS);
 			}
 
+			SimulationContext ctx = new SimulationContext();
+
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
@@ -214,14 +233,15 @@ namespace Shard
 //				Console.Write(".");
 	//			Console.Out.Flush();
 				int nextGen = stack.NewestSDSGeneration + 1;
+				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
-				stack.Insert(new SDS.Computation(nextGen, Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow).Complete());
+				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
 			}
 			Console.WriteLine("done. Starting main loop...");
 
 
-			SDS.Computation comp = null;
+			SDSComputation comp = null;
 
 			while (true)
 			{
@@ -251,7 +271,8 @@ namespace Shard
 					int nextGen = newestSDSGeneration + 1;
 					Log.Message("Processing next TLG g" + nextGen);
 					stack.Append(new SDS(nextGen));
-					comp = new SDS.Computation (nextGen,timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow);
+					ctx.SetGeneration(nextGen);
+					comp = new SDSComputation(timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
 				}
 				else
 				{
@@ -263,11 +284,11 @@ namespace Shard
 						int currentGen = stack[recoverAtIndex].Generation;
 						for (; recoverAtIndex < stack.Size; recoverAtIndex++)
 						{
-							SDS current = stack[recoverAtIndex];
+							var current = stack[recoverAtIndex];
 							if (current.SignificantInboundChange)
 								break;
 
-							var check = current.CheckMissingRCS();
+							var check = CheckMissingRCS(current);
 							
 							if (check.ShouldRecoverThis)
 								break;
@@ -276,7 +297,8 @@ namespace Shard
 						{
 							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
-							comp = new SDS.Computation(stack[recoverAtIndex].Generation, timing.NextStepDeadline, ClientMessageQueue, timing.StepComputationTimeWindow);
+							ctx.SetGeneration(stack[recoverAtIndex].Generation);
+							comp = new SDSComputation(timing.NextStepDeadline, ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}
@@ -292,8 +314,72 @@ namespace Shard
 
 		}
 
+		public struct RecoveryCheck
+		{
+			public int missingRCS,
+							rcsAvailableFromNeighbor,
+							rcsRestoredFromDB;
+			public bool predecessorIsConsistent,
+							thisIsConsistent;
+
+			public bool AllThere { get { return missingRCS == 0; } }
+			public bool MissingAvailableFromNeighbors { get { return missingRCS == rcsAvailableFromNeighbor; } }
+			//public bool MissingAvailableFromAnywhere { get { return MissingRCS == RCSAvailableFromNeighbor + RCSAvailableFromDatabase; }  }
+			public bool AnyAvailableFromNeighbors { get { return rcsAvailableFromNeighbor > 0; } }
+			//public bool AnyAvailableFromAnywhere { get { return rcsAvailableFromNeighbor > 0 || RCSAvailableFromDatabase > 0; } }
+			public bool ShouldRecoverThis
+			{
+				get
+				{
+					return !thisIsConsistent
+							&&
+							(
+								AnyAvailableFromNeighbors
+								|| rcsRestoredFromDB > 0
+								|| (missingRCS == 0 && predecessorIsConsistent)
+								|| rcsRestoredFromDB > 0
+							);
+				}
+			}
+		}
+
+
+
+		public static RecoveryCheck CheckMissingRCS(SDSStack.Entry sds)
+		{
+			RecoveryCheck rs = new RecoveryCheck();
+			rs.predecessorIsConsistent = sds.IntermediateSDS.inputConsistent;
+			rs.thisIsConsistent = sds.IsFullyConsistent;
+
+			foreach (var other in Simulation.Neighbors)
+			{
+				var inbound = sds.InboundRCS[other.LinearIndex];
+				if (inbound != null && inbound.IsFullyConsistent)
+					continue;
+				//try get from database:
+				SerialRCSStack rcsStack = DB.TryGet(other.InboundRCS);
+				var rcs = rcsStack?.FindGeneration(sds.Generation);
+				if (rcs.HasValue)
+				{
+					sds.InboundRCS[other.LinearIndex] = new RCS(rcs.Value);
+					rs.rcsRestoredFromDB++;
+					continue;
+				}
+				rs.missingRCS++;
+
+				//try to get from neighbor:
+				if (other.IsResponsive)
+					rs.rcsAvailableFromNeighbor++;  //optimisitic guess
+			}
+			return rs;
+		}
+
+
+
 		public static void Configure(ShardID addr, DB.ConfigContainer config, bool forceAllLinksPassive)
 		{
+			CSLogicProvider.AsyncFactory = DB.GetLogicProviderAsync;
+
 			ID = addr;
 			ext = config.extent;
 			R = config.r;
@@ -338,42 +424,9 @@ namespace Shard
 			}
 		}
 
-		public static Vec3 ClampDestination(string task, Vec3 newPosition, EntityID currentEntityPosition, float maxDistance)
-		{
-			float dist = GetDistance(newPosition, currentEntityPosition.Position);
-			if (dist <= maxDistance)
-				return newPosition;
-
-			Log.Error(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
-			newPosition = currentEntityPosition.Position + (newPosition - currentEntityPosition.Position) * maxDistance / dist;
-
-			Debug.Assert(GetDistance(newPosition, currentEntityPosition.Position) <= maxDistance);
-
-			return newPosition;
-		}
-
-		public static bool CheckDistance(string task, Vec3 taskLocation, EntityID currentEntityPosition, float maxDistance)
-		{
-			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
-			if (dist <= maxDistance)
-				return true;
-			Log.Error(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
-			return false;
-		}
 
 
-		public static bool CheckDistance(string task, Vec3 taskLocation, Entity actor, float maxDistance)
-		{
-			return CheckDistance(task, taskLocation, actor.ID, maxDistance);
-		}
-		internal static bool CheckDistance(string task, Vec3 referencePosition, Vec3 targetPosition, float maxDistance)
-		{
-			float dist = GetDistance(referencePosition, targetPosition);
-			if (dist <= maxDistance)
-				return true;
-			Log.Error(task + ": exceeded maximum range (" + maxDistance + "): " + dist);
-			return false;
-		}
+
 
 		internal static void FetchIncoming(Link lnk, object obj)
 		{
@@ -401,7 +454,7 @@ namespace Shard
 						lnk.SetOldestGeneration(gen, currentTLG);
 						lnk.Filter((id, o) =>
 						{
-							SDS.Serial sds = o as SDS.Serial;
+							SerialSDS sds = o as SerialSDS;
 							if (sds != null)
 								return sds.Generation >= gen;
 							RCS.Serial rcs = o as RCS.Serial;
@@ -420,38 +473,38 @@ namespace Shard
 						Console.Error.WriteLine("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
 						return;
 					}
-					stack.AllocateGeneration(rcs.Generation).FetchNeighborUpdate(lnk, rcs.Data);
+					FetchNeighborUpdate(stack.AllocateGeneration(rcs.Generation),lnk, rcs.Data);
 					return;
 				}
 
-				if (obj is SDS.Serial)
+				if (obj is SerialSDS)
 				{
 					//Debug.Assert(HaveSibling(lnk));
-					SDS.Serial raw = (SDS.Serial)obj;
+					SerialSDS raw = (SerialSDS)obj;
 					if (raw.Generation <= stack.OldestSDSGeneration)
 					{
 						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Already moved past generation " + raw.Generation);
 						return;
 					}
-					SDS existing = stack.FindGeneration(raw.Generation);
+					var existing = stack.FindGeneration(raw.Generation);
 					if (existing.IsFullyConsistent)
 					{
 						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Generation already consistent: " + raw.Generation);
 						return;
 					}
-					SDS sds = new SDS(raw);
+					SDS sds = raw.Deserialize();
 					if (sds.IsFullyConsistent)
 					{
 						Console.Out.WriteLine("SDS update from sibling or DB: Accepted generation " + raw.Generation);
 						stack.Insert(sds);
 						return;
 					}
-					SDS merged = existing.MergeWith(sds);
+					SDS merged = existing.SDS.MergeWith(sds);
 					Console.Out.WriteLine("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
-					if (merged.Inconsistency < existing.Inconsistency)
+					if (merged.Inconsistency < existing.SDS.Inconsistency)
 						stack.Insert(merged);
 					if (merged.Inconsistency < sds.Inconsistency)
-						lnk.Set(new SDS.ID(ID.XYZ, raw.Generation).P2PKey, merged.Export());
+						lnk.Set(new SDS.ID(ID.XYZ, raw.Generation).P2PKey, new SerialSDS(merged));
 					return;
 				}
 
@@ -459,10 +512,6 @@ namespace Shard
 			}
 		}
 
-		public static float GetDistance(Vec3 a, Vec3 b)
-		{
-			return Vec3.GetChebyshevDistance(a, b);
-		}
 
 		public static bool HaveSibling(Link lnk)
 		{

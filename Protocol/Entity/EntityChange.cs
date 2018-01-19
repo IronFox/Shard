@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,7 +8,125 @@ using VectorMath;
 
 namespace Shard.EntityChange
 {
+	public struct EntityRanges
+	{
+		/// <summary>
+		/// Maximum movement range
+		/// </summary>
+		public readonly float M;
+		/// <summary>
+		/// Maximum influence range
+		/// </summary>
+		public readonly float R;
+		/// <summary>
+		/// Maximum sensor range
+		/// </summary>
+		public readonly float S;
 
+
+		public EntityRanges(float r, float m, float s)
+		{
+			M = m;
+			R = r;
+			S = s;
+		}
+
+
+
+	}
+
+	public abstract class ExecutionContext
+	{
+		public abstract void LogMessage(string message);
+		public abstract void LogError(string message);
+		public readonly EntityRanges Ranges;
+		/// <summary>
+		/// Local simulation space
+		/// </summary>
+		public readonly Box LocalSpace;
+
+		public int GenerationNumber { get; protected set; }
+
+		public float GetDistance(Vec3 a, Vec3 b)
+		{
+			return Vec3.GetChebyshevDistance(a, b);
+		}
+
+		public ExecutionContext(EntityRanges ranges, Box localSimulationSpace)
+		{
+			Ranges = ranges;
+			LocalSpace = localSimulationSpace;
+		}
+		public bool CheckM(string task, Vec3 taskLocation, Vec3 currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition);
+			if (dist <= Ranges.M)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.M + "): " + dist);
+			return false;
+		}
+
+		public bool CheckM(string task, Vec3 taskLocation, EntityID currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
+			if (dist <= Ranges.M)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.M + "): " + dist);
+			return false;
+		}
+		public bool CheckM(string task, Vec3 p, Entity reference)
+		{
+			return CheckM(task, p, reference.ID);
+		}
+
+		public bool CheckR(string task, Vec3 taskLocation, Vec3 currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition);
+			if (dist <= Ranges.R)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.R + "): " + dist);
+			return false;
+		}
+		public bool CheckR(string task, Vec3 taskLocation, EntityID currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
+			if (dist <= Ranges.R)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.R + "): " + dist);
+			return false;
+		}
+		public bool CheckR(string task, Vec3 p, Entity reference)
+		{
+			return CheckR(task, p, reference.ID.Position);
+		}
+
+		//public bool CheckDistance(string task, Vec3 targetPosition, EntityID referencePosition, float maxDistance)
+		//{
+		//	float dist = EntityRanges.GetDistance(referencePosition.Position, targetPosition);
+		//	if (dist <= maxDistance)
+		//		return true;
+		//	LogError(task + ": exceeded maximum range (" + maxDistance + "): " + dist);
+		//	return false;
+		//}
+
+
+		internal Vec3 ClampDestination(string task, Vec3 newPosition, EntityID currentEntityPosition, float maxDistance)
+		{
+			float dist = GetDistance(newPosition, currentEntityPosition.Position);
+			if (dist <= maxDistance)
+				return newPosition;
+
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
+			newPosition = currentEntityPosition.Position + (newPosition - currentEntityPosition.Position) * maxDistance / dist;
+
+			Debug.Assert(GetDistance(newPosition, currentEntityPosition.Position) <= maxDistance);
+
+			return newPosition;
+		}
+
+		public abstract void RelayClientMessage(Guid entityID, Guid clientID, int channel, byte[] data);
+
+	}
 
 
 	[Serializable]
@@ -27,10 +146,10 @@ namespace Shard.EntityChange
 		}
 
 
-		public abstract bool Affects(Box cube);
+		public abstract bool Affects(Box cube, ExecutionContext ctx);
 
 		public abstract int CompareTo(object other);
-		public abstract bool Execute(EntityPool pool);
+		public abstract bool Execute(EntityPool pool, ExecutionContext ctx);
 		public override int GetHashCode()
 		{
 			return Origin.GetHashCode();
@@ -65,12 +184,12 @@ namespace Shard.EntityChange
 		}
 
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
-			return pool.FindAndRemove(Target, e => Simulation.CheckDistance("Removal", Target.Position, e, Simulation.M));
+			return pool.FindAndRemove(Target, e => ctx.CheckM("Removal", Target.Position, e));
 		}
 
-		public override bool Affects(Box cube)
+		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
 			return cube.Contains(Target.Position);
 		}
@@ -121,16 +240,16 @@ namespace Shard.EntityChange
 					.Finish();
 		}
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
-			if (!Simulation.CheckDistance("Insert", Origin.Position, TargetLocation, Simulation.M))
+			if (!ctx.CheckM("Insert", Origin.Position, TargetLocation))
 				return false;
 			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), directState, SerialLogic, Appearances));
 			directState = null;
 			return rs;
 		}
 
-		public override bool Affects(Box cube)
+		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
 			return cube.Contains(TargetLocation);
 		}
@@ -157,18 +276,18 @@ namespace Shard.EntityChange
 			}
 		}
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			Int3 opCoords = TargetLocation.FloorInt3;
-			if (Simulation.Owns(Origin.Position))
+			if (ctx.LocalSpace.Contains(Origin.Position))
 			{
 				Entity e;
 				if (!pool.Find(Origin, out e))
 					return false;
-				if (!Simulation.CheckDistance("Motion", TargetLocation, e, Simulation.M))
+				if (!ctx.CheckM("Motion", TargetLocation, e))
 					return false;
 
-				if (Simulation.Owns(TargetLocation))
+				if (ctx.LocalSpace.Contains(TargetLocation))
 				{
 					return pool.UpdateEntity(e, Entity);
 				}
@@ -177,19 +296,19 @@ namespace Shard.EntityChange
 			}
 			else
 			{
-				if (!Simulation.Owns(TargetLocation))
+				if (!ctx.LocalSpace.Contains(TargetLocation))
 				{
-					Log.Message("Motion: Shard coordinate mismatch. Local=" + Simulation.ID + ", target=" + TargetLocation);
+					ctx.LogMessage("Motion: Shard coordinate mismatch. Local=" + ctx.LocalSpace + ", target=" + TargetLocation);
 					return false;
 				}
-				if (!Simulation.CheckDistance("Motion", Origin.Position, TargetLocation, Simulation.M))
+				if (!ctx.CheckM("Motion", Origin.Position, TargetLocation))
 					return false;
 				return pool.Insert(Entity);
 			}
 
 		}
 
-		public override bool Affects(Box cube)
+		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
 			return cube.Contains(TargetLocation) || cube.Contains(Origin.Position);
 		}
@@ -243,16 +362,15 @@ namespace Shard.EntityChange
 					.GetHashCode();
 		}
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			pool.BroadcastMessage(Origin.Position, MakeMessage(true));
 			return true;
 		}
 
-		public override bool Affects(Box cube)
+		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
-			float r = Simulation.R;
-			return cube.Intersects(Box.FromMinAndMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			return cube.Intersects(Box.CenterExtent(Origin.Position,ctx.Ranges.R, Bool3.True));
 		}
 	}
 
@@ -287,7 +405,7 @@ namespace Shard.EntityChange
 					.GetHashCode();
 		}
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			return pool.RelayMessage(Origin.Position, TargetEntityID, MakeMessage(false));
 		}
@@ -312,7 +430,7 @@ namespace Shard.EntityChange
 			Velocity = entityContact.Velocity;
 		}
 
-		public override bool Execute(EntityPool pool)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			pool.AddContact(new EntityContact(Origin, Appearances, Velocity));
 			return true;
@@ -340,10 +458,9 @@ namespace Shard.EntityChange
 		}
 
 
-		public override bool Affects(Box cube)
+		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
-			float r = Simulation.SensorRange;
-			return cube.Intersects(Box.FromMinAndMax(Origin.Position - r, Origin.Position + r, Bool3.True));
+			return cube.Intersects(Box.CenterExtent(Origin.Position, ctx.Ranges.S, Bool3.True));
 		}
 	}
 

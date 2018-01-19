@@ -17,10 +17,12 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void AddToTest()
 		{
+			var ctx = new SimulationContext();
+
 			Random random = new Random();
 			List<Entity> testEntities = CreateEntities(100);
 
-			EntityPool original = new EntityPool();
+			EntityPool original = new EntityPool(ctx);
 			foreach (var e in testEntities)
 				Assert.IsTrue(original.Insert(e));
 			original.VerifyIntegrity();
@@ -29,7 +31,7 @@ namespace Shard.Tests
 
 			for (int i = 0; i < 100; i++)
 			{
-				EntityPool compare = new EntityPool();
+				EntityPool compare = new EntityPool(ctx);
 				random.Shuffle(testEntities);
 				foreach (var e in testEntities)
 					Assert.IsTrue(compare.Insert(e));
@@ -49,9 +51,9 @@ namespace Shard.Tests
 			return rs;
 		}
 
-		public static EntityPool RandomPool(int numEntities)
+		public static EntityPool RandomPool(int numEntities, EntityChange.ExecutionContext ctx)
 		{
-			var rs = new EntityPool();
+			var rs = new EntityPool(ctx);
 			var entities = CreateEntities(numEntities);
 			foreach (var e in entities)
 				Assert.IsTrue(rs.Insert(e));
@@ -61,8 +63,9 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void UpdateEntityTest()
 		{
+			var ctx = new SimulationContext();
 			Random random = new Random();
-			EntityPool pool = new EntityPool();
+			EntityPool pool = new EntityPool(ctx);
 			var entities = CreateEntities(3);
 			foreach (var e in entities)
 				Assert.IsTrue(pool.Insert(e));

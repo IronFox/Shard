@@ -34,7 +34,7 @@ namespace Shard.Tests
 			public MovingLogic(Vec3 direction)
 			{
 				Motion = direction / direction.Length * Simulation.M;
-				Assert.IsTrue(Simulation.GetDistance(Motion, Vec3.Zero) <= Simulation.M);
+				Assert.IsTrue(Vec3.GetChebyshevDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
 			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
@@ -122,7 +122,7 @@ namespace Shard.Tests
 		}
 
 
-		public static void AssertNoErrors(SDS.Computation comp, string task)
+		public static void AssertNoErrors(SDSComputation comp, string task)
 		{
 			var errors = comp.Errors;
 			if (errors == null)
@@ -135,15 +135,104 @@ namespace Shard.Tests
 			Assert.Fail(task+": "+errors[0].ToString());
 		}
 
+		public class SimulationRun
+		{
+			SimulationContext ctx;
+			public SDSStack stack;
+
+			public SimulationRun(DB.ConfigContainer config, ShardID localShardID, IEnumerable<Entity> entities, bool allLinksArePassive = true)
+			{
+				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+				Simulation.Configure(localShardID, config, allLinksArePassive);
+				ctx = new SimulationContext(config);
+
+				FeedEntities(entities);
+			}
+			public SimulationRun(DB.ConfigContainer config, ShardID localShardID, bool allLinksArePassive = true)
+			{
+				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+				Simulation.Configure(localShardID, config, allLinksArePassive);
+				ctx = new SimulationContext(config);
+			}
+
+			public void FeedEntities(IEnumerable<Entity> entities)
+			{
+				var intermediate = new IntermediateSDS();
+				intermediate.entities = new EntityPool(entities, ctx);
+				intermediate.ic = InconsistencyCoverage.NewCommon();
+				intermediate.inputConsistent = true;
+				intermediate.localChangeSet = new EntityChangeSet();
+
+				var root =
+					new SDSStack.Entry(
+					new SDS(0, intermediate.entities.ToArray(), intermediate.ic, null),
+					intermediate
+					);
+				Assert.IsTrue(root.IsFullyConsistent);
+				stack = Simulation.Stack;
+				stack.ResetToRoot(root);
+			}
+
+			private SDSComputation tlgComp;
+			private int tlgGen;
+			public SDSStack.Entry tlgEntry;
+			public ClientMessageQueue clientMessageQueue = null;
+
+			public SDSComputation BeginAdvanceTLG(bool intermediateShouldBeConsistent)
+			{
+				int i = tlgGen = stack.NewestSDSGeneration;
+				tlgEntry = stack.AllocateGeneration(i + 1);
+				Assert.AreEqual(tlgEntry.Generation, i + 1);
+				Assert.IsNotNull(stack.FindGeneration(i + 1));
+				ctx.SetGeneration(i + 1);
+				tlgComp = new SDSComputation(new DateTime(), clientMessageQueue, TimeSpan.FromMilliseconds(10), ctx);
+				if (intermediateShouldBeConsistent)
+					AssertNoErrors(tlgComp, i.ToString());
+				if (intermediateShouldBeConsistent)
+				{
+					Assert.AreEqual(tlgComp.Intermediate.ic.OneCount, 0);
+					Assert.IsTrue(tlgComp.Intermediate.inputConsistent);
+				}
+				Assert.AreEqual(tlgComp.Generation, i + 1);
+				return tlgComp;
+			}
+
+			public SDSStack.Entry AdvanceTLG(bool shouldBeConsistent, bool intermediateShouldBeConsistent, bool trim = true)
+			{
+				BeginAdvanceTLG(intermediateShouldBeConsistent);
+				return CompleteAdvanceTLG(shouldBeConsistent, trim);
+			}
+
+			public SDSStack.Entry CompleteAdvanceTLG(bool shouldBeConsistent, bool trim = true)
+			{
+				var sds = tlgComp.Complete();
+				Assert.IsTrue(sds.Item2 == tlgComp.Intermediate);
+				if (shouldBeConsistent)
+				{
+					Assert.IsTrue(sds.Item1.IsFullyConsistent);
+					Assert.IsTrue(sds.Item1.IC.OneCount == 0);
+				}
+				Assert.AreEqual(sds.Item1.Generation, tlgGen + 1);
+				return stack.Insert(sds, trim);
+			}
+
+			public SDSStack.Entry RecomputeGeneration(int generation, bool trim = true)
+			{
+				ctx.SetGeneration(generation);
+				var comp = new SDSComputation(new DateTime(), null, TimeSpan.FromMilliseconds(10),ctx);
+				AssertNoErrors(comp, "Recompute (" + generation + ")");
+				var sds = comp.Complete();
+				return stack.Insert(sds, trim);
+			}
+		}
+
 
 		[TestMethod()]
 		public void PingPongTest()
 		{
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
-
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0), 
 				new Entity[]
 				{
 					new Entity(
@@ -158,41 +247,23 @@ namespace Shard.Tests
 						null),
 				}
 			);
+
+
 			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null,null);
-			Assert.IsTrue(root.IsFullyConsistent);
 
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
 
 			const int NumIterations = 10;
 
 			for (int i = 0; i < NumIterations; i++)
 			{
-				SDS temp = stack.AllocateGeneration(i + 1);
-				Assert.AreEqual(temp.Generation, i + 1);
-				Assert.IsNotNull(stack.FindGeneration(i + 1));
-				SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-				AssertNoErrors(comp,i.ToString());
-				Assert.AreEqual(comp.Intermediate.entities.Count, 2);
-				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
-				Assert.IsTrue(comp.Intermediate.inputConsistent);
-				Assert.AreEqual(comp.Generation, i + 1);
-				SDS sds = comp.Complete();
-				Assert.IsTrue(sds.Intermediate == comp.Intermediate);
-				Assert.IsTrue(sds.IsFullyConsistent);
-				Assert.IsTrue(sds.IC.OneCount == 0);
-				Assert.AreEqual(sds.Generation, i+1);
-				Assert.AreEqual(sds.FinalEntities.Length, 2);
-				stack.Insert(sds);
+				var rs = run.AdvanceTLG(true,true);
+				Assert.AreEqual(rs.SDS.FinalEntities.Length, 2);
+
 			}
-			Assert.AreEqual(1, stack.Size);
+			Assert.AreEqual(1, run.stack.Size);
 			int sum = 0;
-			foreach (var e in stack.Last().FinalEntities)
+			foreach (var e in run.stack.Last().SDS.FinalEntities)
 			{
 				var state = Helper.Deserialize(e.SerialLogicState) as PingLogic;
 				if (state != null)
@@ -209,11 +280,9 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void ConsistentStateTest()
 		{
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
-
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{
 					new Entity(
@@ -222,20 +291,11 @@ namespace Shard.Tests
 						null),
 				}
 			);
-			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
 
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
-
-			foreach (var s in stack)
+			foreach (var s in run.stack)
 			{
-				foreach (var e in s.FinalEntities)
+				foreach (var e in s.SDS.FinalEntities)
 				{
 					RoundState st = e.MyLogic as RoundState;
 					Assert.IsNotNull(st);
@@ -249,27 +309,18 @@ namespace Shard.Tests
 			StringBuilder ks = new StringBuilder();
 			for (int i = 0; i < NumIterations; i++)
 			{
-				{
-					SDS temp = stack.AllocateGeneration(i + 1);
-					SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-					AssertNoErrors(comp, i.ToString()+".evolve ("+ks+")");
-					SDS sds = comp.Complete();
-					stack.Insert(sds, false);
-				}
+				run.AdvanceTLG(true,true,false);
 				if (i > 1)
 				{
 					int k = random.Next(1, i - 1);
 					ks.Append(',').Append(k);
-					Console.WriteLine(k);
-					SDS.Computation comp = new SDS.Computation(k, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-					AssertNoErrors(comp, i + ".revisit (" + ks + ")");
-					SDS sds = comp.Complete();
-					stack.Insert(sds, false);
+					Console.WriteLine(ks);
+					run.RecomputeGeneration(k,false);
 				}
 
-				foreach (var s in stack)
+				foreach (var s in run.stack)
 				{
-					foreach (var e in s.FinalEntities)
+					foreach (var e in s.SDS.FinalEntities)
 					{
 						RoundState st = e.MyLogic as RoundState;
 						Assert.IsNotNull(st);
@@ -287,8 +338,10 @@ namespace Shard.Tests
 			int numRCS = 0;
 
 
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(3), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.One, 0), config,true);
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(3), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.One, 0));
+
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			var crossingLogic = new MovingLogic(new Vec3(-1, 0, 0));
@@ -296,7 +349,7 @@ namespace Shard.Tests
 			Vec3 crossingTarget = crosser.ID.Position + crossingLogic.Motion;
 
 			foreach (var n in Simulation.Neighbors)
-				n.OutStack.OnPutRCS = (rcs,gen) =>
+				n.OutStack.OnPutRCS = (rcs, gen) =>
 				{
 					numRCS++;
 
@@ -319,9 +372,9 @@ namespace Shard.Tests
 						Assert.IsNotNull(decoded.CS.FindMotionOf(crosser.ID.Guid));
 				};
 
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
-				new Entity[] 
+
+			run.FeedEntities(
+				new Entity[]
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
@@ -337,65 +390,48 @@ namespace Shard.Tests
 					crosser
 				}
 			);
-			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS( 0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
 
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
-			SDS temp = stack.AllocateGeneration(1);
-			Assert.AreEqual(temp.Generation, 1);
-			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-			AssertNoErrors(comp, "comp");
-			Assert.AreEqual(comp.Intermediate.entities.Count, 3);
-			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
-			Assert.IsTrue(comp.Intermediate.inputConsistent);
 
-			foreach (var p in comp.Intermediate.localChangeSet.NamedSets)
+			var inter = run.BeginAdvanceTLG(true);
+
+			foreach (var p in inter.Intermediate.localChangeSet.NamedSets)
 			{
 				int expected = p.Key == "motions" || p.Key == "advertisements" ? 3 : 0;
 				Assert.AreEqual(expected, p.Value.Size);
 			}
 
-			Assert.AreEqual(comp.Generation, 1);
+			Assert.AreEqual(inter.Generation, 1);
 			Assert.AreEqual(Simulation.NeighborCount, numRCS);
 			//comp.
 
 			{
 				Link inbound = Simulation.Neighbors.Find(new Int3(0,1,1));
 				RCS inRCS = new RCS(new EntityChangeSet(), new InconsistencyCoverage(inbound.ICExportRegion.Size));
-				temp.FetchNeighborUpdate(inbound, inRCS.Export());
+				Simulation.FetchNeighborUpdate(run.tlgEntry, inbound, inRCS.Export());
 			}
 
-			SDS sds = comp.Complete();
-
-			Assert.IsTrue(sds.Intermediate == comp.Intermediate);
+			var rs = run.CompleteAdvanceTLG(false);
 
 			//check if most outer cells are 1 (one full-edge incoming RCS):
-			var core = sds.IC.Sub(Int3.One, sds.IC.Size - 2);
+			var core = rs.SDS.IC.Sub(Int3.One, rs.SDS.IC.Size - 2);
 			int edgeSize = InconsistencyCoverage.CommonResolution - 2;
-			Assert.AreEqual(sds.IC.OneCount , sds.IC.Size.Product - core.Size.Product - edgeSize * edgeSize,edgeSize.ToString());
-			Assert.IsTrue(sds.IC.OneCount > 0);
+			Assert.AreEqual(rs.SDS.IC.OneCount , rs.SDS.IC.Size.Product - core.Size.Product - edgeSize * edgeSize,edgeSize.ToString());
+			Assert.IsTrue(rs.SDS.IC.OneCount > 0);
 			Assert.IsTrue(core.OneCount == 0);
 
 
-			Assert.AreEqual(sds.Generation, 1);
-			Assert.AreEqual(sds.FinalEntities.Length, 2);
-			Assert.IsFalse(sds.HasEntity(crosser.ID.Guid));
+			Assert.AreEqual(rs.Generation, 1);
+			Assert.AreEqual(rs.SDS.FinalEntities.Length, 2);
+			Assert.IsFalse(rs.SDS.HasEntity(crosser.ID.Guid));
 
-			var check = sds.CheckMissingRCS();
+			var check = Simulation.CheckMissingRCS(rs);
 			Assert.IsFalse(check.AllThere);
 			Assert.IsFalse(check.AnyAvailableFromNeighbors);
 			Assert.AreEqual(check.missingRCS, numRCS-1);
 			Assert.IsTrue(check.predecessorIsConsistent);
 			Assert.AreEqual(check.rcsAvailableFromNeighbor, 0);
 			Assert.AreEqual(check.rcsRestoredFromDB, 0);
-
 
 		}
 
@@ -404,9 +440,10 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void IsolatedComputationTest()
 		{
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0));
 
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config,true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			foreach (var n in Simulation.Neighbors)
@@ -422,9 +459,7 @@ namespace Shard.Tests
 				Assert.AreEqual(new InconsistencyCoverage(dbSDS.IC).OneCount, 0);
 			};
 
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
-				new Entity[]
+			run.FeedEntities(new Entity[]
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
@@ -438,24 +473,9 @@ namespace Shard.Tests
 						null),
 				}
 			);
-			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS( 0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
+			var comp = run.BeginAdvanceTLG(true);
 
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
-			SDS temp = stack.AllocateGeneration(1);
-			Assert.AreEqual(temp.Generation, 1);
-			Assert.IsNotNull(stack.FindGeneration(1));
-			SDS.Computation comp = new SDS.Computation(1, new DateTime(), null, TimeSpan.FromMilliseconds(10));
-			AssertNoErrors(comp, "comp");
-			Assert.AreEqual(comp.Intermediate.entities.Count, 2);
-			Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
-			Assert.IsTrue(comp.Intermediate.inputConsistent);
 
 			foreach (var p in comp.Intermediate.localChangeSet.NamedSets)
 			{
@@ -466,13 +486,9 @@ namespace Shard.Tests
 			Assert.AreEqual(comp.Generation, 1);
 
 
-			SDS sds = comp.Complete();
-			Assert.IsTrue(sds.Intermediate == comp.Intermediate);
-
-			Assert.IsTrue(sds.IsFullyConsistent);
-			Assert.IsTrue(sds.IC.OneCount == 0);
+			var sds = run.CompleteAdvanceTLG(true);
 			Assert.AreEqual(sds.Generation, 1);
-			Assert.AreEqual(sds.FinalEntities.Length, 2);
+			Assert.AreEqual(sds.SDS.FinalEntities.Length, 2);
 		}
 
 

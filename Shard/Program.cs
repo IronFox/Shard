@@ -16,11 +16,12 @@ namespace Shard
 		class SDSFactory
 		{
 			private Box box;
-			private EntityPool pool = new EntityPool();
+			private EntityPool pool;
 
-			public SDSFactory(Box box)
+			public SDSFactory(Box box, EntityChange.ExecutionContext ctx)
 			{
 				this.box = box;
+				pool = new EntityPool(ctx);
 			}
 
 			public void Include(Entity e)
@@ -30,10 +31,10 @@ namespace Shard
 					throw new Exception("Failed to insert "+e);
 			}
 
-			public SDS.Serial Finish()
+			public SerialSDS Finish()
 			{
-				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(), new SDS.IntermediateData(), null,null);
-				return sds.Export();
+				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(),null);
+				return new SerialSDS(sds);
 			}
 		}
 
@@ -45,7 +46,7 @@ namespace Shard
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
 				{
-					grid[at.X, at.Y, at.Z] = new SDSFactory(Box.OffsetSize(new Vec3(at), Vec3.One, at+1 >= cfg.extent.XYZ));
+					grid[at.X, at.Y, at.Z] = new SDSFactory(Box.OffsetSize(new Vec3(at), Vec3.One, at+1 >= cfg.extent.XYZ),new SimulationContext());
 				}
 			);
 			var gridBox = IntBox.FromMinAndMax(Int3.Zero, cfg.extent.XYZ, Bool3.False);
@@ -238,14 +239,17 @@ namespace Shard
 			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
-			SDS.IntermediateData intermediate0 = new SDS.IntermediateData();
-			intermediate0.entities = new EntityPool(MakeGrid2D(gridRes));
+			var ctx = new SimulationContext();
+			var intermediate0 = new IntermediateSDS();
+			intermediate0.entities = new EntityPool(MakeGrid2D(gridRes),ctx);
 			//EntityTest.RandomDefaultPool(100);
 			intermediate0.ic = InconsistencyCoverage.NewCommon();
 			intermediate0.inputConsistent = true;
 			intermediate0.localChangeSet = new EntityChangeSet();
 
-			SDS root = new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, intermediate0, null, null);
+			SDSStack.Entry root = new SDSStack.Entry(
+												new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, null),
+												intermediate0);
 			//Assert.IsTrue(root.IsFullyConsistent);
 
 			SDSStack stack = Simulation.Stack;
@@ -254,12 +258,13 @@ namespace Shard
 			for (int i = 0; i < 13; i++)
 			{
 				//Assert.IsNotNull(stack.NewestSDS.FinalEntities, i.ToString());
-				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1,new DateTime(), null, TimeSpan.FromMilliseconds(10));
+				var temp = stack.AllocateGeneration(i + 1);
+				ctx.SetGeneration(i + 1);
+				var comp = new SDSComputation(new DateTime(), null, TimeSpan.FromMilliseconds(10),ctx);
 				//ComputationTests.AssertNoErrors(comp, "comp");
 				//Assert.IsTrue(comp.Intermediate.inputConsistent);
 
-				SDS sds = comp.Complete();
+				var sds = comp.Complete();
 				stack.Insert(sds);
 				//Assert.IsTrue(sds.IsFullyConsistent);
 
@@ -269,7 +274,7 @@ namespace Shard
 				int numPredators = 0;
 				int numConflicts = 0;
 				float totalFood = 0;
-				foreach (var e in sds.FinalEntities)
+				foreach (var e in sds.Item1.FinalEntities)
 				{
 					Habitat h = (Habitat)Helper.Deserialize(e.SerialLogicState);
 					if (h.bug.HasAnimal)

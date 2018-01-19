@@ -72,6 +72,12 @@ namespace VectorMath
 			Y = position[offset+1];
 			Z = position[offset+2];
 		}
+		public Vec3(float[] position)
+		{
+			X = position[0];
+			Y = position[1];
+			Z = position[2];
+		}
 
 		public float Length { get { return (float)System.Math.Sqrt(Vec.Dot(this, this)); } }
 

@@ -30,6 +30,17 @@ namespace Shard
 					&& depth == other.depth 
 					&& Helper.AreEqual(data, other.data);
 			}
+
+			public override int GetHashCode()
+			{
+				var hashCode = 1415848296;
+				//hashCode = hashCode * -1521134295 + base.GetHashCode();
+				hashCode = hashCode * -1521134295 + width.GetHashCode();
+				hashCode = hashCode * -1521134295 + height.GetHashCode();
+				hashCode = hashCode * -1521134295 + depth.GetHashCode();
+				hashCode = hashCode * -1521134295 + EqualityComparer<byte[]>.Default.GetHashCode(data);
+				return hashCode;
+			}
 		}
 
 		/// <summary>

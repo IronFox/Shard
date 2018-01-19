@@ -48,18 +48,18 @@ namespace Shard
 				foreach (T el in other.bag)
 					bag.Add(el);
 			}
-			public void Include(Set<T> other, Box targetSpace)
+			public void Include(Set<T> other, Box targetSpace, EntityChange.ExecutionContext ctx)
 			{
 				foreach (T el in other.bag)
-					if (el.Affects(targetSpace))
+					if (el.Affects(targetSpace, ctx))
 						Add(el);
 			}
-			public void FilterByTargetLocation(Box targetSpace)
+			public void FilterByTargetLocation(Box targetSpace, EntityChange.ExecutionContext ctx)
 			{
 				List<T> temp = new List<T>();
 				T el;
 				while (bag.TryTake(out el))
-					if (el.Affects(targetSpace))
+					if (el.Affects(targetSpace,ctx))
 						temp.Add(el);
 				foreach (var e in temp)
 					bag.Add(e);
@@ -72,11 +72,11 @@ namespace Shard
 				return ar;
 			}
 
-			public int Execute(EntityPool pool)
+			public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
 			{
 				var ar = ToSortedArray();
 				int numErrors = 0;
-				Parallel.ForEach(ar, c => { if (!c.Execute(pool)) Interlocked.Increment(ref numErrors); });
+				Parallel.ForEach(ar, c => { if (!c.Execute(pool,ctx)) Interlocked.Increment(ref numErrors); });
 				return numErrors;
 			}
 
@@ -166,18 +166,18 @@ namespace Shard
 		/// Executes all local changes on the specified pool, and automatically dispatches queued pool events
 		/// </summary>
 		/// <param name="pool">Pool to execute changes on</param>
-		public int Execute(EntityPool pool)
+		public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
 		{
 			int numErrors = 0;
 			if (messages.Size > 0)
 				pool.RequireTree();
-			numErrors += messages.Execute(pool);
-			numErrors += motions.Execute(pool);
-			numErrors += removals.Execute(pool);
-			numErrors += instantiations.Execute(pool);
+			numErrors += messages.Execute(pool,ctx);
+			numErrors += motions.Execute(pool, ctx);
+			numErrors += removals.Execute(pool, ctx);
+			numErrors += instantiations.Execute(pool, ctx);
 			if (advertisements.Size > 0)
 				pool.RequireTree();
-			numErrors += advertisements.Execute(pool);
+			numErrors += advertisements.Execute(pool, ctx);
 			pool.DispatchAll();
 			return numErrors;
 		}
@@ -261,21 +261,20 @@ namespace Shard
 		/// </summary>
 		/// <param name="source"></param>
 		/// <param name="targetSpace"></param>
-		public EntityChangeSet(EntityChangeSet source, Box targetSpace)
+		public EntityChangeSet(EntityChangeSet source, Box targetSpace, EntityChange.ExecutionContext ctx)
 		{
-			messages.Include(source.messages, targetSpace);
-			motions.Include(source.motions, targetSpace);
-			removals.Include(source.removals, targetSpace);
-			instantiations.Include(source.instantiations, targetSpace);
-			advertisements.Include(source.advertisements, targetSpace);
+			messages.Include(source.messages, targetSpace, ctx);
+			motions.Include(source.motions, targetSpace, ctx);
+			removals.Include(source.removals, targetSpace, ctx);
+			instantiations.Include(source.instantiations, targetSpace, ctx);
+			advertisements.Include(source.advertisements, targetSpace, ctx);
 		}
 
 		public List<EntityError> Evolve(IReadOnlyList<Entity> entities,
 			Dictionary<Guid, EntityMessage[]> clientMessages,
 			InconsistencyCoverage ic, 
-			int roundNumber, 
-			bool maySendMessages,
-			TimeSpan budget)
+			TimeSpan budget,
+			EntityChange.ExecutionContext ctx)
 		{
 			int numErrors = 0;
 
@@ -308,7 +307,7 @@ namespace Shard
 				{
 					if (!exceeded)
 					{
-						st = e.Evolve(t, this, roundNumber, maySendMessages, Helper.Concat(clientBroadcasts, messages));
+						st = e.Evolve(t, this, Helper.Concat(clientBroadcasts, messages),ctx);
 						if (entities[i].transientDeserializedLogic != null)
 							throw new IntegrityViolation("Transient deserialized logic was not whiped");
 					}
@@ -324,7 +323,7 @@ namespace Shard
 						st = (EntityLogic)Helper.Deserialize(e.SerialLogicState);
 					lock (lazyLock)
 						rs.Add(new EntityError(e, st,ex) );
-					ic.FlagInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
+					ic.FlagInconsistentR(ctx.LocalSpace.Relativate(e.ID.Position));
 					Interlocked.Increment(ref numErrors);
 				}
 			});
@@ -393,13 +392,13 @@ namespace Shard
 			set = (Set<T>)info.GetValue(name, typeof(Set<T>));
 		}
 
-		internal void FilterByTargetLocation(Box targetSpace)
+		public void FilterByTargetLocation(Box targetSpace, EntityChange.ExecutionContext ctx)
 		{
-			messages.FilterByTargetLocation(targetSpace);
-			motions.FilterByTargetLocation(targetSpace);
-			removals.FilterByTargetLocation(targetSpace);
-			instantiations.FilterByTargetLocation(targetSpace);
-			advertisements.FilterByTargetLocation(targetSpace);
+			messages.FilterByTargetLocation(targetSpace, ctx);
+			motions.FilterByTargetLocation(targetSpace, ctx);
+			removals.FilterByTargetLocation(targetSpace, ctx);
+			instantiations.FilterByTargetLocation(targetSpace, ctx);
+			advertisements.FilterByTargetLocation(targetSpace, ctx);
 		}
 
 		public bool IsEmpty

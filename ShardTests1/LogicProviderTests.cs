@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using VectorMath;
+using static Shard.Tests.ComputationTests;
 
 namespace Shard.Tests
 {
@@ -157,10 +158,10 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void LogicProviderTest()
 		{
-			DB.LogicLoader = scriptName => Task.Run( () => new CSLogicProvider(scriptName, code));
+			CSLogicProvider.AsyncFactory = scriptName => Task.Run( () => new CSLogicProvider(scriptName, code));
 			CSLogicProvider provider = new CSLogicProvider("Test", code);
-			var exported = provider.Export();
-			var imported = new CSLogicProvider(exported);
+			var exported = new SerialCSLogicProvider( provider );
+			var imported = exported.Deserialize();
 			Assert.AreEqual(provider, imported);
 
 			DynamicCSLogic logic = new DynamicCSLogic(provider,null,null);
@@ -185,14 +186,12 @@ namespace Shard.Tests
 		public void ScriptedLogicInstantiationTest()
 		{
 			CSLogicProvider provider = new CSLogicProvider("Test", instantiationTest);
-			DB.LogicLoader = scriptName => Task.Run(() => provider);
+			DB.LogicLoader =
+				CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => provider);
 
-
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
-
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{
 					new Entity(
@@ -201,37 +200,19 @@ namespace Shard.Tests
 						null),
 				}
 			);
-			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
-			Assert.AreEqual(intermediate.entities.Count, 1);
-
-			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
-
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
-
+			
 			const int NumIterations = 3;
 
 			for (int i = 0; i < NumIterations; i++)
 			{
-				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(1));
-				ComputationTests.AssertNoErrors(comp,i.ToString());
-				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
+				var rs = run.AdvanceTLG(true, true);
+				int instantiations = rs.IntermediateSDS.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);
-				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i+1,2));	//can never be more than 2
-				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
-				Assert.IsTrue(comp.Intermediate.inputConsistent);
-				SDS sds = comp.Complete();
-				Assert.AreEqual(sds.FinalEntities.Length, 2);	//previous clone self-destructed, so we are back to exactly 2
-				Assert.IsTrue(sds.IsFullyConsistent);
-				stack.Insert(sds);
+				Assert.AreEqual(rs.IntermediateSDS.entities.Count, Math.Min(i+1,2));	//can never be more than 2
+				Assert.AreEqual(rs.SDS.FinalEntities.Length, 2);	//previous clone self-destructed, so we are back to exactly 2
 			}
-			Assert.AreEqual(1, stack.Size);
-			foreach (var e in stack.Last().FinalEntities)
+			Assert.AreEqual(1, run.stack.Size);
+			foreach (var e in run.stack.Last().SDS.FinalEntities)
 			{
 				var st = Helper.Deserialize(e.SerialLogicState);
 				Assert.IsTrue(st is DynamicCSLogic, st.GetType().ToString());
@@ -287,14 +268,12 @@ namespace Shard.Tests
 		{
 			CSLogicProvider providerA = new CSLogicProvider("RemoteA", remoteTestA);
 			CSLogicProvider providerB = new CSLogicProvider("RemoteB", remoteTestB);
-			DB.LogicLoader = scriptName => Task.Run(() => scriptName == providerA.AssemblyName ? providerA : providerB);
+			DB.LogicLoader = CSLogicProvider.AsyncFactory =  scriptName => Task.Run(() => scriptName == providerA.AssemblyName ? providerA : providerB);
 
 
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
-
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{
 					new Entity(
@@ -303,37 +282,20 @@ namespace Shard.Tests
 						null),
 				}
 			);
-			//EntityTest.RandomDefaultPool(100);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
-			Assert.AreEqual(intermediate.entities.Count, 1);
 
-			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
-
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
 
 			const int NumIterations = 3;
 
 			for (int i = 0; i < NumIterations; i++)
 			{
-				SDS temp = stack.AllocateGeneration(i + 1);
-				SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), null, TimeSpan.FromMilliseconds(100));
-				ComputationTests.AssertNoErrors(comp, i.ToString());
-				int instantiations = comp.Intermediate.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
+				var rs = run.AdvanceTLG(true, true);
+				int instantiations = rs.IntermediateSDS.localChangeSet.NamedSets.Where(pair => pair.Key == "instantiations").First().Value.Size;
 				Assert.AreEqual(instantiations, 1);
-				Assert.AreEqual(comp.Intermediate.entities.Count, Math.Min(i + 1, 2));  //can never be more than 2
-				Assert.AreEqual(comp.Intermediate.ic.OneCount, 0);
-				Assert.IsTrue(comp.Intermediate.inputConsistent);
-				SDS sds = comp.Complete();
-				Assert.AreEqual(sds.FinalEntities.Length, 2);   //previous clone self-destructed, so we are back to exactly 2
-				Assert.IsTrue(sds.IsFullyConsistent);
-				stack.Insert(sds);
+				Assert.AreEqual(rs.IntermediateSDS.entities.Count, Math.Min(i + 1, 2));  //can never be more than 2
+				Assert.AreEqual(rs.SDS.FinalEntities.Length, 2);   //previous clone self-destructed, so we are back to exactly 2
 			}
-			Assert.AreEqual(1, stack.Size);
-			foreach (var e in stack.Last().FinalEntities)
+			Assert.AreEqual(1, run.stack.Size);
+			foreach (var e in run.stack.Last().SDS.FinalEntities)
 			{
 				var st = Helper.Deserialize(e.SerialLogicState);
 				Assert.IsTrue(st is DynamicCSLogic, st.GetType().ToString());

@@ -64,18 +64,18 @@ namespace Shard
 					instantiations[i] = replacer(instantiations[i]);
 			}
 
-			public void ApplyTo(EntityChangeSet outChangeSet, EntityLogic logic, byte[] serialLogic, bool maySendMessages, int roundNumber)
+			public void ApplyTo(EntityChangeSet outChangeSet, EntityLogic logic, byte[] serialLogic, EntityChange.ExecutionContext ctx)
 			{
-				Vec3 dest = Simulation.ClampDestination("Motion", NewPosition, id, SuppressAdvertisements ? Simulation.R : Simulation.M);
+				Vec3 dest = ctx.ClampDestination("Motion", NewPosition, id, SuppressAdvertisements ? ctx.Ranges.R : ctx.Ranges.M);
 				var newID = id.Relocate(dest);
 				outChangeSet.Add(new EntityChange.Motion(id, dest, newAppearances, logic,serialLogic)); //motion doubles as logic-state-update
 				if (!SuppressAdvertisements)
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
 				foreach (var inst in instantiations)
-					outChangeSet.Add(new EntityChange.Instantiation(newID, Simulation.ClampDestination("Instantiation", inst.targetLocation, newID, Simulation.M), inst.appearances, inst.logic,Helper.SerializeToArray(inst.logic)));
+					outChangeSet.Add(new EntityChange.Instantiation(newID, ctx.ClampDestination("Instantiation", inst.targetLocation, newID, ctx.Ranges.M), inst.appearances, inst.logic,Helper.SerializeToArray(inst.logic)));
 				foreach (var rem in removals)
 				{
-					if (Simulation.CheckDistance("Removal", rem.Position, newID, Simulation.M))
+					if (ctx.CheckM("Removal", rem.Position, newID))
 						outChangeSet.Add(new EntityChange.Removal(newID, rem));
 				}
 				int messageID = 0;
@@ -83,8 +83,7 @@ namespace Shard
 				{
 					if (m.IsDirectedToClient)
 					{
-						if (maySendMessages)
-							InteractionLink.Relay(id.Guid, m.receiver.Guid, m.channel, m.data, roundNumber);
+						ctx.RelayClientMessage(id.Guid, m.receiver.Guid, m.channel, m.data);
 					}
 					else
 						outChangeSet.Add(new EntityChange.Message(id, messageID++, m.receiver.Guid, m.channel, m.data));

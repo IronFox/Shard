@@ -11,12 +11,6 @@ using VectorMath;
 
 namespace Shard
 {
-	public class IntegrityViolation : Exception
-	{
-		public IntegrityViolation(string message) : base(message)
-		{ }
-
-	}
 
 	public static class Extensions
 	{

@@ -61,249 +61,6 @@ namespace Shard
 		}
 	}
 
-	[Serializable]
-	public struct EntityID : IComparable<EntityID>
-	{
-		public readonly Vec3 Position;
-		public readonly Guid Guid;
-
-
-		public EntityID(Guid guid, Vec3 position)
-		{
-			Guid = guid;
-			Position = position;
-		}
-
-		public EntityID(Vec3 position) : this(Guid.NewGuid(), position)
-		{ }
-
-
-		public override int GetHashCode()
-		{
-			return Position.GetHashCode() * 31 + Guid.GetHashCode();
-		}
-
-		public override bool Equals(object obj)
-		{
-			if (!(obj is EntityID))
-				return false;
-			var other = (EntityID)obj;
-			return other == this;
-		}
-
-		public static bool operator==(EntityID a, EntityID b)
-		{
-			return a.Position == b.Position && a.Guid == b.Guid;
-		}
-		public static bool operator !=(EntityID a, EntityID b) => !(a == b);
-
-		public override string ToString()
-		{
-			return Guid.ToString().Substring(0,13) + " "+Position;
-		}
-
-		public int CompareTo(EntityID other)
-		{
-			int cmp = Position.CompareTo(other.Position);
-			if (cmp != 0)
-				return cmp;
-			return Guid.CompareTo(other.Guid);
-		}
-
-		public EntityID Relocate(Vec3 targetLocation)
-		{
-			return new EntityID(Guid, targetLocation);
-		}
-	}
-
-	[Serializable]
-	public abstract class EntityAppearance : IComparable<EntityAppearance>
-	{
-		public abstract int CompareTo(EntityAppearance other);
-		public override bool Equals(object obj)
-		{
-			EntityAppearance other = obj as EntityAppearance;
-			return other != null && CompareTo(other) == 0;
-		}
-		public override abstract int GetHashCode();
-	}
-
-	[Serializable]
-	public class EntityAppearanceCollection : IComparable<EntityAppearanceCollection>, ISerializable, IEnumerable<EntityAppearance>
-	{
-		private SortedList<Type, EntityAppearance> members = new SortedList<Type, EntityAppearance>();
-
-		public void Add(EntityAppearance app)
-		{
-			Type t = app.GetType();
-			if (!t.IsSerializable)
-				throw new IntegrityViolation("Trying to add non-serializable appearance to collection: "+t);
-			if (Contains(t))
-				throw new IntegrityViolation("This appearance already exists in this collection");
-			members.Add(t, app);
-		}
-		public void AddOrReplace(EntityAppearance app)
-		{
-			Type t = app.GetType();
-			if (!t.IsSerializable)
-				throw new IntegrityViolation("Trying to add non-serializable appearance to collection: " + t);
-			members[app.GetType()] = app;
-		}
-
-		public bool Remove(Type t)
-		{
-			return members.Remove(t);
-		}
-
-		public bool Remove<T>()
-		{
-			return members.Remove(typeof(T));
-		}
-
-		public void Clear()
-		{
-			members.Clear();
-		}
-
-
-		public int CompareTo(EntityAppearanceCollection other)
-		{
-			var h = new Helper.Comparator();
-			h.Append(members.Values, other.members.Values);
-			return h.Finish();
-		}
-
-		public bool Contains(Type appearanceType)
-		{
-			return members.ContainsKey(appearanceType);
-		}
-
-		public bool Contains<T>() where T : EntityAppearance
-		{
-			return members.ContainsKey(typeof(T));
-		}
-
-		public T Get<T>() where T: EntityAppearance
-		{
-			EntityAppearance rs;
-			if (!members.TryGetValue(typeof(T), out rs))
-				return null;
-			return (T)rs;
-		}
-
-		public void GetObjectData(SerializationInfo info, StreamingContext context)
-		{
-			info.AddValue("members", Helper.ToArray(members.Values));
-		}
-
-		public EntityAppearanceCollection()
-		{ }
-
-		public EntityAppearanceCollection(SerializationInfo info, StreamingContext context)
-		{
-			EntityAppearance[] field = (EntityAppearance[])info.GetValue("members", typeof(EntityAppearance[]));
-			foreach (var a in field)
-				Add(a);
-		}
-
-
-		public override string ToString()
-		{
-			if (members.Count == 0)
-				return "{}";
-			if (members.Count == 1)
-				return members.Values[0].ToString();
-
-			StringBuilder builder = new StringBuilder();
-
-
-			foreach (var a in members.Values)
-			{
-				if (builder.Length != 0)
-					builder.Append(',');
-				builder.Append(a.ToString());
-			}
-
-			return "{"+builder.ToString()+"}";
-		}
-
-		public override bool Equals(object obj)
-		{
-			var other = obj as EntityAppearanceCollection;
-			return other != null && CompareTo(other) == 0;
-		}
-
-		public override int GetHashCode()
-		{
-			var h = Helper.Hash(this);
-			foreach (var app in members.Values)
-				h.Add(app);
-			return h.GetHashCode();
-		}
-
-		public IEnumerator<EntityAppearance> GetEnumerator()
-		{
-			return members.Values.GetEnumerator();
-		}
-
-		IEnumerator IEnumerable.GetEnumerator()
-		{
-			return members.Values.GetEnumerator();
-		}
-
-		public EntityAppearanceCollection Duplicate()
-		{
-			return (EntityAppearanceCollection)Helper.Deserialize(Helper.SerializeToArray(this));
-		}
-	}
-
-	[Serializable]
-	public struct EntityContact : IComparable<EntityContact>
-	{
-		public readonly EntityID ID;
-		public readonly EntityAppearanceCollection Appearances;
-		public readonly Vec3 Velocity;
-
-		public EntityContact(EntityID id, EntityAppearanceCollection appearances, Vec3 velocity)
-		{
-			ID = id;
-			Appearances = appearances;
-			Velocity = velocity;
-		}
-
-
-		public int CompareTo(EntityContact other)
-		{
-			return new Helper.Comparator()
-				.Append(ID, other.ID)
-				.Append(Appearances, other.Appearances)
-				.Append(Velocity, other.Velocity)
-				.Finish();
-		}
-
-		public override bool Equals(object obj)
-		{
-			if (!(obj is EntityContact))
-			{
-				return false;
-			}
-
-			var contact = (EntityContact)obj;
-			return ID ==  contact.ID &&
-				   Equals(Appearances, contact.Appearances)
-				   && Velocity == contact.Velocity
-				   ;
-		}
-
-		public override int GetHashCode()
-		{
-			var hashCode = 2035686911;
-			hashCode = hashCode * -1521134295 + ID.GetHashCode();
-			hashCode = hashCode * -1521134295 + Appearances.GetHashCode();
-			hashCode = hashCode * -1521134295 + Velocity.GetHashCode();
-			return hashCode;
-		}
-	}
 
 
 	[Serializable]
@@ -459,7 +216,7 @@ namespace Shard
 
 		}
 
-		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, int roundNumber, bool maySendMessages, ICollection<EntityMessage> clientMessages)
+		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, ICollection<EntityMessage> clientMessages, EntityChange.ExecutionContext ctx)
 		{
 			EntityLogic state = null;
 			evolutionState.Begin();
@@ -475,13 +232,13 @@ namespace Shard
 
 
 					var actions = new EntityLogic.Actions(this);
-					state.Execute(ref actions,AddClientMessages(clientMessages), roundNumber, new EntityRandom(this,roundNumber));
+					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber));
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);
 					evolutionState.SignalReserializationDone();
 
-					actions.ApplyTo(outChangeSet,state, serialLogic,maySendMessages,roundNumber);
+					actions.ApplyTo(outChangeSet,state, serialLogic,ctx);
 				}
 				catch
 				{
@@ -546,8 +303,8 @@ namespace Shard
 		{ }
 		public Entity(EntityID id, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) //: this()
 		{
-			if (!Simulation.FullSimulationSpace.Contains(id.Position))
-				throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
+			//if (!Simulation.FullSimulationSpace.Contains(id.Position))
+			//	throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
 			SerialLogicState = state;
 			transientDeserializedLogic = dstate;

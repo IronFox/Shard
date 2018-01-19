@@ -59,6 +59,8 @@ namespace Shard
 		private ConcurrentDictionary<EntityID, Container> fullMap = new ConcurrentDictionary<EntityID, Container>();
 		private ConcurrentDictionary<Guid, Container> guidMap = new ConcurrentDictionary<Guid, Container>();
 
+		private EntityChange.ExecutionContext ctx;
+
 		private static float Sqr(float x)
 		{
 			return x * x;
@@ -79,7 +81,7 @@ namespace Shard
 							points[i] = containers[i].entity.ID.Position.ToArray();
 						tree = rs = new KDTree<float, Container>(3, points, containers, (x, y) =>
 						{
-							return Simulation.GetDistance(new Vec3(x, 0), new Vec3(y, 0));
+							return ctx.GetDistance(new Vec3(x), new Vec3(y));
 						});
 					}
 					return rs;
@@ -87,18 +89,22 @@ namespace Shard
 			}
 		}
 
-		public EntityPool(IEnumerable<Entity> entities)
+		public EntityPool(IEnumerable<Entity> entities, EntityChange.ExecutionContext ctx)
 		{
+			this.ctx = ctx;
 			if (entities != null)
 				foreach (var e in entities)
 				{
 					var c = InsertC(e);
 					if (c == null)
-						Log.Message("Failed to insert entity " + e);
+						ctx.LogMessage("Failed to insert entity " + e);
 				}
 		}
-		public EntityPool()
-		{ }
+
+		public EntityPool(EntityChange.ExecutionContext ctx)
+		{
+			this.ctx = ctx;
+		}
 
 		public int Count
 		{
@@ -144,7 +150,7 @@ namespace Shard
 
 		public void AddContact(EntityContact c)
 		{
-			var contacts = tree.RadialSearch(c.ID.Position.ToArray(), Simulation.SensorRange);
+			var contacts = tree.RadialSearch(c.ID.Position.ToArray(), ctx.Ranges.S);
 
 			foreach (var p in contacts)
 			{
@@ -182,7 +188,7 @@ namespace Shard
 			Container rs;
 			if (!guidMap.TryGetValue(receiver, out rs))
 				return false;
-			if (!Simulation.CheckDistance("Message", senderPosition, rs.entity, Simulation.R))
+			if (!ctx.CheckR("Message", senderPosition, rs.entity))
 				return false;
 			return rs.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 		}
@@ -196,7 +202,7 @@ namespace Shard
 		{
 			int counter = 0;
 			
-			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), Simulation.R))
+			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), ctx.Ranges.R))
 			{
 				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
 				{
@@ -211,9 +217,11 @@ namespace Shard
 		/// Evolves all local entities (in parallel), and stores changes in the specified change set
 		/// </summary>
 		/// <param name="set"></param>
-		public List<EntityError> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, bool maySendMessages, TimeSpan budget)
+		public List<EntityError> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
 		{
-			return set.Evolve(EnumerateEntities().ToList(), null,ic, roundNumber, maySendMessages,budget);
+			if (roundNumber != ctx.GenerationNumber)
+				throw new IntegrityViolation("Expected generation number "+roundNumber+" in execution context, but found "+ctx.GenerationNumber);
+			return set.Evolve(EnumerateEntities().ToList(), null,ic,budget,ctx);
 		}
 
 		public IEnumerable<Entity> EnumerateEntities()
@@ -334,7 +342,7 @@ namespace Shard
 
 		public EntityPool Clone()
 		{
-			EntityPool rs = new EntityPool();
+			EntityPool rs = new EntityPool(ctx);
 			foreach (var e in this)
 				rs.Insert(e.Clone());
 			return rs;

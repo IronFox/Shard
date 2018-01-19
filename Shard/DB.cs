@@ -1,6 +1,7 @@
 ﻿using MyCouch;
 using MyCouch.Requests;
 using Newtonsoft.Json;
+using Shard.EntityChange;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -60,17 +61,17 @@ namespace Shard
 
 		public static Task PutLogicProviderAsync(CSLogicProvider provider)
 		{
-			return PutLogicProviderAsync(provider.Export());
+			return PutLogicProviderAsync(new SerialCSLogicProvider( provider ));
 		}
 
 		public static Task PutLogicProviderAsync(string name, string sourceCode)
 		{
-			var serial = new CSLogicProvider.DBSerial() { sourceCode = sourceCode, _id = name };
+			var serial = new SerialCSLogicProvider(name,sourceCode);
 
 			return PutLogicProviderAsync(serial);
 		}
 
-		public static async Task PutLogicProviderAsync(CSLogicProvider.DBSerial data)
+		public static async Task PutLogicProviderAsync(SerialCSLogicProvider data)
 		{
 			if (logicStore == null)
 				return;// Task.FromResult<object>(null);
@@ -87,8 +88,8 @@ namespace Shard
 					return logic;
 			}
 
-			var script = await logicStore.GetByIdAsync<CSLogicProvider.DBSerial>(scriptName);
-			return new CSLogicProvider(script);
+			var script = await logicStore.GetByIdAsync<SerialCSLogicProvider>(scriptName);
+			return script.Deserialize();
 		}
 
 		public static void Connect(Host host, string username = null, string password = null)
@@ -147,7 +148,7 @@ namespace Shard
 
 
 		private static ContinuousPoller<TimingContainer> timingPoller;
-		private static ContinuousPoller<SDS.Serial> sdsPoller;
+		private static ContinuousPoller<SerialSDS> sdsPoller;
 
 		public static TimingContainer Timing
 		{
@@ -315,9 +316,9 @@ namespace Shard
 		}
 
 
-		public static SDS.Serial Begin(Int3 myID)
+		public static SerialSDS Begin(Int3 myID)
 		{
-			sdsPoller = new ContinuousPoller<SDS.Serial>(null);
+			sdsPoller = new ContinuousPoller<SerialSDS>(null);
 			sdsPoller.Start(sdsStore, myID.Encoded);
 			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
 			return sdsPoller.Latest;
@@ -359,7 +360,16 @@ namespace Shard
 				BeginFetch(id);
 		}
 
-		public static Action<SDS.Serial> OnPutSDS { get; set; } = null;
+		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
+		public static EntityRanges EntityRanges
+		{
+			get
+			{
+				var cfg = Config;
+				return new EntityRanges(cfg.r, cfg.m, cfg.r - cfg.m);
+
+			}
+		}
 
 		public class AsyncRCSStack
 		{
@@ -506,7 +516,7 @@ namespace Shard
 		}
 
 
-		internal static void PutNow(SDS.Serial serial, bool forceReplace)
+		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{
 			if (OnPutSDS != null)
 				OnPutSDS(serial);
@@ -517,8 +527,8 @@ namespace Shard
 			}, 3);
 		}
 
-		private static SDS.Serial latestPut = null;
-		public static async Task PutAsync(SDS.Serial serial, bool forceReplace)
+		private static SerialSDS latestPut = null;
+		public static async Task PutAsync(SerialSDS serial, bool forceReplace)
 		{
 			if (sdsStore == null)
 				return;	//tests

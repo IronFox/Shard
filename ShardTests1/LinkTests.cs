@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
+using static Shard.Tests.ComputationTests;
 
 namespace Shard.Tests
 {
@@ -280,11 +281,10 @@ namespace Shard.Tests
 		public void FullInteractionLinkTest()
 		{
 			Random random = new Random();
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
-			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
 
-			SDS.IntermediateData intermediate = new SDS.IntermediateData();
-			intermediate.entities = new EntityPool(
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{
 					new Entity(
@@ -292,15 +292,7 @@ namespace Shard.Tests
 						new SineLogic()),
 				}
 			);
-			intermediate.ic = InconsistencyCoverage.NewCommon();
-			intermediate.inputConsistent = true;
-			intermediate.localChangeSet = new EntityChangeSet();
-
-			SDS root = new SDS(0, intermediate.entities.ToArray(), intermediate.ic, intermediate, null, null);
-			Assert.IsTrue(root.IsFullyConsistent);
-
-			SDSStack stack = Simulation.Stack;
-			stack.ResetToRoot(root);
+			run.clientMessageQueue = Simulation.ClientMessageQueue;
 
 			bool keepRunning = true;
 			//parallel evolution:
@@ -308,18 +300,9 @@ namespace Shard.Tests
 			{
 				for (int i = 0; keepRunning; i++)
 				{
-					SDS temp = stack.AllocateGeneration(i + 1);
-					Assert.AreEqual(temp.Generation, i + 1);
-					Assert.IsNotNull(stack.FindGeneration(i + 1));
-					SDS.Computation comp = new SDS.Computation(i + 1, new DateTime(), Simulation.ClientMessageQueue, TimeSpan.FromSeconds(30));
-					ComputationTests.AssertNoErrors(comp, i.ToString());
-					Assert.AreEqual(comp.Intermediate.entities.Count, 1);
-					Assert.IsTrue(comp.Intermediate.inputConsistent);
-					SDS sds = comp.Complete();
-					Assert.IsTrue(sds.IsFullyConsistent);
-					Assert.AreEqual(sds.Generation, i + 1);
-					Assert.AreEqual(sds.FinalEntities.Length, 1);
-					stack.Insert(sds);
+					var rs = run.AdvanceTLG(true, true);
+					Assert.AreEqual(rs.IntermediateSDS.entities.Count, 1);
+					Assert.AreEqual(rs.SDS.FinalEntities.Length, 1);
 				}
 			});
 

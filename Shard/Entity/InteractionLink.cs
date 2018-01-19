@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
+using VectorMath;
 
 namespace Shard
 {
@@ -15,16 +16,20 @@ namespace Shard
 	/// Communication is treated just like ordinary inter-entity messages, except they have an external origin guid, or maximum range.
 	/// They may be targeted to a specific entity or broadcast (target guid is empty)
 	/// </summary>
-	[Serializable]
-	public class InteractionLink : ISerializable, IDisposable
+//	[Serializable]
+	public class InteractionLink : /*ISerializable,*/ IDisposable
 	{
 		public enum ChannelID
 		{
 			RegisterLink = 1,		//[int[4]: shardID]
-			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages from entities
+			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
 			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
-			SendMessage = 4,	//c2s: [Guid: me][Guid: toEntity][uint: num bytes][bytes...], s2c: [Guid: fromEntity][uint: num bytes][bytes...]
+			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
+			Observe = 5,			//
+			StopObservation = 6,	//
+			Observation = 7,		//s2c: [SDS: new TLG SDS]
 		}
+
 
 		public struct OutPackage
 		{
@@ -36,7 +41,6 @@ namespace Shard
 				Channel = channel;
 				Data = data;
 			}
-
 		}
 
 		private int orderIndex=0;
@@ -53,6 +57,7 @@ namespace Shard
 		private readonly Func<Host, Link> linkLookup;
 
 		private HashSet<Guid> guids = new HashSet<Guid>();
+		private bool observe = false;
 
 		public InteractionLink(TcpClient client, Func<Host, Link> linkLookup)
 		{
@@ -112,6 +117,16 @@ namespace Shard
 		private int NextInt()
 		{
 			return BitConverter.ToInt32(ReadBytes(4), 0);
+		}
+		private float NextFloat()
+		{
+			return BitConverter.ToSingle(ReadBytes(4), 0);
+		}
+
+		private Vec3 NextVec3()
+		{
+			byte[] data = ReadBytes(12);
+			return new Vec3(BitConverter.ToSingle(data,0), BitConverter.ToSingle(data, 4), BitConverter.ToSingle(data, 8));
 		}
 
 		private ShardID NextShardID()
@@ -230,6 +245,15 @@ namespace Shard
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;
+
+							case (uint)ChannelID.Observe:
+								if (!observe && Simulation.Stack.Size > 0)
+									SendSDS(Compress(Simulation.Stack.NewestSDS));
+								observe = true;
+								break;
+							case (uint)ChannelID.StopObservation:
+								observe = false;
+								break;
 						}
 					}
 					catch (SerializationException ex)
@@ -287,7 +311,7 @@ namespace Shard
 			return null;
 		}
 
-		public void RelayMessage(Guid senderEntity, Guid receiverID, int channel, byte[] data, int generation)
+		public void Send(OutPackage pack)
 		{
 			if (closed)
 				return;
@@ -295,28 +319,42 @@ namespace Shard
 			{
 				if (writeQueue.Count > 16)
 				{
-					Message("More than 16 messages queued up for dispatch. Closing down");
+					Message("More than 16 packages queued up for dispatch. Closing down");
 					Close();
 					return;
 				}
-
-				using (MemoryStream ms = new MemoryStream())
-				{
-					ms.Write(senderEntity.ToByteArray(), 0, 16);
-					ms.Write(receiverID.ToByteArray(), 0, 16);
-					ms.Write(BitConverter.GetBytes(generation), 0, 4);
-					ms.Write(BitConverter.GetBytes(channel), 0, 4);
-					ms.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
-					ms.Write(data, 0, data.Length);
-
-					writeQueue.Add(new OutPackage((uint)ChannelID.SendMessage, ms.ToArray()));
-				}
+				writeQueue.Add(pack);
 			}
 			catch (Exception ex)
 			{
 				Error(ex);
 				Close();
 			}
+
+
+		}
+
+		public void RelayMessage(Guid senderEntity, Guid receiverID, int channel, byte[] data, int generation)
+		{
+			if (closed)
+				return;
+			using (MemoryStream ms = new MemoryStream())
+			{
+				ms.Write(senderEntity.ToByteArray(), 0, 16);
+				ms.Write(receiverID.ToByteArray(), 0, 16);
+				ms.Write(BitConverter.GetBytes(generation), 0, 4);
+				ms.Write(BitConverter.GetBytes(channel), 0, 4);
+				ms.Write(BitConverter.GetBytes((uint)data.Length), 0, 4);
+				ms.Write(data, 0, data.Length);
+				Send(new OutPackage((uint)ChannelID.SendMessage, ms.ToArray()));
+			}
+		}
+
+		public void SendSDS(byte[] serializedSDS)
+		{
+			if (closed)
+				return;
+			Send(new OutPackage((uint)ChannelID.Observation, serializedSDS));
 		}
 
 		public bool Connected
@@ -331,10 +369,6 @@ namespace Shard
 		public Action<Guid> OnUnregisterReceiver { get; set; }
 		public Action<Guid> OnRegisterReceiver { get; set; }
 
-		public void GetObjectData(SerializationInfo info, StreamingContext context)
-		{
-			//nothing
-		}
 
 		public static InteractionLink Lookup(Guid guid)
 		{
@@ -346,6 +380,28 @@ namespace Shard
 
 		private static ConcurrentDictionary<Guid, InteractionLink> guidMap = new ConcurrentDictionary<Guid, InteractionLink>();
 
+
+		public static byte[] Compress(SDS sds)
+		{
+			using (MemoryStream ms = new MemoryStream())
+			using (var stream = new LZ4.LZ4Stream(Helper.Serialize(sds), LZ4.LZ4StreamMode.Compress))
+			{
+				stream.CopyTo(ms);
+				return ms.ToArray();
+			}
+		}
+
+		public static void SignalUpdate(SDS sds)
+		{
+			byte[] serial = null;
+			foreach (var link in guidMap.Values)
+				if (link.observe)
+				{
+					if (serial == null)
+						serial = Compress(sds);
+					link.SendSDS(serial);
+				}
+		}
 
 		public static void Relay(Guid sender, Guid receiver, int channel, byte[] data, int generation)
 		{
@@ -359,4 +415,5 @@ namespace Shard
 			Close();
 		}
 	}
+
 }

@@ -187,6 +187,16 @@ namespace Shard
 		{
 			return "[" + Min.ToString() + "," + Max.ToString() + "]";
 		}
+
+		public static Box CenterExtent(Vec3 center, float extent)
+		{
+			return CenterExtent(center, extent, Bool3.True);
+		}
+
+		public static Box CenterExtent(Vec3 center, float extent, Bool3 maxIsInclusive)
+		{
+			return FromMinAndMax(center - extent, center + extent, maxIsInclusive);
+		}
 	}
 
 
