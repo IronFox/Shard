@@ -197,7 +197,7 @@
       <Project>{8b82845e-874b-4b7c-9ea6-85c968b73986}</Project>
       <Name>VectorMath</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Protocol\ShardBase.csproj">
+    <ProjectReference Include="..\ShardBase\ShardBase.csproj">
       <Project>{8247ae53-9109-4d16-aaef-74b27f63df39}</Project>
       <Name>ShardBase</Name>
     </ProjectReference>

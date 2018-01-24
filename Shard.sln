@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VectorMath", "Math\VectorMa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardTests", "ShardTests1\ShardTests.csproj", "{C16B5786-0D4D-4E50-AD1D-1A19C35E6C42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardBase", "Protocol\ShardBase.csproj", "{8247AE53-9109-4D16-AAEF-74B27F63DF39}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardBase", "ShardBase\ShardBase.csproj", "{8247AE53-9109-4D16-AAEF-74B27F63DF39}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
