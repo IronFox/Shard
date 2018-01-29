@@ -1,14 +1,17 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 
 
 namespace VectorMath
 {
 	[Serializable]
 	public struct Vec3 : IComparable<Vec3>
-    {
-        public readonly float X, Y, Z;
+	{
+		public readonly float X, Y, Z;
+		[JsonIgnore]
         public Vec2 XY { get { return new Vec2(X, Y); } }
-        public Vec2 ZY { get { return new Vec2(Y, Z); } }
+		[JsonIgnore]
+		public Vec2 ZY { get { return new Vec2(Y, Z); } }
 
         public static readonly Vec3 Zero = new Vec3(0);
 		public static readonly Vec3 One = new Vec3(1);
@@ -16,6 +19,7 @@ namespace VectorMath
         public static readonly Vec3 YAxis = new Vec3(0, 1, 0);
         public static readonly Vec3 ZAxis = new Vec3(0, 0, 1);
 
+		[JsonIgnore]
 		public float this[int key]
         {
             get
@@ -79,8 +83,10 @@ namespace VectorMath
 			Z = position[2];
 		}
 
+		[JsonIgnore]
 		public float Length { get { return (float)System.Math.Sqrt(Vec.Dot(this, this)); } }
 
+		[JsonIgnore]
 		public Int3 FloorInt3 { get { return new Int3((int)Math.Floor(X), (int)Math.Floor(Y), (int)Math.Floor(Z)); } }
 
 		public Vec3 Normalized() { return this / Length; }
@@ -255,7 +261,7 @@ namespace VectorMath
 		public override int GetHashCode()
 		{
 			var hashCode = -307843816;
-			hashCode = hashCode * -1521134295 + base.GetHashCode();
+			//hashCode = hashCode * -1521134295 + base.GetHashCode();
 			hashCode = hashCode * -1521134295 + X.GetHashCode();
 			hashCode = hashCode * -1521134295 + Y.GetHashCode();
 			hashCode = hashCode * -1521134295 + Z.GetHashCode();
@@ -285,6 +291,7 @@ namespace VectorMath
 		public static readonly Int3 YAxis = new Int3(0, 1, 0);
 		public static readonly Int3 ZAxis = new Int3(0, 0, 1);
 
+		[JsonIgnore]
 		public int this[int key]
 		{
 			get
@@ -532,6 +539,7 @@ namespace VectorMath
 				);
 		}
 
+		[JsonIgnore]
 		public string Encoded
 		{
 			get
@@ -540,8 +548,10 @@ namespace VectorMath
 			}
 		}
 
+		[JsonIgnore]
 		public int Product { get { return X * Y * Z; } }
 
+		[JsonIgnore]
 		public Int2 YZ
 		{
 			get
@@ -554,6 +564,7 @@ namespace VectorMath
 				Z = value.Y;
 			}
 		}
+		[JsonIgnore]
 		public Int2 XZ
 		{
 			get
@@ -566,6 +577,7 @@ namespace VectorMath
 				Z = value.Y;
 			}
 		}
+		[JsonIgnore]
 		public Int2 XY
 		{
 			get
@@ -626,6 +638,7 @@ namespace VectorMath
 		public static readonly Bool3 False = new Bool3(false);
 
 
+		[JsonIgnore]
 		public bool this[int key]
 		{
 			get

@@ -13,8 +13,15 @@ namespace VectorMath
         public Vec2 xy { get { return new Vec2(x, y); } set { x = value.x; y = value.y; } }
         public Vec2 zw { get { return new Vec2(z, w); } set { z = value.x; w = value.y; } }
 
+		public Vec4(float[] field,int offset)
+		{
+			this.x = field[offset];
+			this.y = field[offset+1];
+			this.z = field[offset+2];
+			this.w = field[offset+3];
+		}
 
-        public Vec4(Vec3 v, float w = 1)
+		public Vec4(Vec3 v, float w = 1)
         {
             this.x = v.X;
             this.y = v.Y;
@@ -87,12 +94,21 @@ namespace VectorMath
         {
             return new Vec4(u.x * v, u.y * v, u.z * v, u.w * v);
         }
-        //public static implicit operator string(Vec4 v)
-        //{
-        //    return Convert.ToString(v.x) + ", " + Convert.ToString(v.y) + ", " + Convert.ToString(v.z) + ", " + Convert.ToString(v.w);
-        //}
 
-        private bool Eq(Vec4 other)
+		public void CopyTo(float[] ar, int offset)
+		{
+			ar[offset] = x;
+			ar[offset + 1] = y;
+			ar[offset + 2] = z;
+			ar[offset + 3] = w;
+		}
+
+		//public static implicit operator string(Vec4 v)
+		//{
+		//    return Convert.ToString(v.x) + ", " + Convert.ToString(v.y) + ", " + Convert.ToString(v.z) + ", " + Convert.ToString(v.w);
+		//}
+
+		private bool Eq(Vec4 other)
         {
 			return x == other.x && y == other.y && z == other.z && w == other.w;
         }

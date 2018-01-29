@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 using System.Threading;
 using VectorMath;
 
@@ -383,6 +384,16 @@ namespace Shard
 
 		public static byte[] Compress(SDS sds)
 		{
+			var serial = new Newtonsoft.Json.JsonSerializer();
+			StringBuilder str = new StringBuilder();
+			TextWriter w = new StringWriter(str);
+			foreach (var e in sds.FinalEntities)
+			{
+				serial.Serialize(w, e);
+			}
+
+
+
 			using (MemoryStream ms = new MemoryStream())
 			using (var stream = new LZ4.LZ4Stream(Helper.Serialize(sds), LZ4.LZ4StreamMode.Compress))
 			{

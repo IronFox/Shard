@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -261,6 +262,7 @@ namespace Shard
 
 		public readonly EntityID ID;
 		public readonly EntityAppearanceCollection Appearances;
+		[JsonIgnore]
 		public readonly byte[] SerialLogicState;
 		public EntityMessage[] InboundMessages { get; private set; }
 		public EntityContact[] Contacts { get; private set; }

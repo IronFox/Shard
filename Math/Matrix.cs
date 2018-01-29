@@ -28,6 +28,13 @@ namespace VectorMath
             z = newZ;
             w = newW;
         }
+		public Matrix4(float[] field)
+		{
+			x = new Vec4(field,0);
+			y = new Vec4(field,4);
+			z = new Vec4(field,8);
+			w = new Vec4(field,12);
+		}
 
         public void ResetBottomRow()
         {
@@ -90,6 +97,64 @@ namespace VectorMath
             return x.xyz * v.X + y.xyz * v.Y + z.xyz * v.Z;
             //(this * new Vec4(v, 0)).XYZ;
         }
+
+		public void CopyTo(float[] ar, int offset)
+		{
+			x.CopyTo(ar, offset);
+			y.CopyTo(ar, offset + 4);
+			z.CopyTo(ar, offset + 8);
+			w.CopyTo(ar, offset + 16);
+		}
+
+		public Matrix4 Invert
+		{
+			get
+			{
+				float[] buffer = new float[2 * 4 * 4];
+				CopyTo(buffer, 0);
+				Identity.CopyTo(buffer, 16);
+				for (int line = 0; line < 4; line++)
+				{
+					int targetline = line;
+					while (Math.Abs(buffer[line * 4 + targetline]) <= float.Epsilon && targetline < 4)
+						targetline++;
+					if (targetline == 4)
+						throw new InversionFailedException(this);
+					if (targetline != line)
+					{
+						for (int i = 0; i < 8; i++)
+						{
+							int from = i * 4 + targetline;
+							int to = i * 4 + line;
+							float save = buffer[from];
+							buffer[from] = buffer[to];
+							buffer[to] = save;
+						}
+					}
+					for (int i = line + 1; i < 4; i++)
+					{
+						float a = buffer[line * 4 + i] / buffer[line * 4 + line];
+						for (int j = line + 1; j < 8; j++)
+							buffer[j * 4 + i] -= buffer[j * 4 + line] * a;
+						buffer[line * 4 + i] = 0;
+					}
+				}
+				float[] result = new float[16];
+				for (int i = 0; i < 4; i++)
+					for (int line = 3; line >= 0; line--)
+					{
+						float a = 0;
+						for (int inner = 0; inner < 4 - line; inner++)
+							a += buffer[(inner + line) * 4 + line] * result[i*4+(inner+line)];
+						if (buffer[line * 4 + line] == 0)
+							throw new InversionFailedException(this);
+						result[i*4+line]
+							=
+							(buffer[(4 + i) * 4 + line]-a)/buffer[line * 4 + line];
+					}
+				return new Matrix4(result);
+			}
+		}
 
 
         public static Matrix4 Assemble(Vec3 orientationX, Vec3 orientationY, Vec3 position)
