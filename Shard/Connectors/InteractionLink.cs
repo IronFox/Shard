@@ -17,8 +17,7 @@ namespace Shard
 	/// Communication is treated just like ordinary inter-entity messages, except they have an external origin guid, or maximum range.
 	/// They may be targeted to a specific entity or broadcast (target guid is empty)
 	/// </summary>
-//	[Serializable]
-	public class InteractionLink : /*ISerializable,*/ IDisposable
+	public class InteractionLink : IDisposable
 	{
 		public enum ChannelID
 		{
@@ -26,9 +25,6 @@ namespace Shard
 			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
 			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
 			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
-			Observe = 5,			//
-			StopObservation = 6,	//
-			Observation = 7,		//s2c: [SDS: new TLG SDS]
 		}
 
 
@@ -58,7 +54,6 @@ namespace Shard
 		private readonly Func<Host, Link> linkLookup;
 
 		private HashSet<Guid> guids = new HashSet<Guid>();
-		private bool observe = false;
 
 		public InteractionLink(TcpClient client, Func<Host, Link> linkLookup)
 		{
@@ -247,14 +242,6 @@ namespace Shard
 								}
 								break;
 
-							case (uint)ChannelID.Observe:
-								if (!observe && Simulation.Stack.Size > 0)
-									SendSDS(Compress(Simulation.Stack.NewestSDS));
-								observe = true;
-								break;
-							case (uint)ChannelID.StopObservation:
-								observe = false;
-								break;
 						}
 					}
 					catch (SerializationException ex)
@@ -351,13 +338,6 @@ namespace Shard
 			}
 		}
 
-		public void SendSDS(byte[] serializedSDS)
-		{
-			if (closed)
-				return;
-			Send(new OutPackage((uint)ChannelID.Observation, serializedSDS));
-		}
-
 		public bool Connected
 		{
 			get
@@ -402,17 +382,6 @@ namespace Shard
 			}
 		}
 
-		public static void SignalUpdate(SDS sds)
-		{
-			byte[] serial = null;
-			foreach (var link in guidMap.Values)
-				if (link.observe)
-				{
-					if (serial == null)
-						serial = Compress(sds);
-					link.SendSDS(serial);
-				}
-		}
 
 		public static void Relay(Guid sender, Guid receiver, int channel, byte[] data, int generation)
 		{

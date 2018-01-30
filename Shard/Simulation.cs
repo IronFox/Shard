@@ -111,6 +111,7 @@ namespace Shard
 									siblings;
 
 		private static Listener listener;
+		private static ObservationLink.Listener observationListener;
 
 		private static SDSStack stack = new SDSStack();
 
@@ -187,6 +188,7 @@ namespace Shard
 			AdvertiseOldestGeneration(0);
 
 			listener = new Listener(h => Simulation.FindLink(h.ID));
+			observationListener = new ObservationLink.Listener();
 
 			Console.Write("Polling SDS state...");
 			Console.Out.Flush();

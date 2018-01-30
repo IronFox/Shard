@@ -113,7 +113,7 @@ namespace Shard
 		{
 			int gen = tuple.Item1.Generation;
 			if (gen >= NewestSDSGeneration)
-				InteractionLink.SignalUpdate(tuple.Item1);
+				ObservationLink.SignalUpdate(tuple.Item1);
 
 			Entry rs;
 			if (gen > NewestSDSGeneration)
@@ -147,7 +147,7 @@ namespace Shard
 		public void Insert(Entry entry, bool trim = true)
 		{
 			if (entry.Generation >= NewestSDSGeneration)
-				InteractionLink.SignalUpdate(entry.SDS);
+				ObservationLink.SignalUpdate(entry.SDS);
 
 			if (entry.Generation > NewestSDSGeneration)
 			{

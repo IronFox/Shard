@@ -164,9 +164,10 @@
   <ItemGroup>
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Clock.cs" />
+    <Compile Include="Connectors\ObservationLink.cs" />
     <Compile Include="DB\SerialCSLogicProvider.cs" />
     <Compile Include="Entity\ClientMessageQueue.cs" />
-    <Compile Include="InteractionLink.cs" />
+    <Compile Include="Connectors\InteractionLink.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="IntermediateSDS.cs" />
     <Compile Include="Log.cs" />

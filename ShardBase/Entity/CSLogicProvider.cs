@@ -18,6 +18,7 @@ namespace Shard
 		private CSLogicProvider provider;
 		private Constructor constructor;
 
+		public CSLogicProvider Provider { get { return provider; } }
 
 		class Constructor
 		{
