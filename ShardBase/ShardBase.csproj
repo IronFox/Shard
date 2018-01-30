@@ -7,8 +7,8 @@
     <ProjectGuid>{8247AE53-9109-4D16-AAEF-74B27F63DF39}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Protocol</RootNamespace>
-    <AssemblyName>Protocol</AssemblyName>
+    <RootNamespace>Shard</RootNamespace>
+    <AssemblyName>ShardBase</AssemblyName>
     <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
