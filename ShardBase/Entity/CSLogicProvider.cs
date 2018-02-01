@@ -1,5 +1,6 @@
 ﻿using System;
 using System.CodeDom.Compiler;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -169,19 +170,32 @@ namespace Shard
 		{
 			return "Dynamic CS: " + (constructor != null ? constructor.ToString() : nestedLogic.ToString());
 		}
-
 	}
 
 	[Serializable]
 	public class CSLogicProvider : ISerializable
 	{
 
-		public static Func<string,Task<CSLogicProvider>> AsyncFactory { get; set; }
+		public static Func<string, Task<CSLogicProvider>> AsyncFactory { get; set; }
 
+
+		public struct Dependency
+		{
+			public readonly string Name;
+			public readonly Task<CSLogicProvider> Provider;
+
+			public Dependency(string name, Task<CSLogicProvider> prov)
+			{
+				Name = name;
+				Provider = prov;
+			}
+
+		}
 
 		//CompilerResults result;
 		public readonly Assembly Assembly;
 		public readonly byte[] BinaryAssembly;
+		public readonly Dependency[] Dependencies;
 		private readonly Dictionary<string,Type> types = new Dictionary<string, Type>();
 
 		public readonly string AssemblyName,SourceCode;
@@ -201,6 +215,9 @@ namespace Shard
 
 		public EntityLogic Instantiate(string logicName, object[] constructorParameters)
 		{
+			if (types.Count == 0)
+				throw new LogicCompositionException(this, "This assembly does not provide any logic");
+
 			Type t = string.IsNullOrEmpty(logicName) && types.Count == 1 ? types.First().Value : types[logicName];
 
 			var rs = Activator.CreateInstance(t, constructorParameters) as EntityLogic;
@@ -222,9 +239,16 @@ namespace Shard
 
 		public EntityLogic DeserializeLogic(byte[] serialData)
 		{
-			return (EntityLogic)Helper.Deserialize(serialData, Assembly, FromScript);
+			return (EntityLogic)Helper.Deserialize(serialData, EnumerateAssemblies(), FromScript);
 		}
 
+		private IEnumerable<Assembly> EnumerateAssemblies()
+		{
+			yield return Assembly;
+
+			foreach (var d in Dependencies)
+				yield return d.Provider.Get().Assembly;
+		}
 
 		public CSLogicProvider(string assemblyName, string sourceCode, byte[] compiledAssembly)
 		{
@@ -234,76 +258,193 @@ namespace Shard
 			BinaryAssembly = compiledAssembly;
 
 			if (FromScript)
-				Assembly = Compile(SourceCode, out BinaryAssembly);
+			{
+				var rs = CompileAsync(SourceCode).Result;
+				Assembly = rs.assembly;
+				BinaryAssembly = rs.compiledAssembly;
+
+			}
 			else
 				Assembly = Assembly.Load(BinaryAssembly);
 
 			CheckAssembly(types);
 		}
 
-		public CSLogicProvider(string assemblyName, byte[] binaryAssembly)
+
+
+		private struct BinaryKey
+		{
+			public byte[] key;
+
+			public BinaryKey(byte[] binaryAssembly) : this()
+			{
+				key = binaryAssembly;
+			}
+
+			public override bool Equals(object obj)
+			{
+				if (!(obj is BinaryKey))
+					return false;
+				BinaryKey other = (BinaryKey)obj;
+				return Helper.AreEqual(key, other.key);
+			}
+
+			//http://www.java2s.com/Code/CSharp/Data-Types/Gethashcodeforabytearray.htm
+			public override int GetHashCode()
+			{
+				if (key == null)
+				{
+					return 0;
+				}
+
+				int i = key.Length;
+				int hc = i + 1;
+
+				while (--i >= 0)
+				{
+					hc *= 257;
+					hc ^= key[i];
+				}
+
+				return hc;
+			}
+		}
+
+		private static Dictionary<BinaryKey, Assembly> loadedAssemblies = new Dictionary<BinaryKey, Assembly>();
+
+
+		public static Assembly LoadAssembly(byte[] binaryAssembly)
+		{
+			var key = new BinaryKey(binaryAssembly);
+			lock (loadedAssemblies)
+			{
+				Assembly a;
+				if (loadedAssemblies.TryGetValue(key, out a))
+					return a;
+				a = AppDomain.CurrentDomain.Load(binaryAssembly);
+				loadedAssemblies.Add(key, a);
+				return a;
+			}
+		}
+
+		public CSLogicProvider(string assemblyName, bool fromScript, Assembly assembly, byte[] binaryAssembly, Dependency[] dependencies)
+		{
+			FromScript = fromScript;
+			AssemblyName = assemblyName;
+			Assembly = assembly;
+			BinaryAssembly = binaryAssembly;
+			Dependencies = dependencies;
+			CheckAssembly(types);
+		}
+
+
+		public CSLogicProvider(string assemblyName, byte[] binaryAssembly, byte[][] dependencies)
 		{
 			FromScript = false;
 			AssemblyName = assemblyName;
-			Assembly = Assembly.Load(binaryAssembly);
-			this.BinaryAssembly = binaryAssembly;
+			if (dependencies != null)
+				foreach (var dep in dependencies)
+					LoadAssembly(dep);
+			Assembly = LoadAssembly(binaryAssembly);
+			BinaryAssembly = binaryAssembly;
 			CheckAssembly(types);
 		}
 
 
-		public CSLogicProvider(string assemblyName, string code)
+		public static async Task<CSLogicProvider> CompileAsync(string assemblyName, string assemblyCode)
 		{
-			SourceCode = code;
-			FromScript = true;
-			AssemblyName = assemblyName;
-			Assembly = Compile(code, out BinaryAssembly);
-			CheckAssembly(types);
+			var c = await CompileAsync(assemblyCode);
+			return new CSLogicProvider(assemblyName, true, c.assembly, c.compiledAssembly, c.dependencies);
 		}
 
-		private static Assembly Compile(string code, out byte[] binaryAssembly)
+
+		public struct Compiled
 		{
-			//https://stackoverflow.com/questions/137933/what-is-the-best-scripting-language-to-embed-in-a-c-sharp-desktop-application
-			// Create a code provider
-			// This class implements the 'CodeDomProvider' class as its base. All of the current .Net languages (at least Microsoft ones)
-			// come with thier own implemtation, thus you can allow the user to use the language of thier choice (though i recommend that
-			// you don't allow the use of c++, which is too volatile for scripting use - memory leaks anyone?)
-			Microsoft.CSharp.CSharpCodeProvider csProvider = new Microsoft.CSharp.CSharpCodeProvider();
-			// Setup our options
-			CompilerParameters options = new CompilerParameters();
-			options.GenerateExecutable = false; // we want a Dll (or "Class Library" as its called in .Net)
-			options.GenerateInMemory = false;
-											 
+			public Assembly assembly;
+			public byte[] compiledAssembly;
+			public Dependency[] dependencies;
+		}
 
-//			Directory.CreateDirectory("logicAssemblies");
-//			options.OutputAssembly = Path.Combine("logicAssemblies",assemblyName+".dll");
-			
-			//options.TreatWarningsAsErrors = true;
-			// Add any references you want the users to be able to access, be warned that giving them access to some classes can allow
-			// harmful code to be written and executed. I recommend that you write your own Class library that is the only reference it allows
-			// thus they can only do the things you want them to.
-			// (though things like "System.Xml.dll" can be useful, just need to provide a way users can read a file to pass in to it)
-			// Just to avoid bloatin this example to much, we will just add THIS program to its references, that way we don't need another
-			// project to store the interfaces that both this class and the other uses. Just remember, this will expose ALL public classes to
-			// the "script"
-			options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
-			options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
-			options.ReferencedAssemblies.Add(typeof(EntityAppearance).Assembly.Location);
-			// Compile our code
-			var result = csProvider.CompileAssemblyFromSource(options, code);
-			if (result.Errors.HasErrors)
-				throw new CompilationException("Unable to compile logic: " + result.Errors[0]);
-			var assembly = result.CompiledAssembly;
-			binaryAssembly = File.ReadAllBytes(result.PathToAssembly);
+		private static async Task<Compiled> CompileAsync(string code)
+		{
+			string[] lines = code.Split('\n');
+			List<string> actualLines = new List<string>();
+			List<string> dependenciesNames = new List<string>();
+			List<CSLogicProvider> assemblies = new List<CSLogicProvider>();
+			foreach (var l in lines)
+			{
+				string trimmed = l.Trim();
+				if (trimmed.StartsWith("#reference"))
+				{
+					//# reference shared
+					trimmed = trimmed.Remove(0, 10).Trim();
+					dependenciesNames.Add(trimmed);
+					var t = AsyncFactory(trimmed);
+					assemblies.Add(await t);
+				}
+				else
+					actualLines.Add(l);
+			}
+			code = string.Join("\n", actualLines);
 
-			//foreach (var f in result.TempFiles)
-			//{
-			//	System.Console.WriteLine(f);
-			//	File.Delete(f.ToString());
-			//}
-			//if (result.Errors.HasWarnings)
-			//Log.Message("Warning while loading logic '" + ScriptName + "': " + FirstWarning);
+			Assembly assembly = null;
+			byte[] binary = null;
+			await Task.Run(() =>
+			{
+				//https://stackoverflow.com/questions/137933/what-is-the-best-scripting-language-to-embed-in-a-c-sharp-desktop-application
+				// Create a code provider
+				// This class implements the 'CodeDomProvider' class as its base. All of the current .Net languages (at least Microsoft ones)
+				// come with thier own implemtation, thus you can allow the user to use the language of thier choice (though i recommend that
+				// you don't allow the use of c++, which is too volatile for scripting use - memory leaks anyone?)
+				Microsoft.CSharp.CSharpCodeProvider csProvider = new Microsoft.CSharp.CSharpCodeProvider();
+				// Setup our options
+				CompilerParameters options = new CompilerParameters();
+				options.GenerateExecutable = false; // we want a Dll (or "Class Library" as its called in .Net)
+				options.GenerateInMemory = false;
 
-			return assembly;
+
+				//			Directory.CreateDirectory("logicAssemblies");
+				//			options.OutputAssembly = Path.Combine("logicAssemblies",assemblyName+".dll");
+
+				//options.TreatWarningsAsErrors = true;
+				// Add any references you want the users to be able to access, be warned that giving them access to some classes can allow
+				// harmful code to be written and executed. I recommend that you write your own Class library that is the only reference it allows
+				// thus they can only do the things you want them to.
+				// (though things like "System.Xml.dll" can be useful, just need to provide a way users can read a file to pass in to it)
+				// Just to avoid bloatin this example to much, we will just add THIS program to its references, that way we don't need another
+				// project to store the interfaces that both this class and the other uses. Just remember, this will expose ALL public classes to
+				// the "script"
+				options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+				options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
+				options.ReferencedAssemblies.Add(typeof(EntityAppearance).Assembly.Location);
+				foreach (var a in assemblies)
+					options.ReferencedAssemblies.Add(a.Assembly.Location);
+
+				var result = csProvider.CompileAssemblyFromSource(options, code);
+				if (result.Errors.HasErrors)
+					throw new CompilationException("Unable to compile logic: " + result.Errors[0]);
+				assembly = result.CompiledAssembly;
+				binary = File.ReadAllBytes(result.PathToAssembly);
+				lock (loadedAssemblies)
+					loadedAssemblies[new BinaryKey( binary )] = assembly;
+				//foreach (var f in result.TempFiles)
+				//{
+				//	System.Console.WriteLine(f);
+				//	File.Delete(f.ToString());
+				//}
+				//if (result.Errors.HasWarnings)
+				//Log.Message("Warning while loading logic '" + ScriptName + "': " + FirstWarning);
+			});
+			Compiled rs = new Compiled();
+			rs.assembly = assembly;
+			rs.compiledAssembly = binary;
+			rs.dependencies = new Dependency[assemblies.Count];
+			for (int i = 0; i < assemblies.Count; i++)
+			{
+				var a = assemblies[i];
+				rs.dependencies[i] = new Dependency(dependenciesNames[i], Task.Run(() => a));
+			}
+			return rs;
 		}
 
 		void CheckAssembly(Dictionary<string, Type> types)
@@ -328,8 +469,8 @@ namespace Shard
 					types[type.Name] = type;
 				}
 			}
-			if (types.Count == 0)
-				throw new LogicCompositionException(this, "Failed to find any entity logic in assembly");
+			//if (types.Count == 0)
+				//throw new LogicCompositionException(this, "Failed to find any entity logic in assembly");
 		}
 
 		private void CheckType(HashSet<Type> checkedTypes, Type type, string path, bool requireSerializable)
@@ -358,6 +499,7 @@ namespace Shard
 		{
 			info.AddValue("assemblyName", AssemblyName);
 			info.AddValue("assembly", BinaryAssembly);
+			info.AddValue("dependencies", Dependencies.Select(d => d.Name).ToArray());
 		}
 
 		public override int GetHashCode()
@@ -373,7 +515,11 @@ namespace Shard
 		{
 			AssemblyName = info.GetString("assemblyName");
 			BinaryAssembly = (byte[])info.GetValue("assembly", typeof(byte[]));
-			Assembly = Assembly.Load(BinaryAssembly);
+			Assembly = LoadAssembly(BinaryAssembly);
+			var refs = (string[])info.GetValue("dependencies", typeof(string[]));
+			Dependencies = new Dependency[refs.Length];
+			for (int i = 0; i < refs.Length; i++)
+				Dependencies[i] = new Dependency(refs[i], AsyncFactory(refs[i]));
 		}
 
 		[Serializable]

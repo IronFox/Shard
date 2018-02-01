@@ -212,7 +212,7 @@ namespace Shard
 
 		internal Entity Clone()
 		{
-			var rs = new Entity(ID, transientDeserializedLogic, SerialLogicState, Appearances, null, null);
+			var rs = new Entity(ID, Velocity,transientDeserializedLogic, SerialLogicState, Appearances, null, null);
 			return rs;
 
 		}
@@ -257,10 +257,14 @@ namespace Shard
 			if (messages == null || messages.Count == 0)
 				return this;
 			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
-			return new Entity(ID, transientDeserializedLogic,SerialLogicState, Appearances, newMessages, Contacts);
+			return new Entity(ID, Velocity,transientDeserializedLogic,SerialLogicState, Appearances, newMessages, Contacts);
 		}
 
 		public readonly EntityID ID;
+		/// <summary>
+		/// Motion during the last evolution
+		/// </summary>
+		public readonly Vec3 Velocity;
 		public readonly EntityAppearanceCollection Appearances;
 		[JsonIgnore]
 		public readonly byte[] SerialLogicState;
@@ -271,9 +275,9 @@ namespace Shard
 			get
 			{
 				if (transientDeserializedLogic != null)
-				{
 					return transientDeserializedLogic;
-				}
+				if (SerialLogicState == null)
+					return null;
 				transientDeserializedLogic =(EntityLogic)Helper.Deserialize(SerialLogicState);
 				return transientDeserializedLogic;
 			}
@@ -298,16 +302,17 @@ namespace Shard
 
 		public Entity() { }
 
-		public Entity(EntityID id, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, state, Helper.SerializeToArray(state), appearance, null, null)
+		public Entity(EntityID id, Vec3 velocity, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, velocity, state, Helper.SerializeToArray(state), appearance, null, null)
 		{ }
 
-		public Entity(EntityID id, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance= null) : this(id, dstate, state, appearance, null, null)
+		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance= null) : this(id, velocity,dstate, state, appearance, null, null)
 		{ }
-		public Entity(EntityID id, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) //: this()
+		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) //: this()
 		{
 			//if (!Simulation.FullSimulationSpace.Contains(id.Position))
 			//	throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
+			Velocity = velocity;
 			SerialLogicState = state;
 			transientDeserializedLogic = dstate;
 			Appearances = appearance;

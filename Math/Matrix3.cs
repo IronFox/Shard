@@ -5,7 +5,7 @@ using System.Text;
 
 namespace VectorMath
 {
-    public struct Matrix3
+    public struct Matrix3 : IComparable<Matrix3>
     {
         public Vec3 x, y, z;
         public static Matrix3 Identity { get { return new Matrix3(1); } }
@@ -42,16 +42,28 @@ namespace VectorMath
             return obj is Matrix3 && Eq((Matrix3)obj);
         }
 
-        public override int GetHashCode()
-        {
-            int hash = 17;
-            hash = hash * 31 + x.GetHashCode();
-            hash = hash * 31 + y.GetHashCode();
-            hash = hash * 31 + z.GetHashCode();
-            return hash;
-        }
 
-        public static Vec3 operator *(Matrix3 m, Vec3 v)
+
+		public int CompareTo(Matrix3 other)
+		{
+			int rs = x.CompareTo(other.x);
+			if (rs == 0)
+				rs = y.CompareTo(other.y);
+			if (rs == 0)
+				rs = z.CompareTo(other.z);
+			return rs;
+		}
+
+		public override int GetHashCode()
+		{
+			var hashCode = 373119288;
+			hashCode = hashCode * -1521134295 + x.GetHashCode();
+			hashCode = hashCode * -1521134295 + y.GetHashCode();
+			hashCode = hashCode * -1521134295 + z.GetHashCode();
+			return hashCode;
+		}
+
+		public static Vec3 operator *(Matrix3 m, Vec3 v)
         {
             return m.x * v.X + m.y * v.Y + m.z * v.Z;
         }

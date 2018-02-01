@@ -77,7 +77,7 @@ namespace Shard
 			CSLogicProvider provider;
 			if (providers.TryGetValue(name, out provider))
 				return provider;
-			provider = new CSLogicProvider(name, File.ReadAllText(Path.Combine("scenario", "Logic", name+ ".cs")));
+			provider = CSLogicProvider.CompileAsync(name, File.ReadAllText(Path.Combine("scenario", "Logic", name + ".cs"))).Result;
 			providers[name] = provider;
 			return provider;
 		}
@@ -106,7 +106,7 @@ namespace Shard
 
 					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
 					DynamicCSLogic logic = new DynamicCSLogic(provider, inst.LogicName, inst.Parameters);
-					yield return new Entity(new EntityID(pos), logic, appearances);
+					yield return new Entity(new EntityID(pos), Vec3.Zero, logic, appearances);
 				}
 				
 			}
@@ -137,6 +137,7 @@ namespace Shard
 
 					yield return new Entity(
 							new EntityID(Guid.NewGuid(), Simulation.MySpace.DeRelativate(new Vec3(0.5f + x, 0.5f + y, 0) / horizontalResolution)),
+							Vec3.Zero,
 							new Habitat(random),   //check that this doesn't actually cause a fault (should get clamped)
 							null);
 		}

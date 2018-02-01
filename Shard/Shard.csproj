@@ -178,7 +178,6 @@
     <Compile Include="DB\SerialGenerationObject.cs" />
     <Compile Include="DB\SerialRCSStack.cs" />
     <Compile Include="SerialSDS.cs" />
-    <Compile Include="ShardID.cs" />
     <Compile Include="DB.cs" />
     <Compile Include="Host.cs" />
     <Compile Include="Listener.cs" />

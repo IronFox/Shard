@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -92,6 +93,7 @@ namespace Shard
 			endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
 			writeThread = new Thread(new ThreadStart(WriterMain));
 			writeThread.Start();
+			SendCompressed(Simulation.ID);
 			SignalUpdate(Simulation.Stack.NewestSDS);
 		}
 
@@ -115,10 +117,11 @@ namespace Shard
 			Message("Starting Write");
 			try
 			{
-				while (!closed)
+				var f = new BinaryFormatter();
+				using (var compressor = new LZ4.LZ4Stream(netStream, LZ4.LZ4StreamMode.Compress))
 				{
-					byte[] p = Compress(Helper.Serialize(compressQueue.Take()));
-					netStream.Write(p, 0, p.Length);
+					while (!closed)
+						f.Serialize(compressor, compressQueue.Take());
 				}
 			}
 			catch (ObjectDisposedException)
@@ -166,26 +169,7 @@ namespace Shard
 			return null;
 		}
 
-		public void SendBytes(byte[] data)
-		{
-			if (closed)
-				return;
-			try
-			{
-				if (compressQueue.Count > 1024)
-				{
-					Message("More than 1024 packages queued up for dispatch. Closing down");
-					Close();
-					return;
-				}
-				compressQueue.Add(data);
-			}
-			catch (Exception ex)
-			{
-				Error(ex);
-				Close();
-			}
-		}
+		
 		public void SendCompressed(object serializable)
 		{
 			if (closed)
@@ -217,6 +201,16 @@ namespace Shard
 			SendCompressed(sds);
 		}
 
+		private void SendProvider(CSLogicProvider p)
+		{
+			if (p != null && sentProviders.TryAdd(p.AssemblyName, true))
+			{
+				foreach (var d in p.Dependencies)
+					SendProvider(d.Provider.Get());
+				SendCompressed(p);
+			}
+		}
+
 		private void SendNewProvidersOf(SDS sds)
 		{
 			foreach (var e in sds.FinalEntities)
@@ -224,9 +218,7 @@ namespace Shard
 				DynamicCSLogic logic = e.MyLogic as DynamicCSLogic;
 				if (logic == null)
 					continue;
-				var p = logic.Provider;
-				if (p != null && sentProviders.TryAdd(p.AssemblyName, true))
-					SendCompressed(p);
+				SendProvider(logic.Provider);
 			}
 		}
 

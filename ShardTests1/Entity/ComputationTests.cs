@@ -237,11 +237,13 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero,
 						new PingLogic(new PingPacket(0),false),	//check that this doesn't actually cause a fault (should get clamped)
 						null),
 
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center + new Vec3(Simulation.R)),
+						Vec3.Zero,
 						new PingLogic(new PingPacket(0),true),
 						//new EntityTest.FaultLogic.State(),
 						null),
@@ -287,6 +289,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero,
 						new RoundState(),
 						null),
 				}
@@ -345,7 +348,7 @@ namespace Shard.Tests
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			var crossingLogic = new MovingLogic(new Vec3(-1, 0, 0));
-			Entity crosser = new Entity(new EntityID(Guid.NewGuid(), Simulation.MySpace.Min), crossingLogic, null);
+			Entity crosser = new Entity(new EntityID(Guid.NewGuid(), Simulation.MySpace.Min), Vec3.Zero, crossingLogic, null);
 			Vec3 crossingTarget = crosser.ID.Position + crossingLogic.Motion;
 
 			foreach (var n in Simulation.Neighbors)
@@ -378,12 +381,14 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero, 
 						new ExceedingMovementLogic(),
 						//new EntityTest.FaultLogic.State(),
 						null),
 
 					new Entity(
 						new EntityID(Guid.NewGuid(), outlierCoords),
+						Vec3.Zero, 
 						new StationaryLogic(),
 						//new EntityTest.FaultLogic.State(),
 						null),
@@ -463,11 +468,13 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero, 
 						new ExceedingMovementLogic(),	//check that this doesn't actually cause a fault (should get clamped)
 						null),
 
 					new Entity(
 						new EntityID(Guid.NewGuid(), outlierCoords),
+						Vec3.Zero, 
 						new StationaryLogic(),
 						//new EntityTest.FaultLogic.State(),
 						null),

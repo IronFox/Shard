@@ -34,6 +34,39 @@ namespace Shard.Tests
 			};
 		";
 
+
+		const string sharedCode =
+			@"	using Shard;
+				using System;
+				[Serializable]
+				public class SomeClass
+				{
+					public int SomeInt;
+				}
+		";
+
+		const string usingSharedCode =
+			@"	#reference shared
+				using Shard;
+				using System;
+				[Serializable]
+				public class SharingTestLogic : Shard.EntityLogic {
+					public SomeClass cls = new SomeClass();
+					int counter = 0;
+					public SharingTestLogic()	{}
+					private SharingTestLogic(int counter)
+					{
+						this.counter = counter;
+					}
+					protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+					{
+						counter++;
+					}
+				};
+		";
+
+
+
 		const string disallowedStructNotSerializable =
 		@"	using Shard;
 			using System;
@@ -129,14 +162,14 @@ namespace Shard.Tests
 		{
 			try
 			{
-				CSLogicProvider factory0 = new CSLogicProvider("DisallowedA", disallowedStructNotSerializable);
+				CSLogicProvider factory0 = CSLogicProvider.CompileAsync("DisallowedA", disallowedStructNotSerializable).Get();
 				Assert.Fail("The specified code has a non-serializable struct field. Should have triggered an exception");
 			}
 			catch (CSLogicProvider.SerializationException)
 			{ }
 			try
 			{
-				CSLogicProvider factory1 = new CSLogicProvider("DisallowedB", disallowedLogicNotSerializable);
+				CSLogicProvider factory1 = CSLogicProvider.CompileAsync("DisallowedB", disallowedLogicNotSerializable).Get();
 				Assert.Fail("The specified code has a non-serializable logic. Should have triggered an exception");
 			}
 			catch (CSLogicProvider.SerializationException)
@@ -144,13 +177,13 @@ namespace Shard.Tests
 
 			try
 			{
-				CSLogicProvider factory1 = new CSLogicProvider("DisallowedNested", disallowedClassNotSerializable);
+				CSLogicProvider factory1 = CSLogicProvider.CompileAsync("DisallowedNested", disallowedClassNotSerializable).Get();
 				Assert.Fail("The specified code has a non-serializable class field. Should have triggered an exception");
 			}
 			catch (CSLogicProvider.SerializationException)
 			{ }
 
-			CSLogicProvider factory2 = new CSLogicProvider("Allowed", allowed);
+			CSLogicProvider factory2 = CSLogicProvider.CompileAsync("Allowed", allowed).Get();
 
 
 		}
@@ -158,8 +191,8 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void LogicProviderTest()
 		{
-			CSLogicProvider.AsyncFactory = scriptName => Task.Run( () => new CSLogicProvider(scriptName, code));
-			CSLogicProvider provider = new CSLogicProvider("Test", code);
+			CSLogicProvider.AsyncFactory = scriptName => CSLogicProvider.CompileAsync(scriptName, code);
+			CSLogicProvider provider = CSLogicProvider.CompileAsync("Test", code).Get();
 			var exported = new SerialCSLogicProvider( provider );
 			var imported = exported.Deserialize();
 			Assert.AreEqual(provider, imported);
@@ -183,9 +216,27 @@ namespace Shard.Tests
 		}
 
 		[TestMethod()]
+		public void ReferencedProviderTest()
+		{
+			CSLogicProvider sharedP = CSLogicProvider.CompileAsync("shared", sharedCode).Get();
+			CSLogicProvider.AsyncFactory = scriptName => Task.Run(()=>sharedP);
+			CSLogicProvider usingSharedP = CSLogicProvider.CompileAsync("using", usingSharedCode).Get();
+			DynamicCSLogic logic = new DynamicCSLogic(usingSharedP, null, null);
+			logic.FinishLoading(new EntityID(),TimeSpan.Zero);
+
+			var serialProvider = Helper.SerializeToArray(usingSharedP);
+			var provider2 = (CSLogicProvider)Helper.Deserialize(serialProvider);
+
+			var serialLogic = Helper.SerializeToArray(logic);
+			CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => scriptName == "shared" ? sharedP : provider2);
+			var logic3 = (DynamicCSLogic)Helper.Deserialize(serialLogic);
+			logic3.FinishLoading(new EntityID(), TimeSpan.FromHours(1));
+		}
+
+		[TestMethod()]
 		public void ScriptedLogicInstantiationTest()
 		{
-			CSLogicProvider provider = new CSLogicProvider("Test", instantiationTest);
+			CSLogicProvider provider = CSLogicProvider.CompileAsync("Test", instantiationTest).Result;
 			DB.LogicLoader =
 				CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => provider);
 
@@ -196,6 +247,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero, 
 						new DynamicCSLogic(provider,"InstantiatorLogic",null),
 						null),
 				}
@@ -266,8 +318,8 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void ScriptedRemoteLogicInstantiationTest()
 		{
-			CSLogicProvider providerA = new CSLogicProvider("RemoteA", remoteTestA);
-			CSLogicProvider providerB = new CSLogicProvider("RemoteB", remoteTestB);
+			CSLogicProvider providerA = CSLogicProvider.CompileAsync("RemoteA", remoteTestA).Result;
+			CSLogicProvider providerB = CSLogicProvider.CompileAsync("RemoteB", remoteTestB).Result;
 			DB.LogicLoader = CSLogicProvider.AsyncFactory =  scriptName => Task.Run(() => scriptName == providerA.AssemblyName ? providerA : providerB);
 
 
@@ -278,6 +330,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero, 
 						new DynamicCSLogic(providerA,"InstantiatorLogic",null),
 						null),
 				}
@@ -313,7 +366,7 @@ namespace Shard.Tests
 			CSLogicProvider factory = null;
 			for (int i = 0; i < 10; i++)
 			{
-				factory = new CSLogicProvider("Test", code);
+				factory = CSLogicProvider.CompileAsync("Test", code).Result;
 			}
 			watch.Stop();
 			Console.WriteLine("Compilation of 10 scripts took " + watch.Elapsed);

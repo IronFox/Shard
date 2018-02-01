@@ -244,7 +244,7 @@ namespace Shard.EntityChange
 		{
 			if (!ctx.CheckM("Insert", Origin.Position, TargetLocation))
 				return false;
-			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), directState, SerialLogic, Appearances));
+			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Vec3.Zero, directState, SerialLogic, Appearances));
 			directState = null;
 			return rs;
 		}
@@ -270,7 +270,7 @@ namespace Shard.EntityChange
 		{
 			get
 			{
-				var rs = new Entity(Origin.Relocate(TargetLocation), directState, SerialLogic, Appearances, null, null);
+				var rs = new Entity(Origin.Relocate(TargetLocation), TargetLocation - Origin.Position, directState, SerialLogic, Appearances, null, null);
 				directState = null;
 				return rs;
 			}

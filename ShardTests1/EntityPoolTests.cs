@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard.Tests
 {
@@ -47,7 +48,7 @@ namespace Shard.Tests
 		{
 			var rs = new List<Entity>();
 			for (int i = 0; i < count; i++)
-				rs.Add(new Entity(EntityChangeSetTests.RandomID(), logicFactory != null ? logicFactory(i) : null));
+				rs.Add(new Entity(EntityChangeSetTests.RandomID(), Vec3.Zero, logicFactory != null ? logicFactory(i) : null));
 			return rs;
 		}
 
@@ -73,7 +74,7 @@ namespace Shard.Tests
 			for (int i = 0; i < 10; i++)
 			{
 				Entity old = entities[0];
-				Entity moved = new Entity(Relocate(old.ID), old.transientDeserializedLogic, old.SerialLogicState, old.Appearances);
+				Entity moved = Relocate(old);
 				Assert.IsTrue(pool.Contains(old.ID));
 				Assert.IsTrue(pool.UpdateEntity(entities[0], moved),"Update moved entity "+i);
 				Assert.IsFalse(pool.Contains(old.ID));
@@ -88,15 +89,16 @@ namespace Shard.Tests
 
 		}
 
-		private EntityID Relocate(EntityID id)
+		private Entity Relocate(Entity entity)
 		{
 			EntityID rs;
 			do
 			{
-				rs = id.Relocate(random.NextVec3(Simulation.FullSimulationSpace));
+				rs = entity.ID.Relocate(random.NextVec3(Simulation.FullSimulationSpace));
 			}
-			while (rs == id);
-			return rs;
+			while (rs == entity.ID);
+
+			return new Entity(rs, rs.Position - entity.ID.Position, entity.MyLogic, entity.Appearances);
 		}
 	}
 }

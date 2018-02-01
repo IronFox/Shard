@@ -15,6 +15,18 @@ namespace Shard
 	public static class Extensions
 	{
 
+		public static T Get<T>(this Task<T> task)
+		{
+			try
+			{
+				return task.Result;
+			}
+			catch (AggregateException ex)
+			{
+				throw ex.InnerException;
+			}
+		}
+
 		public static T[] Subarray<T>(this T[] array, int offset)
 		{
 			if (array == null)

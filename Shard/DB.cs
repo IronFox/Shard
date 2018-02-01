@@ -50,11 +50,7 @@ namespace Shard
 
 		public static async Task<CSLogicProvider> PutCompiledLogicProviderAsync(string name, string sourceCode)
 		{
-			var provider = await
-				Task.Run(() =>
-				{
-					return new CSLogicProvider(name, sourceCode);
-				});
+			var provider = await CSLogicProvider.CompileAsync(name, sourceCode);
 			await PutLogicProviderAsync(provider);
 			return provider;
 		}

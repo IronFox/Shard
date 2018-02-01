@@ -24,6 +24,7 @@ namespace Shard.Tests
 
 					yield return new Entity(
 							new EntityID(Guid.NewGuid(), Simulation.MySpace.DeRelativate(new Vec3(0.5f + x, 0.5f + y, 0) / horizontalResolution)),
+							Vec3.Zero, 
 							new Habitat(random),   //check that this doesn't actually cause a fault (should get clamped)
 							null);
 		}

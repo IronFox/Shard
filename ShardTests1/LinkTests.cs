@@ -289,6 +289,7 @@ namespace Shard.Tests
 				{
 					new Entity(
 						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center),
+						Vec3.Zero, 
 						new SineLogic()),
 				}
 			);
