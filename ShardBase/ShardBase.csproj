@@ -62,6 +62,7 @@
     <Compile Include="Entity\EntityLogic.cs" />
     <Compile Include="Entity\EntityPool.cs" />
     <Compile Include="Entity\EntityRandom.cs" />
+    <Compile Include="Entity\EntityRanges.cs" />
     <Compile Include="Entity\StandardAppearances.cs" />
     <Compile Include="Entity\TimeBudgetException.cs" />
     <Compile Include="Extensions.cs" />

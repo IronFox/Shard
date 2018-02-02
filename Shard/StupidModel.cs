@@ -164,7 +164,7 @@ namespace Shard
 			predator = new GridLogic(1, putPredator ? 0.01f : 0);
 		}
 
-		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom random)
+		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom random, EntityRanges ranges)
 		{
 			actions.SuppressAdvertisements = true;
 			int zero = 0;

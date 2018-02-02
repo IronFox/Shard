@@ -148,10 +148,10 @@ namespace Shard
 		[NonSerialized]
 		private int myGeneration;	//cannot initialize with anything explicitly. Assume is 0
 
-		public void Execute(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+		public void Execute(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 		{
 			VerifyGeneration(generation);
-			Evolve(ref newState, currentState, generation, randomSource);
+			Evolve(ref newState, currentState, generation, randomSource,ranges);
 			myGeneration = generation+2;
 			//Console.WriteLine(this + "->" + myGeneration);
 		}
@@ -167,7 +167,7 @@ namespace Shard
 		/// <param name="currentState">Current entity state</param>
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		protected abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource);
+		protected abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges);
 
 		public void VerifyGeneration(int generation)
 		{

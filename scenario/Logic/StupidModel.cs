@@ -31,7 +31,7 @@ public class CellLogic : EntityLogic
 	}
 	
 	
-	public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom random)
+	public override void Evolve(ref NewState newState, Entity currentState, int generation, EntityRandom random, EntityRanges ranges)
 	{
 		if (generation % 3 == 0)	//move bugs
 		{

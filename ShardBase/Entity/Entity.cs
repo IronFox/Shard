@@ -233,7 +233,7 @@ namespace Shard
 
 
 					var actions = new EntityLogic.Actions(this);
-					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber));
+					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber),ctx.Ranges);
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);

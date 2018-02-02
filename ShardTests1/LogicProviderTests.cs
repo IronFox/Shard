@@ -27,7 +27,7 @@ namespace Shard.Tests
 				{
 					this.counter = counter;
 				}
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					counter++;
 				}
@@ -58,7 +58,7 @@ namespace Shard.Tests
 					{
 						this.counter = counter;
 					}
-					protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+					protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 					{
 						counter++;
 					}
@@ -78,7 +78,7 @@ namespace Shard.Tests
 				}
 				MyStruct m;
 				
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{}
 			};
 		";
@@ -87,7 +87,7 @@ namespace Shard.Tests
 		@"	using Shard;
 			using System;
 			public class TestLogic : Shard.EntityLogic {
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{}
 			};
 		";
@@ -104,7 +104,7 @@ namespace Shard.Tests
 
 				readonly Nested n = new Nested();
 				
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					n.a = 4;
 				}
@@ -127,7 +127,7 @@ namespace Shard.Tests
 				}
 				NestedStruct test = new NestedStruct() {testInt = 42};
 				
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{}
 			};
 		";
@@ -139,7 +139,7 @@ namespace Shard.Tests
 
 			[Serializable]
 			public class InstantiatedLogic : Shard.EntityLogic {
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					//self-destruct
 					actions.Kill(currentState.ID);
@@ -148,7 +148,7 @@ namespace Shard.Tests
 			[Serializable]
 			public class InstantiatorLogic : Shard.EntityLogic {
 
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					//Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances
 					//if (generation == 1)
@@ -284,7 +284,7 @@ namespace Shard.Tests
 			[Serializable]
 			public class InstantiatorLogic : Shard.EntityLogic {
 
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					actions.Instantiate(currentState.ID.Position + randomSource.NextVec3(-1,1),""RemoteB"",""InstantiatedLogic"",new object[]{""My Little Secret""},null);
 				}
@@ -307,7 +307,7 @@ namespace Shard.Tests
 					if (test != ""My Little Secret"")
 						throw new Exception(""Secret not given or wrong"");
 				}
-				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource)
+				protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
 				{
 					//self-destruct
 					actions.Kill(currentState.ID);

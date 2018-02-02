@@ -2,7 +2,7 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <StartWorkingDirectory>..\..\..\</StartWorkingDirectory>
-    <StartArguments>136.199.51.2:5984 0_0_0r0</StartArguments>
+    <StartArguments>136.199.51.2:5984 setup</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <StartArguments>localhost:5984 0_0_0r0</StartArguments>

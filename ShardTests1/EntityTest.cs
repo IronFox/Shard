@@ -55,7 +55,7 @@ namespace ShardTests1
 
 			}
 
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random, Shard.EntityRanges ranges)
 			{
 				CheckRandom(random,"started");
 				bool isConsistent = true;
@@ -103,7 +103,7 @@ namespace ShardTests1
 		[Serializable]
 		public class RandomMotion : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges)
 			{
 				while (newState.NewPosition == currentState.ID.Position)
 				{
@@ -121,7 +121,7 @@ namespace ShardTests1
 		[Serializable]
 		public class FaultLogic : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges)
 			{
 				throw new NotImplementedException();
 			}

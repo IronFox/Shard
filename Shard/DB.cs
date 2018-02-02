@@ -531,15 +531,18 @@ namespace Shard
 			try
 			{
 				Log.Message("Storing serial SDS in DB: g" + serial.Generation);
-				var latest = sdsPoller.Latest;
-				if (latestPut != null && latestPut.Generation > latest.Generation)
-					latest = latestPut;
-				if (serial.Generation <= latest.Generation)
+				if (sdsPoller != null)
 				{
-					Log.Message("Newer already online. Rejecting update");
-					return; //nothing to do
+					var latest = sdsPoller.Latest;
+					if (latestPut != null && latestPut.Generation > latest.Generation)
+						latest = latestPut;
+					if (serial.Generation <= latest.Generation)
+					{
+						Log.Message("Newer already online. Rejecting update");
+						return; //nothing to do
+					}
+					serial._rev = latest._rev;
 				}
-				serial._rev = latest._rev;
 				await PutAsync(null, sdsStore, serial, forceReplace);
 				latestPut = serial;
 				Log.Message("Stored serial SDS in DB: g" + serial.Generation);
