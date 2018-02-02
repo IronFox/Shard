@@ -194,7 +194,7 @@ namespace Shard.Tests
 			CSLogicProvider.AsyncFactory = scriptName => CSLogicProvider.CompileAsync(scriptName, code);
 			CSLogicProvider provider = CSLogicProvider.CompileAsync("Test", code).Get();
 			var exported = new SerialCSLogicProvider( provider );
-			var imported = exported.Deserialize();
+			var imported = exported.DeserializeAsync().Result;
 			Assert.AreEqual(provider, imported);
 
 			DynamicCSLogic logic = new DynamicCSLogic(provider,null,null);

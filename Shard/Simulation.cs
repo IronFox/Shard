@@ -249,7 +249,7 @@ namespace Shard
 			{
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration);
-				Log.Message("TLG "+stack.NewestSDSGeneration+"/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
+				Log.Minor("TLG "+stack.NewestSDSGeneration+"/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 
 				if (comp != null)
 				{
@@ -271,7 +271,7 @@ namespace Shard
 				{
 					//fast forward: process now. don't care if we're at the beginning
 					int nextGen = newestSDSGeneration + 1;
-					Log.Message("Processing next TLG g" + nextGen);
+					Log.Minor("Processing next TLG g" + nextGen);
 					stack.Append(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
 					comp = new SDSComputation(timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
@@ -307,7 +307,7 @@ namespace Shard
 					if (comp == null)
 					{
 						//nothing to recover
-						Log.Message("Nothing to do");
+						Log.Minor("Nothing to do");
 						Clock.SleepUntil(timing.NextStepDeadline);
 					}
 				}

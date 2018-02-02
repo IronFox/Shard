@@ -30,5 +30,9 @@ namespace Shard
 			Console.Error.WriteLine(msg);
 		}
 
+		public static void Minor(string msg)
+		{
+			
+		}
 	}
 }

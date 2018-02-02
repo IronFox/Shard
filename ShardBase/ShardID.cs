@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 
 namespace Shard
 {
+	[Serializable]
 	public struct ShardID
 	{
 		[JsonIgnore]

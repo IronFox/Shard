@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +10,11 @@ namespace Shard
 	public class SerialCSLogicProvider : DB.Entity
 	{
 		public byte[] compiledAssembly;
+		public string[] dependencies;
 		public string sourceCode;
+
+		public SerialCSLogicProvider()
+		{ }
 
 		public SerialCSLogicProvider(string assemblyName, string sourceCode)
 		{
@@ -21,11 +26,12 @@ namespace Shard
 			compiledAssembly = provider.BinaryAssembly;
 			_id = provider.AssemblyName;
 			sourceCode = provider.SourceCode;
+			dependencies = provider.Dependencies.Select(dep => dep.Name).ToArray();
 		}
 
-		public CSLogicProvider Deserialize()
+		public Task<CSLogicProvider> DeserializeAsync()
 		{
-			return new CSLogicProvider(_id, sourceCode, compiledAssembly);
+			return CSLogicProvider.LoadAsync(_id, sourceCode, compiledAssembly, dependencies);
 		}
 	}
 }

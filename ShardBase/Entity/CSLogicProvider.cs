@@ -250,25 +250,6 @@ namespace Shard
 				yield return d.Provider.Get().Assembly;
 		}
 
-		public CSLogicProvider(string assemblyName, string sourceCode, byte[] compiledAssembly)
-		{
-			FromScript = compiledAssembly == null || compiledAssembly.Length == 0;
-			AssemblyName = assemblyName;
-			SourceCode = sourceCode;
-			BinaryAssembly = compiledAssembly;
-
-			if (FromScript)
-			{
-				var rs = CompileAsync(SourceCode).Result;
-				Assembly = rs.assembly;
-				BinaryAssembly = rs.compiledAssembly;
-
-			}
-			else
-				Assembly = Assembly.Load(BinaryAssembly);
-
-			CheckAssembly(types);
-		}
 
 
 
@@ -338,23 +319,37 @@ namespace Shard
 		}
 
 
-		public CSLogicProvider(string assemblyName, byte[] binaryAssembly, byte[][] dependencies)
-		{
-			FromScript = false;
-			AssemblyName = assemblyName;
-			if (dependencies != null)
-				foreach (var dep in dependencies)
-					LoadAssembly(dep);
-			Assembly = LoadAssembly(binaryAssembly);
-			BinaryAssembly = binaryAssembly;
-			CheckAssembly(types);
-		}
+		//public CSLogicProvider(string assemblyName, byte[] binaryAssembly, byte[][] dependencies)
+		//{
+		//	FromScript = false;
+		//	AssemblyName = assemblyName;
+		//	if (dependencies != null)
+		//		foreach (var dep in dependencies)
+		//			LoadAssembly(dep);
+		//	Assembly = LoadAssembly(binaryAssembly);
+		//	BinaryAssembly = binaryAssembly;
+		//	CheckAssembly(types);
+		//}
 
 
 		public static async Task<CSLogicProvider> CompileAsync(string assemblyName, string assemblyCode)
 		{
 			var c = await CompileAsync(assemblyCode);
 			return new CSLogicProvider(assemblyName, true, c.assembly, c.compiledAssembly, c.dependencies);
+		}
+
+
+		public static async Task<CSLogicProvider> LoadAsync(string assemblyName, string sourceCode, byte[] compiledAssembly, string[] dependencies)
+		{
+			bool fromScript = compiledAssembly == null || compiledAssembly.Length == 0;
+			if (fromScript)
+			{
+				if (Helper.Length(dependencies) != 0)
+					throw new IntegrityViolation("When compiling from code, dependencies must not be specified externally. Use '#reference [logic name]' instead");
+				return await CompileAsync(assemblyName, sourceCode);
+			}
+			Dependency[] deps = dependencies?.Select(name => new Dependency(name, AsyncFactory(name))).ToArray();
+			return new CSLogicProvider(assemblyName, false, LoadAssembly(compiledAssembly), compiledAssembly, deps);
 		}
 
 
@@ -499,7 +494,7 @@ namespace Shard
 		{
 			info.AddValue("assemblyName", AssemblyName);
 			info.AddValue("assembly", BinaryAssembly);
-			info.AddValue("dependencies", Dependencies.Select(d => d.Name).ToArray());
+			info.AddValue("dependencies", Dependencies?.Select(d => d.Name).ToArray());
 		}
 
 		public override int GetHashCode()
@@ -517,9 +512,12 @@ namespace Shard
 			BinaryAssembly = (byte[])info.GetValue("assembly", typeof(byte[]));
 			Assembly = LoadAssembly(BinaryAssembly);
 			var refs = (string[])info.GetValue("dependencies", typeof(string[]));
-			Dependencies = new Dependency[refs.Length];
-			for (int i = 0; i < refs.Length; i++)
-				Dependencies[i] = new Dependency(refs[i], AsyncFactory(refs[i]));
+			if (refs != null)
+			{
+				Dependencies = new Dependency[refs.Length];
+				for (int i = 0; i < refs.Length; i++)
+					Dependencies[i] = new Dependency(refs[i], AsyncFactory(refs[i]));
+			}
 		}
 
 		[Serializable]

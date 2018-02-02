@@ -85,7 +85,7 @@ namespace Shard
 			}
 
 			var script = await logicStore.GetByIdAsync<SerialCSLogicProvider>(scriptName);
-			return script.Deserialize();
+			return await script.DeserializeAsync();
 		}
 
 		public static void Connect(Host host, string username = null, string password = null)

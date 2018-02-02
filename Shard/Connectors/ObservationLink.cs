@@ -94,7 +94,7 @@ namespace Shard
 			writeThread = new Thread(new ThreadStart(WriterMain));
 			writeThread.Start();
 			SendCompressed(Simulation.ID);
-			SignalUpdate(Simulation.Stack.NewestSDS);
+			SendSDS(Simulation.Stack.NewestSDS);
 		}
 
 		private void Message(string msg)
@@ -121,7 +121,14 @@ namespace Shard
 				using (var compressor = new LZ4.LZ4Stream(netStream, LZ4.LZ4StreamMode.Compress))
 				{
 					while (!closed)
+					{
+						Message("sending next object");
 						f.Serialize(compressor, compressQueue.Take());
+						Message("flushing");
+						compressor.Flush();
+						netStream.Flush();
+					}
+
 				}
 			}
 			catch (ObjectDisposedException)
@@ -182,6 +189,7 @@ namespace Shard
 					Close();
 					return;
 				}
+				Log.Message("Added "+serializable);
 				compressQueue.Add(serializable);
 			}
 			catch (Exception ex)
@@ -205,8 +213,9 @@ namespace Shard
 		{
 			if (p != null && sentProviders.TryAdd(p.AssemblyName, true))
 			{
-				foreach (var d in p.Dependencies)
-					SendProvider(d.Provider.Get());
+				if (p.Dependencies != null)
+					foreach (var d in p.Dependencies)
+						SendProvider(d.Provider.Get());
 				SendCompressed(p);
 			}
 		}
