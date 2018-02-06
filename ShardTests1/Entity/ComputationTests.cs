@@ -180,7 +180,7 @@ namespace Shard.Tests
 
 			public SDSComputation BeginAdvanceTLG(bool intermediateShouldBeConsistent)
 			{
-				int i = tlgGen = stack.NewestSDSGeneration;
+				int i = tlgGen = stack.NewestRegisteredSDSGeneration;
 				tlgEntry = stack.AllocateGeneration(i + 1);
 				Assert.AreEqual(tlgEntry.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));

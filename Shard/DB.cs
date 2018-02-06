@@ -178,13 +178,13 @@ namespace Shard
 			string doc = controlStore.Client.Serializer.Serialize(Config);
 			bool success = await TryAsync(async () =>
 			{
-				Log.Message("Storing simulation configuration on " + Host + " ...");
+				Log.Minor("Storing simulation configuration on " + Host + " ...");
 				var header = await controlStore.SetAsync("config", doc);
 				Config = await controlStore.GetByIdAsync<ConfigContainer>(header.Id);
 				return Config != null;
 			}, numTries);
 			if (success)
-				Log.Message("Done");
+				Log.Minor("Done");
 			else
 				Log.Error("Failed to upload config to server");
 
@@ -277,7 +277,7 @@ namespace Shard
 							}
 							if (actualChange)
 							{
-								Log.Message("Update detected on " + store.DBName + "['" + id + "']:" + revs + ". Polling");
+								Log.Minor("Update detected on " + store.DBName + "['" + id + "']:" + revs + ". Polling");
 								PollAsync().Wait();
 							}
 						}
@@ -298,7 +298,7 @@ namespace Shard
 							var data = await store.GetByIdAsync<T>(id);
 							sl.DoLocked(() =>
 							{
-								Log.Message("Got new data on " + store.DBName + "['" + id + "']: rev " + header.Rev);
+								Log.Minor("Got new data on " + store.DBName + "['" + id + "']: rev " + header.Rev);
 								lastValue = data;
 								OnChange?.Invoke(data);
 							});
@@ -530,7 +530,7 @@ namespace Shard
 				return;	//tests
 			try
 			{
-				Log.Message("Storing serial SDS in DB: g" + serial.Generation);
+				Log.Minor("Storing serial SDS in DB: g" + serial.Generation);
 				if (sdsPoller != null)
 				{
 					var latest = sdsPoller.Latest;
@@ -538,14 +538,14 @@ namespace Shard
 						latest = latestPut;
 					if (serial.Generation <= latest.Generation)
 					{
-						Log.Message("Newer already online. Rejecting update");
+						Log.Minor("Newer already online. Rejecting update");
 						return; //nothing to do
 					}
 					serial._rev = latest._rev;
 				}
 				await PutAsync(null, sdsStore, serial, forceReplace);
 				latestPut = serial;
-				Log.Message("Stored serial SDS in DB: g" + serial.Generation);
+				Log.Minor("Stored serial SDS in DB: g" + serial.Generation);
 			}
 			catch (Exception ex)
 			{

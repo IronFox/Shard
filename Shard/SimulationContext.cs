@@ -22,7 +22,7 @@ namespace Shard
 
 		public override void RelayClientMessage(Guid entityID, Guid clientID, int channel, byte[] data)
 		{
-			if (GenerationNumber == Simulation.Stack.NewestSDSGeneration)
+			if (GenerationNumber == Simulation.Stack.NewestRegisteredSDSGeneration)
 				InteractionLink.Relay(entityID, clientID, channel, data, GenerationNumber);
 		}
 

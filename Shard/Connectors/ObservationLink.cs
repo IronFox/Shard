@@ -94,7 +94,9 @@ namespace Shard
 			writeThread = new Thread(new ThreadStart(WriterMain));
 			writeThread.Start();
 			SendCompressed(Simulation.ID);
-			SendSDS(Simulation.Stack.NewestSDS);
+			if (sentProviders.Count != 0)
+				throw new Exception("Inconsistent start");
+			SendSDS(Simulation.Stack.NewestFinishedSDS);
 		}
 
 		private void Message(string msg)
@@ -122,8 +124,9 @@ namespace Shard
 				{
 					while (!closed)
 					{
-						Message("sending next object");
-						f.Serialize(compressor, compressQueue.Take());
+						var obj = compressQueue.Take();
+						Message("sending "+obj);
+						f.Serialize(compressor, obj);
 						Message("flushing");
 						compressor.Flush();
 						netStream.Flush();
@@ -165,6 +168,7 @@ namespace Shard
 			try
 			{
 				ObservationLink rs = new ObservationLink(client);
+				Log.Message("Registering " + client.Client.RemoteEndPoint);
 				lock (registry)
 				{
 					registry.Add(rs);
@@ -189,7 +193,7 @@ namespace Shard
 					Close();
 					return;
 				}
-				Log.Message("Added "+serializable);
+				//Log.Message("Added "+serializable);
 				compressQueue.Add(serializable);
 			}
 			catch (Exception ex)
@@ -213,20 +217,29 @@ namespace Shard
 		{
 			if (p != null && sentProviders.TryAdd(p.AssemblyName, true))
 			{
+				//Message("SendProvider: "+p);
+				//Log.Message("Sending provider " + p.AssemblyName);
 				if (p.Dependencies != null)
 					foreach (var d in p.Dependencies)
 						SendProvider(d.Provider.Get());
 				SendCompressed(p);
 			}
+			//else
+			//	Message("SendProvider rejected: " + p);
+
 		}
 
 		private void SendNewProvidersOf(SDS sds)
 		{
+			Message("Checking providers of g" + sds.Generation);
 			foreach (var e in sds.FinalEntities)
 			{
 				DynamicCSLogic logic = e.MyLogic as DynamicCSLogic;
 				if (logic == null)
 					continue;
+				if (string.IsNullOrEmpty(logic.Provider.AssemblyName))
+					throw new IntegrityViolation("");
+				//Message("Checking logic " + logic.Provider);
 				SendProvider(logic.Provider);
 			}
 		}

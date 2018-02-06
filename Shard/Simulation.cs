@@ -162,7 +162,7 @@ namespace Shard
 			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
 			if (existing != null && candidate.IC.OneCount > existing.IC.OneCount)
 			{
-				Console.Error.WriteLine("Unable to incorportate RCS from " + neighbor + ": RCS at generation " + target.Generation + " is worse than known");
+				Log.Minor("Unable to incorportate RCS from " + neighbor + ": RCS at generation " + target.Generation + " is worse than known");
 				return;
 			}
 			target.InboundRCS[neighbor.LinearIndex] = candidate;
@@ -219,7 +219,7 @@ namespace Shard
 
 			stack.Append(sds);
 
-			Console.WriteLine("Start Date="+DB.Timing.startTime);
+			Log.Message("Start Date="+DB.Timing.startTime);
 
 			{
 				foreach (var link in neighbors)
@@ -229,18 +229,18 @@ namespace Shard
 			SimulationContext ctx = new SimulationContext();
 
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
-			while (stack.NewestSDSGeneration < TimingInfo.Current.TopLevelGeneration)
+			while (stack.NewestRegisteredSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
 				Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
 //				Console.Write(".");
 	//			Console.Out.Flush();
-				int nextGen = stack.NewestSDSGeneration + 1;
+				int nextGen = stack.NewestRegisteredSDSGeneration + 1;
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
 				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
 			}
-			Console.WriteLine("done. Starting main loop...");
+			Log.Message("done. Starting main loop...");
 
 
 			SDSComputation comp = null;
@@ -249,7 +249,7 @@ namespace Shard
 			{
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration);
-				Log.Minor("TLG "+stack.NewestSDSGeneration+"/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
+				Log.Minor("TLG "+stack.NewestRegisteredSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 
 				if (comp != null)
 				{
@@ -266,7 +266,7 @@ namespace Shard
 					}
 				}
 
-				int newestSDSGeneration = stack.NewestSDSGeneration;
+				int newestSDSGeneration = stack.NewestRegisteredSDSGeneration;
 				if (timing.TopLevelGeneration > newestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
@@ -448,7 +448,7 @@ namespace Shard
 					int gen = ((OldestGeneration)obj).Generation;
 					if (gen == lnk.OldestGeneration)
 					{
-						Console.Error.WriteLine("OldestGen update from sibling " + lnk + ": Warning: Already moved to generation " + gen);
+						Log.Minor("OldestGen update from sibling " + lnk + ": Warning: Already moved to generation " + gen);
 						return;
 					}
 					if (gen > lnk.OldestGeneration)
@@ -472,7 +472,7 @@ namespace Shard
 					RCS.Serial rcs = (RCS.Serial)obj;
 					if (rcs.Generation <= stack.NewestConsistentSDSGeneration)
 					{
-						Console.Error.WriteLine("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
+						Log.Minor("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
 						return;
 					}
 					FetchNeighborUpdate(stack.AllocateGeneration(rcs.Generation),lnk, rcs.Data);
@@ -485,24 +485,24 @@ namespace Shard
 					SerialSDS raw = (SerialSDS)obj;
 					if (raw.Generation <= stack.OldestSDSGeneration)
 					{
-						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Already moved past generation " + raw.Generation);
+						Log.Minor("SDS update from sibling or DB: Rejected. Already moved past generation " + raw.Generation);
 						return;
 					}
 					var existing = stack.FindGeneration(raw.Generation);
 					if (existing.IsFullyConsistent)
 					{
-						Console.Error.WriteLine("SDS update from sibling or DB: Rejected. Generation already consistent: " + raw.Generation);
+						Log.Minor("SDS update from sibling or DB: Rejected. Generation already consistent: " + raw.Generation);
 						return;
 					}
 					SDS sds = raw.Deserialize();
 					if (sds.IsFullyConsistent)
 					{
-						Console.Out.WriteLine("SDS update from sibling or DB: Accepted generation " + raw.Generation);
+						Log.Minor("SDS update from sibling or DB: Accepted generation " + raw.Generation);
 						stack.Insert(sds);
 						return;
 					}
 					SDS merged = existing.SDS.MergeWith(sds);
-					Console.Out.WriteLine("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
+					Log.Minor("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
 					if (merged.Inconsistency < existing.SDS.Inconsistency)
 						stack.Insert(merged);
 					if (merged.Inconsistency < sds.Inconsistency)
@@ -510,7 +510,7 @@ namespace Shard
 					return;
 				}
 
-				Console.Error.WriteLine("Unsupported update from sibling " + lnk + ": " + obj.GetType());
+				Log.Error("Unsupported update from sibling " + lnk + ": " + obj.GetType());
 			}
 		}
 

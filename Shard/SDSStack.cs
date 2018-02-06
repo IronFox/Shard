@@ -40,41 +40,77 @@ namespace Shard
 
 		public void ResetToRoot(Entry root)
 		{
-			sdsList.Clear();
-			Insert(root);
+			lock (this)
+			{
+				sdsList.Clear();
+				Insert(root);
+			}
 		}
 
 		private void Trim()
 		{
-			int newest = NewestConsistentSDSIndex;
-			if (newest == 0)
-				return;
-
-			sdsList.RemoveRange(0, newest);
-
-			Simulation.AdvertiseOldestGeneration(OldestSDS.Generation);
-		}
-
-		public SDS NewestSDS
-		{
-			get
+			lock (this)
 			{
-				return sdsList[sdsList.Count - 1].SDS;
+				int newest = NewestConsistentSDSIndex;
+				if (newest == 0)
+					return;
+
+				sdsList.RemoveRange(0, newest);
+
+				Simulation.AdvertiseOldestGeneration(OldestSDS.Generation);
 			}
 		}
 
-		public int NewestSDSGeneration
+		public SDS NewestRegisteredSDS
 		{
 			get
 			{
-				return sdsList.Count > 0 ? sdsList.GetLast().Generation : -1;
+				lock (this)
+					return sdsList[sdsList.Count - 1].SDS;
 			}
 		}
+		public SDS NewestFinishedSDS
+		{
+			get
+			{
+				lock (this)
+				{
+					int at = sdsList.Count - 1;
+					while (at > 0 && !sdsList[at].SDS.IsSet)
+						at--;
+					return sdsList[at].SDS;
+				}
+			}
+		}
+
+		public int NewestRegisteredSDSGeneration
+		{
+			get
+			{
+				lock(this)
+					return sdsList.Count > 0 ? sdsList.GetLast().Generation : -1;
+			}
+		}
+		public int NewestFinishedSDSGeneration
+		{
+			get
+			{
+				lock (this)
+				{
+					int at = sdsList.Count - 1;
+					while (at >= 0 && !sdsList[at].SDS.IsSet)
+						at--;
+					return at >= 0 ? sdsList[at].Generation : -1;
+				}
+			}
+		}
+
 		public int OldestSDSGeneration
 		{
 			get
 			{
-				return sdsList.Count > 0 ? sdsList[0].Generation : -1;
+				lock (this)
+					return sdsList.Count > 0 ? sdsList[0].Generation : -1;
 			}
 		}
 
@@ -88,20 +124,26 @@ namespace Shard
 
 		public Entry AllocateGeneration(int gen)
 		{
-			if (gen < OldestSDSGeneration)
-				return null;
-			while (gen > NewestSDSGeneration)
+			lock (this)
 			{
-				int gen2 = NewestSDSGeneration + 1;
-				sdsList.Add(new Entry(gen2));
+				if (gen < OldestSDSGeneration)
+					return null;
+				while (gen > NewestRegisteredSDSGeneration)
+				{
+					int gen2 = NewestRegisteredSDSGeneration + 1;
+					sdsList.Add(new Entry(gen2));
+				}
+				return sdsList[gen - sdsList[0].Generation];
 			}
-			return sdsList[gen - sdsList[0].Generation];
 		}
 		public Entry FindGeneration(int gen)
 		{
-			if (gen < OldestSDSGeneration || gen > NewestSDSGeneration)
-				return null;
-			return sdsList[gen - OldestSDS.Generation];
+			lock (this)
+			{
+				if (gen < OldestSDSGeneration || gen > NewestRegisteredSDSGeneration)
+					return null;
+				return sdsList[gen - OldestSDS.Generation];
+			}
 		}
 
 		public void Insert(SDS sds, bool trim = true)
@@ -111,63 +153,69 @@ namespace Shard
 
 		public Entry Insert(Tuple<SDS, IntermediateSDS> tuple, bool trim = true)
 		{
-			int gen = tuple.Item1.Generation;
-			if (gen >= NewestSDSGeneration)
-				ObservationLink.SignalUpdate(tuple.Item1);
+			lock (this)
+			{
+				int gen = tuple.Item1.Generation;
+				if (gen >= NewestRegisteredSDSGeneration)
+					ObservationLink.SignalUpdate(tuple.Item1);
 
-			Entry rs;
-			if (gen > NewestSDSGeneration)
-			{
-				while (gen > NewestSDSGeneration + 1)
+				Entry rs;
+				if (gen > NewestRegisteredSDSGeneration)
 				{
-					int gen2 = NewestSDS.Generation + 1;
-					sdsList.Add(new Entry(gen2));
+					while (gen > NewestRegisteredSDSGeneration + 1)
+					{
+						int gen2 = NewestRegisteredSDS.Generation + 1;
+						sdsList.Add(new Entry(gen2));
+					}
+					//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
+					sdsList.Add(new Entry(tuple.Item1, tuple.Item2));
+					rs = sdsList.GetLast();
 				}
-				//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
-				sdsList.Add(new Entry(tuple.Item1,tuple.Item2));
-				rs = sdsList.GetLast();
+				else
+				{
+					int at = gen - OldestSDS.Generation;
+					if (at < 0 || at >= sdsList.Count)
+						throw new IntegrityViolation("Cannot insert SDS generation " + gen + ", oldest = " + OldestSDSGeneration);
+					Entry e = sdsList[at];
+					e.SDS = tuple.Item1;
+					e.IntermediateSDS = tuple.Item2;
+					e.IsFullyConsistent = tuple.Item1.IsFullyConsistent;
+					e.SignificantInboundChange = false;
+					rs = e;
+				}
+				if (trim)
+					Trim();
+				return rs;
 			}
-			else
-			{
-				int at = gen - OldestSDS.Generation;
-				if (at < 0 || at >= sdsList.Count)
-					throw new IntegrityViolation("Cannot insert SDS generation " + gen + ", oldest = " + OldestSDSGeneration);
-				Entry e = sdsList[at];
-				e.SDS = tuple.Item1;
-				e.IntermediateSDS = tuple.Item2;
-				e.IsFullyConsistent = tuple.Item1.IsFullyConsistent;
-				e.SignificantInboundChange = false;
-				rs = e;
-			}
-			if (trim)
-				Trim();
-			return rs;
 		}
 
 		public void Insert(Entry entry, bool trim = true)
 		{
-			if (entry.Generation >= NewestSDSGeneration)
-				ObservationLink.SignalUpdate(entry.SDS);
+			lock (this)
+			{
+				if (entry.Generation >= NewestRegisteredSDSGeneration)
+					ObservationLink.SignalUpdate(entry.SDS);
 
-			if (entry.Generation > NewestSDSGeneration)
-			{
-				while (entry.Generation > NewestSDSGeneration+1)
+				if (entry.Generation > NewestRegisteredSDSGeneration)
 				{
-					int gen2 = NewestSDS.Generation + 1;
-					sdsList.Add(new Entry(gen2));
+					while (entry.Generation > NewestRegisteredSDSGeneration + 1)
+					{
+						int gen2 = NewestRegisteredSDS.Generation + 1;
+						sdsList.Add(new Entry(gen2));
+					}
+					//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
+					sdsList.Add(entry);
 				}
-				//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
-				sdsList.Add(entry);
+				else
+				{
+					int at = entry.Generation - OldestSDS.Generation;
+					if (at < 0 || at >= sdsList.Count)
+						throw new IntegrityViolation("Cannot insert SDS generation " + entry.Generation + ", oldest = " + OldestSDSGeneration);
+					sdsList[at] = entry;
+				}
+				if (trim)
+					Trim();
 			}
-			else
-			{
-				int at = entry.Generation - OldestSDS.Generation;
-				if (at < 0 || at >= sdsList.Count)
-					throw new IntegrityViolation("Cannot insert SDS generation "+entry.Generation+", oldest = "+OldestSDSGeneration);
-				sdsList[at] = entry;
-			}
-			if (trim)
-				Trim();
 		}
 
 		public int Size
@@ -182,7 +230,8 @@ namespace Shard
 		{
 			get
 			{
-				return sdsList[NewestConsistentSDSIndex].SDS;
+				lock (this)
+					return sdsList[NewestConsistentSDSIndex].SDS;
 			}
 		}
 
@@ -193,9 +242,12 @@ namespace Shard
 
 		public void Append(Entry entry)
 		{
-			if (sdsList.Count > 0 && NewestSDSGeneration + 1 != entry.Generation)
-				throw new IntegrityViolation("Newest generation in stack is "+NewestSDSGeneration+". Trying to append generation "+entry.Generation);
-			sdsList.Add(entry);
+			lock (this)
+			{
+				if (sdsList.Count > 0 && NewestRegisteredSDSGeneration + 1 != entry.Generation)
+					throw new IntegrityViolation("Newest generation in stack is " + NewestRegisteredSDSGeneration + ". Trying to append generation " + entry.Generation);
+				sdsList.Add(entry);
+			}
 		}
 
 		public IEnumerator<Entry> GetEnumerator()
@@ -220,12 +272,15 @@ namespace Shard
 		{
 			get
 			{
-				for (int i = sdsList.Count - 1; i >= 0; i--)
+				lock (this)
 				{
-					if (sdsList[i].IsFullyConsistent)
-						return i;
+					for (int i = sdsList.Count - 1; i >= 0; i--)
+					{
+						if (sdsList[i].IsFullyConsistent)
+							return i;
+					}
+					return -1;
 				}
-				return -1;
 			}
 		}
 
@@ -233,7 +288,8 @@ namespace Shard
 		{
 			get
 			{
-				return sdsList[NewestConsistentSDSIndex].Generation;
+				lock (this)
+					return sdsList[NewestConsistentSDSIndex].Generation;
 			}
 		}
 

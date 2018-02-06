@@ -54,6 +54,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="EntityComponent.cs" />
     <Compile Include="Sector.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

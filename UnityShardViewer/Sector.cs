@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+//using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -42,6 +43,12 @@ namespace UnityShardViewer
 				client.Close();
 		}
 
+		private System.Diagnostics.Stopwatch sdsDelta = new System.Diagnostics.Stopwatch();
+
+		private SpinLock deltaLock = new SpinLock();
+		private double deltaSum = 0;
+		private int deltaNum = 0;
+
 
 		private bool stop = false;
 		private void ThreadMain()
@@ -65,9 +72,9 @@ namespace UnityShardViewer
 
 						while (client.Connected)
 						{
-							Debug.Log("Sector: Deserialized next object");
+							//Debug.Log("Sector: Deserializing next object");
 							var obj = f.UnsafeDeserialize(stream, null);
-							Debug.Log("Sector: Deserialized object " + obj);
+							//Debug.Log("Sector: Deserialized object " + obj);
 
 							if (obj is ShardID)
 							{
@@ -86,7 +93,7 @@ namespace UnityShardViewer
 							else if (obj is SDS)
 							{
 								SDS sds = (SDS)obj;
-								Debug.Log("Sector: Got new SDS. Deserializing entities...");
+								//Debug.Log("Sector: Got new SDS. Deserializing entities...");
 
 								foreach (var e in sds.FinalEntities)
 								{
@@ -101,21 +108,43 @@ namespace UnityShardViewer
 											Debug.LogException(ex);
 										}
 								}
-								Debug.Log("Sector: SDS processed. Signalling change");
+								//Debug.Log("Sector: SDS processed. Signalling change");
 								SDS = sds;
 								sdsChanged = true;
+								if (sdsDelta.IsRunning)
+								{
+									double delta = sdsDelta.Elapsed.TotalSeconds;
+									deltaLock.DoLocked(() =>
+									{
+										deltaSum += delta;
+										deltaNum++;
+									});
+									sdsDelta.Restart();
+								}
 							}
 						}
 					}
 					catch (SocketException ex)
 					{
 						Debug.LogException(ex);
+						Debug.Log("Waiting, then retrying");
 					}
+					catch (Exception ex)
+					{
+						Debug.LogException(ex);
+						Debug.Log("Weird type: "+ex.GetType()+". Waiting, then retrying");
+					}
+					try
+					{
+						client.Close();
+					}
+					catch { };
 					Thread.Sleep(2000);
 				}
 			}
 			catch (Exception ex)
 			{
+				Debug.LogError("Encountered terminal exception");
 				Debug.LogException(ex);
 			}
 		}
@@ -177,6 +206,7 @@ namespace UnityShardViewer
 			{
 				cube = Instantiate(cubePrototype, transform);
 				cube.name = "cube";
+				cube.transform.name = "cube";
 				cube.transform.position = Convert(MyID.XYZ) * Scale;
 			}
 
@@ -252,51 +282,83 @@ namespace UnityShardViewer
 
 		public const float Scale = 100;
 
-		private Queue<GameObject> availableEntityObjects = new Queue<GameObject>();
+		private Dictionary<string, GameObject> availableEntityObjects = new Dictionary<string, GameObject>();
 		private Dictionary<string, Queue<GameObject>> availableGeometryObjects = new Dictionary<string, Queue<GameObject>>();
 
+		private int updateNo = 0;
 		// Update is called once per frame
 		public void Update()
 		{
 			if (sdsChanged)
 			{
 				sdsChanged = false;
-				Debug.Log("Sector: processing change");
+
+				float timeDelta = 0;
+				deltaLock.DoLocked(() =>
+				{
+					timeDelta = deltaNum > 0 ? (float)(deltaSum / deltaNum) : 1f;
+				});
+
+				//Debug.Log("Sector: processing change");
+				updateNo++;
 				if (cube != null)
 					cube.transform.position = Convert(MyID.XYZ);
 
 				SDS source = SDS;
+				//Debug.Log("Sector: got "+transform.childCount+" children");
 				foreach (Transform child in transform)
 				{
 					if (child.name == "cube")
+					{
+						//Debug.Log("Sector: got cube");
 						continue;
-					child.hideFlags = HideFlags.HideAndDontSave;
-					child.transform.parent = null;
-					availableEntityObjects.Enqueue(child.gameObject);
+					}
+					child.gameObject.hideFlags = HideFlags.HideAndDontSave;
 					foreach (Transform sub in child)
 					{
-						sub.parent = null;
 						sub.gameObject.hideFlags = HideFlags.HideAndDontSave;
 						availableGeometryObjects.GetOrCreate(sub.name).Enqueue(sub.gameObject);
 						//availableEntityObjects.Enqueue(sub.gameObject);
 					}
-				}
 
+					if (!availableEntityObjects.ContainsKey(child.name))
+						availableEntityObjects.Add(child.name, child.gameObject);
+					else
+					{
+						Destroy(child.gameObject);
+					}
+				}
+				//Debug.Log("Sector: recovered " + availableEntityObjects.Count + " objects");
+				if (updateNo > 1 && availableEntityObjects.Count == 0)
+				{
+					throw new Exception("should have had some entity objects at update no "+ updateNo);
+				}
+				int reused = 0;
 				foreach (var e in source.FinalEntities)
 				{
 					GameObject obj;
-					if (availableEntityObjects.Count == 0)
+					string key = e.ID.Guid.ToString();
+					if (!availableEntityObjects.ContainsKey(key))
 					{
 						obj = entityPrototype != null ? Instantiate(entityPrototype, transform) : new GameObject();
 						obj.transform.parent = transform;
+						if (updateNo > 1)
+							throw new Exception("should have had enough entity objects at update no " + updateNo+" (reused "+reused+"/"+source.FinalEntities.Length+")");
 					}
 					else
 					{
-						obj = availableEntityObjects.Dequeue();
+						obj = availableEntityObjects[key];
+						availableEntityObjects.Remove(key);
 						obj.hideFlags = HideFlags.None;
+						reused++;
 					}
-					obj.transform.position = Convert(e.ID.Position) * Scale;
 					obj.name = e.ID.Guid.ToString();
+					var c = obj.GetComponent<EntityComponent>();
+					if (c == null)
+						c = obj.AddComponent<EntityComponent>();
+					var next = Convert(e.ID.Position) * Scale;
+					c.SetState(obj.transform.position, next, timeDelta);
+					obj.transform.position = next;
 					foreach (var app in e.Appearances)
 					{
 						GeometricAppearance g = app as GeometricAppearance;
@@ -325,6 +387,7 @@ namespace UnityShardViewer
 						}
 					}
 				}
+				Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);
 			}
 		}
 

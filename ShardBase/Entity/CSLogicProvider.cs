@@ -19,7 +19,7 @@ namespace Shard
 		private CSLogicProvider provider;
 		private Constructor constructor;
 
-		public CSLogicProvider Provider { get { return provider; } }
+		public CSLogicProvider Provider { get { return provider ?? constructor.Provider; } }
 
 		class Constructor
 		{
@@ -35,6 +35,17 @@ namespace Shard
 				if (SerialData != null)
 					return provider != null ? provider.DeserializeLogic(SerialData).ToString() : AssemblyName + " [" + SerialData.Length + "]";
 				return "new " + AssemblyName + "." + LogicName;
+			}
+
+			public CSLogicProvider Provider
+			{
+				get
+				{
+					if (provider != null)
+						return provider;
+					task.Wait();
+					return provider;
+				}
 			}
 
 			public Constructor(string assemblyName, byte[] data)
@@ -211,6 +222,10 @@ namespace Shard
 					&& SourceCode == other.SourceCode;
 		}
 
+		public override string ToString()
+		{
+			return AssemblyName;
+		}
 
 
 		public EntityLogic Instantiate(string logicName, object[] constructorParameters)
@@ -499,11 +514,11 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			var hashCode = -342463410;
-			hashCode = hashCode * -1521134295 + EqualityComparer<byte[]>.Default.GetHashCode(BinaryAssembly);
-			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(AssemblyName);
-			hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(SourceCode);
-			return hashCode;
+			return Helper.Hash(this)
+				.Add(BinaryAssembly)
+				.Add(AssemblyName)
+				.Add(SourceCode)
+				.GetHashCode();
 		}
 
 		public CSLogicProvider(SerializationInfo info, StreamingContext context)
