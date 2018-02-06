@@ -107,12 +107,13 @@ namespace ShardTests1
 			{
 				while (newState.NewPosition == currentState.ID.Position)
 				{
-					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-Simulation.M, Simulation.M);
-					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > Simulation.M) 
+					//newState.NewPosition = ranges.World.Clamp(currentState.ID.Position + random.NextVec3(-ranges.M, ranges.M));
+					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-ranges.M, ranges.M);
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.M) 
 						throw new Exception("Pre-clamp motion range exceeded");
 
-					newState.NewPosition = Simulation.FullSimulationSpace.Clamp(newState.NewPosition);
-					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > Simulation.M)
+					newState.NewPosition = ranges.World.Clamp(newState.NewPosition);
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.M)
 						throw new Exception("Post-clamp motion range exceeded");
 				}
 			}

@@ -414,6 +414,11 @@ namespace Shard
 			}
 		}
 
+		public static Box ExtToWorld(Int3 extent)
+		{
+			return Box.FromMinAndMax(Vec3.Zero, new Vec3(extent), Bool3.True);
+		}
+
 		public static Box MySpace { get; private set; } = Box.OffsetSize(Vec3.Zero, new Vec3(1), Bool3.True);
 
 		public static float SensorRange { get { return R - M; } }
@@ -422,7 +427,7 @@ namespace Shard
 		{
 			get
 			{
-				return Box.FromMinAndMax(Vec3.Zero, new Vec3(ext.XYZ), Bool3.True);
+				return ExtToWorld(ext.XYZ);
 			}
 		}
 

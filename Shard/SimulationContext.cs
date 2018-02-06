@@ -5,9 +5,9 @@ namespace Shard
 {
 	public class SimulationContext : ExecutionContext
 	{
-		public SimulationContext():base(new EntityRanges(Simulation.R,Simulation.M,Simulation.SensorRange),Simulation.MySpace)
+		public SimulationContext():base(new EntityRanges(Simulation.R,Simulation.M,Simulation.SensorRange,Simulation.FullSimulationSpace),Simulation.MySpace)
 		{}
-		public SimulationContext(DB.ConfigContainer cfg) : base(new EntityRanges(cfg.r,cfg.m,cfg.r-cfg.m), Simulation.MySpace)
+		public SimulationContext(DB.ConfigContainer cfg) : base(new EntityRanges(cfg.r,cfg.m,cfg.r-cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ)), Simulation.MySpace)
 		{ }
 
 		public override void LogError(string message)

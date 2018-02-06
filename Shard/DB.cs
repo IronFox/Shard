@@ -368,7 +368,7 @@ namespace Shard
 			get
 			{
 				var cfg = Config;
-				return new EntityRanges(cfg.r, cfg.m, cfg.r - cfg.m);
+				return new EntityRanges(cfg.r, cfg.m, cfg.r - cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ));
 
 			}
 		}
