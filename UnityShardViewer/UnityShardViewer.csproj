@@ -36,8 +36,9 @@
     <Reference Include="LZ4, Version=1.0.15.93, Culture=neutral, PublicKeyToken=62e1b5ec1eec9bdd, processorArchitecture=MSIL">
       <HintPath>packages\lz4net.1.0.15.93\lib\net4-client\LZ4.dll</HintPath>
     </Reference>
-    <Reference Include="ShardBase">
-      <HintPath>..\Shard\ShardBase\bin\Debug\ShardBase.dll</HintPath>
+    <Reference Include="ShardBase, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\ShardBase\bin\Debug\ShardBase.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -55,6 +56,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EntityComponent.cs" />
+    <Compile Include="Manager.cs" />
     <Compile Include="Sector.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

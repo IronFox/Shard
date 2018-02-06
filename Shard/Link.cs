@@ -7,6 +7,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Shard
 {
@@ -466,6 +467,11 @@ namespace Shard
 				Int3 end = (delta * InconsistencyCoverage.CommonResolution + InconsistencyCoverage.CommonResolution - 1).Clamp(0, InconsistencyCoverage.CommonResolution - 1);
 				return IntBox.FromMinAndMax(offset, end, Bool3.True);
 			}
+		}
+
+		public Task<PublicHostReference> GetPublicHostAsync()
+		{
+			return DB.GetPublicHostOfAync(this.ID);
 		}
 
 		private void WriteMain()

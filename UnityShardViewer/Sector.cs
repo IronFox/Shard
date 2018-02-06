@@ -19,7 +19,9 @@ namespace UnityShardViewer
 		//private Shard.SDS sds = new Shard.SDS(12);
 		private Thread connectionThread;
 
-		public ShardID MyID { get; private set; }
+		private ShardID privateID;
+		public ShardID publicID = new ShardID(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue);
+
 		public SDS SDS { get; private set; }
 		private bool sdsChanged = false;
 	
@@ -78,8 +80,8 @@ namespace UnityShardViewer
 
 							if (obj is ShardID)
 							{
-								MyID = (ShardID)obj;
-								Debug.Log("Sector: ID updated to " + MyID);
+								privateID = (ShardID)obj;
+								Debug.Log("Sector: ID updated to " + privateID);
 							}
 							else if (obj is CSLogicProvider)
 							{
@@ -87,8 +89,14 @@ namespace UnityShardViewer
 								TaskCompletionSource<CSLogicProvider> entry;
 								while (!providerMap.TryGetValue(prov.AssemblyName, out entry))
 									providerMap.TryAdd(prov.AssemblyName, new TaskCompletionSource<CSLogicProvider>());
-								entry.SetResult(prov);
+								if (!entry.Task.IsCompleted)
+									entry.SetResult(prov);
 								Debug.Log("Sector: Added new provider " + prov.AssemblyName);
+							}
+							else if (obj is PublicHostReference)
+							{
+								var h = (PublicHostReference)obj;
+								newNeighbors.Add(h);
 							}
 							else if (obj is SDS)
 							{
@@ -207,7 +215,7 @@ namespace UnityShardViewer
 				cube = Instantiate(cubePrototype, transform);
 				cube.name = "cube";
 				cube.transform.name = "cube";
-				cube.transform.position = Convert(MyID.XYZ) * Scale;
+				//cube.transform.position = Convert(MyID.XYZ) * Scale;
 			}
 
 		}
@@ -275,23 +283,54 @@ namespace UnityShardViewer
 				{
 					cube = Instantiate(value, transform);
 					cube.name = "cube";
-					cube.transform.position = Convert(MyID.XYZ) * Scale;
+					cube.transform.position = Convert(publicID.XYZ) * Scale;
 				}
 			}
 		}
+
+		public Action<ShardID> onNewID;
+
+		public Action<PublicHostReference> OnNewNeighbor { get; internal set; }
 
 		public const float Scale = 100;
 
 		private Dictionary<string, GameObject> availableEntityObjects = new Dictionary<string, GameObject>();
 		private Dictionary<string, Queue<GameObject>> availableGeometryObjects = new Dictionary<string, Queue<GameObject>>();
 
+		private ConcurrentBag<PublicHostReference> newNeighbors = new ConcurrentBag<PublicHostReference>();
+
 		private int updateNo = 0;
 		// Update is called once per frame
 		public void Update()
 		{
+			{
+				PublicHostReference t;
+				while (newNeighbors.TryTake(out t))
+				{
+					Debug.Log(name + ": received neighbor update: " + t);
+					OnNewNeighbor(t);
+				}
+			}
+			
+
+
 			if (sdsChanged)
 			{
 				sdsChanged = false;
+
+				{
+					var id = privateID;
+					if (id != publicID)
+					{
+						Debug.Log("ID change detected: " + id);
+						publicID = id;
+						name = publicID.ToString();
+						transform.name = publicID.ToString();
+						onNewID?.Invoke(id);
+						if (cube != null)
+							cube.transform.position = Convert(publicID.XYZ) * Scale;
+					}
+				}
 
 				float timeDelta = 0;
 				deltaLock.DoLocked(() =>
@@ -301,8 +340,6 @@ namespace UnityShardViewer
 
 				//Debug.Log("Sector: processing change");
 				updateNo++;
-				if (cube != null)
-					cube.transform.position = Convert(MyID.XYZ);
 
 				SDS source = SDS;
 				//Debug.Log("Sector: got "+transform.childCount+" children");
@@ -329,10 +366,6 @@ namespace UnityShardViewer
 					}
 				}
 				//Debug.Log("Sector: recovered " + availableEntityObjects.Count + " objects");
-				if (updateNo > 1 && availableEntityObjects.Count == 0)
-				{
-					throw new Exception("should have had some entity objects at update no "+ updateNo);
-				}
 				int reused = 0;
 				foreach (var e in source.FinalEntities)
 				{
@@ -342,8 +375,6 @@ namespace UnityShardViewer
 					{
 						obj = entityPrototype != null ? Instantiate(entityPrototype, transform) : new GameObject();
 						obj.transform.parent = transform;
-						if (updateNo > 1)
-							throw new Exception("should have had enough entity objects at update no " + updateNo+" (reused "+reused+"/"+source.FinalEntities.Length+")");
 					}
 					else
 					{
@@ -387,7 +418,7 @@ namespace UnityShardViewer
 						}
 					}
 				}
-				Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);
+				//Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);
 			}
 		}
 

@@ -26,6 +26,11 @@ namespace Shard
 			public float r = 0.5f, m=0.25f;
 		}
 
+		public class HostEntry : Entity
+		{
+			public string host;
+		}
+
 		public class TimingContainer : Entity
 		{
 			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) step comprise a top level generation
@@ -43,7 +48,7 @@ namespace Shard
 
 		public static Host Host { get; private set; }
 
-		private static DataBase sdsStore, rcsStore, logicStore,controlStore;
+		private static DataBase sdsStore, rcsStore, logicStore,controlStore, hostsStore;
 
 		public static Func<string, Task<CSLogicProvider>> LogicLoader { get; set; }
 
@@ -100,6 +105,7 @@ namespace Shard
 			rcsStore = new DataBase(url, "rcs");
 			logicStore = new DataBase(url, "logic");
 			controlStore = new DataBase(url, "control");
+			hostsStore = new DataBase(url, "hosts");
 		}
 
 
@@ -511,6 +517,18 @@ namespace Shard
 			
 		}
 
+		public static async Task<PublicHostReference> GetPublicHostOfAync(ShardID id)
+		{
+			string host;
+			if (hostsStore != null)
+				host = (await hostsStore.GetByIdAsync<HostEntry>(id.Encode())).host;
+			else
+			{
+				var h = new Host(id);
+				host = h.URL + ":" + h.Port;
+			}
+			return new PublicHostReference(id, host);
+		}
 
 		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{

@@ -71,6 +71,7 @@
     <Compile Include="IntegrityViolation.cs" />
     <Compile Include="LazyList.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PublicHostReference.cs" />
     <Compile Include="SDS.cs" />
     <Compile Include="ShardID.cs" />
   </ItemGroup>

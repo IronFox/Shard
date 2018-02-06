@@ -94,6 +94,10 @@ namespace Shard
 			writeThread = new Thread(new ThreadStart(WriterMain));
 			writeThread.Start();
 			SendCompressed(Simulation.ID);
+
+			foreach (var n in Simulation.Neighbors)
+				SendCompressed(n.GetPublicHostAsync().Result);
+
 			if (sentProviders.Count != 0)
 				throw new Exception("Inconsistent start");
 			SendSDS(Simulation.Stack.NewestFinishedSDS);
@@ -125,11 +129,11 @@ namespace Shard
 					while (!closed)
 					{
 						var obj = compressQueue.Take();
-						Message("sending "+obj);
+						//Message("sending "+obj);
 						f.Serialize(compressor, obj);
-						Message("flushing");
-						compressor.Flush();
-						netStream.Flush();
+						//Message("flushing");
+						//compressor.Flush();
+						//netStream.Flush();
 					}
 
 				}
@@ -231,7 +235,7 @@ namespace Shard
 
 		private void SendNewProvidersOf(SDS sds)
 		{
-			Message("Checking providers of g" + sds.Generation);
+			//Message("Checking providers of g" + sds.Generation);
 			foreach (var e in sds.FinalEntities)
 			{
 				DynamicCSLogic logic = e.MyLogic as DynamicCSLogic;
