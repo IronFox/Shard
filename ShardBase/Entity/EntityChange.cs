@@ -175,16 +175,24 @@ namespace Shard.EntityChange
 	public class Instantiation : Abstract
 	{
 		public readonly Vec3 TargetLocation;
+#if STATE_ADV
 		public readonly EntityAppearanceCollection Appearances;
+#endif
 		public readonly byte[] SerialLogic;
 		[NonSerialized]
 		protected EntityLogic directState;
 
-		public Instantiation(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic directState, byte[] serialLogic) : base(origin)
+		public Instantiation(EntityID origin, Vec3 targetLocation,
+#if STATE_ADV
+			EntityAppearanceCollection appearance, 
+#endif
+			EntityLogic directState, byte[] serialLogic) : base(origin)
 		{
 			TargetLocation = targetLocation;
 			SerialLogic = serialLogic;
+#if STATE_ADV
 			Appearances = appearance;
+#endif
 			this.directState = directState;
 		}
 
@@ -193,7 +201,9 @@ namespace Shard.EntityChange
 			return Helper.Hash(this)
 				.Add(Origin)
 				.Add(TargetLocation)
+#if STATE_ADV
 				.Add(Appearances)
+#endif
 				.Add(SerialLogic)
 				.GetHashCode();
 		}
@@ -209,7 +219,9 @@ namespace Shard.EntityChange
 			return new Helper.Comparator()
 					.Append(Origin, other.Origin)
 					.Append(TargetLocation, other.TargetLocation)
+#if STATE_ADV
 					.Append(Appearances, other.Appearances)
+#endif
 					//.Append(Logic, other.Logic)
 					.Finish();
 		}
@@ -218,7 +230,11 @@ namespace Shard.EntityChange
 		{
 			if (!ctx.CheckM("Insert", Origin.Position, TargetLocation))
 				return false;
-			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Vec3.Zero, directState, SerialLogic, Appearances));
+			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Vec3.Zero, directState, SerialLogic
+#if STATE_ADV
+				,Appearances
+#endif
+				));
 			directState = null;
 			return rs;
 		}
@@ -233,7 +249,15 @@ namespace Shard.EntityChange
 	public class Motion : Instantiation
 	{
 
-		public Motion(EntityID origin, Vec3 targetLocation, EntityAppearanceCollection appearance, EntityLogic logic,byte[] serialLogic) : base(origin, targetLocation, appearance, logic,serialLogic)
+		public Motion(EntityID origin, Vec3 targetLocation,
+#if STATE_ADV
+			EntityAppearanceCollection appearance, 
+#endif
+			EntityLogic logic,byte[] serialLogic) : base(origin, targetLocation,
+#if STATE_ADV
+				appearance, 
+#endif
+				logic,serialLogic)
 		{}
 
 		//public Motion(Entity e, byte[] newState, EntityAppearanceCollection newAppearance, Vec3 destination) : base(e.ID, destination, newAppearance, newState)
@@ -244,7 +268,11 @@ namespace Shard.EntityChange
 		{
 			get
 			{
-				var rs = new Entity(Origin.Relocate(TargetLocation), TargetLocation - Origin.Position, directState, SerialLogic, Appearances, null, null);
+				var rs = new Entity(Origin.Relocate(TargetLocation), TargetLocation - Origin.Position, directState, SerialLogic,
+#if STATE_ADV
+					Appearances, null,
+#endif
+					null);
 				directState = null;
 				return rs;
 			}
@@ -386,6 +414,7 @@ namespace Shard.EntityChange
 	}
 
 
+#if STATE_ADV
 	[Serializable]
 	public class StateAdvertisement : Abstract
 	{
@@ -437,5 +466,6 @@ namespace Shard.EntityChange
 			return cube.Intersects(Box.CenterExtent(Origin.Position, ctx.Ranges.S, Bool3.True));
 		}
 	}
+#endif
 
 }

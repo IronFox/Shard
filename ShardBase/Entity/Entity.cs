@@ -125,7 +125,8 @@ namespace Shard
 	[Serializable]
 	public class Entity : IComparable<Entity>
 	{
-	
+
+#if STATE_ADV
 		public int FindContact(EntityID id)
 		{
 			if (Contacts == null)
@@ -154,6 +155,7 @@ namespace Shard
 		{
 			return FindContact(guid) != -1;
 		}
+#endif
 
 		public override string ToString()
 		{
@@ -212,12 +214,16 @@ namespace Shard
 
 		internal Entity Clone()
 		{
-			var rs = new Entity(ID, Velocity,transientDeserializedLogic, SerialLogicState, Appearances, null, null);
+			var rs = new Entity(ID, Velocity,transientDeserializedLogic, SerialLogicState,
+#if STATE_ADV
+				Appearances, null, 
+#endif
+				null);
 			return rs;
 
 		}
 
-		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, ICollection<EntityMessage> clientMessages, EntityChange.ExecutionContext ctx)
+		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, ICollection<EntityMessage> clientMessages, EntityChange.ExecutionContext ctx, bool locationIsInconsistent)
 		{
 			EntityLogic state = null;
 			evolutionState.Begin();
@@ -233,20 +239,26 @@ namespace Shard
 
 
 					var actions = new EntityLogic.Actions(this);
-					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber),ctx.Ranges);
+					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber),ctx.Ranges, locationIsInconsistent);
 					evolutionState.SignalEvolutionDone();
 
 					byte[] serialLogic = Helper.SerializeToArray(state);
 					evolutionState.SignalReserializationDone();
 
-					actions.ApplyTo(outChangeSet,state, serialLogic,ctx);
+					actions.ApplyTo(outChangeSet, state, serialLogic, ctx);
 				}
 				catch
 				{
+#if STATE_ADV
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(ID, Appearances, Vec3.Zero)));
+#endif
+					transientDeserializedLogic = null;
 					throw;
 				}
 			}
+			else
+				transientDeserializedLogic = null;
+
 			evolutionState.End();
 			return state;
 		}
@@ -257,7 +269,11 @@ namespace Shard
 			if (messages == null || messages.Count == 0)
 				return this;
 			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
-			return new Entity(ID, Velocity,transientDeserializedLogic,SerialLogicState, Appearances, newMessages, Contacts);
+			return new Entity(ID, Velocity,transientDeserializedLogic,SerialLogicState,
+#if STATE_ADV
+				Appearances, Contacts, 
+#endif
+				newMessages);
 		}
 
 		public readonly EntityID ID;
@@ -265,11 +281,15 @@ namespace Shard
 		/// Motion during the last evolution
 		/// </summary>
 		public readonly Vec3 Velocity;
+#if STATE_ADV
 		public readonly EntityAppearanceCollection Appearances;
+#endif
 		[JsonIgnore]
 		public readonly byte[] SerialLogicState;
 		public EntityMessage[] InboundMessages { get; private set; }
+#if STATE_ADV
 		public EntityContact[] Contacts { get; private set; }
+#endif
 		public EntityLogic MyLogic
 		{
 			get
@@ -293,39 +313,69 @@ namespace Shard
 						yield return msg;
 		}
 
+#if STATE_ADV
 		public T GetAppearance<T>() where T : EntityAppearance
 		{
 			if (Appearances != null)
 				return Appearances.Get<T>();
 			return null;
 		}
+#endif
 
 		public Entity() { }
 
-		public Entity(EntityID id, Vec3 velocity, EntityLogic state, EntityAppearanceCollection appearance = null) : this(id, velocity, state, Helper.SerializeToArray(state), appearance, null, null)
+		public Entity(EntityID id, Vec3 velocity, EntityLogic state
+#if STATE_ADV
+			, EntityAppearanceCollection appearance = null
+#endif
+			) : this(id, velocity, state, Helper.SerializeToArray(state),
+#if STATE_ADV
+				appearance,null, 
+#endif
+				null)
 		{ }
 
-		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance= null) : this(id, velocity,dstate, state, appearance, null, null)
+		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state
+#if STATE_ADV
+			, EntityAppearanceCollection appearance= null
+#endif
+			) : this(id, velocity,dstate, state,
+#if STATE_ADV
+				appearance, null, 
+#endif
+				null)
 		{ }
-		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state, EntityAppearanceCollection appearance, EntityMessage[] messages, EntityContact[] contacts) //: this()
+		public Entity(EntityID id, Vec3 velocity, EntityLogic dstate, byte[] state
+#if STATE_ADV
+			, EntityAppearanceCollection appearance, EntityContact[] contacts
+#endif
+			, EntityMessage[] messages) //: this()
 		{
 			//if (!Simulation.FullSimulationSpace.Contains(id.Position))
 			//	throw new IntegrityViolation("New entity location is located outside simulation space: "+id+", "+Simulation.FullSimulationSpace);
 			ID = id;
 			Velocity = velocity;
-			SerialLogicState = state;
+			SerialLogicState = state ?? Helper.SerializeToArray(dstate);
 			transientDeserializedLogic = dstate;
+#if STATE_ADV
 			Appearances = appearance;
+			Contacts = contacts;
+#endif
 
 			InboundMessages = messages;
-			Contacts = contacts;
 		}
 
 
-		internal Entity SetIncoming(EntityMessage[] messages, EntityContact[] contacts)
+		internal Entity SetIncoming(EntityMessage[] messages
+#if STATE_ADV
+			, EntityContact[] contacts
+#endif
+			)
 		{
 			this.InboundMessages = messages;
+#if STATE_ADV
 			this.Contacts = contacts;
+#endif
 			return this;
 			//return new Entity(ID, transientDeserializedLogic, SerialLogicState, Appearances, messages, contacts);
 		}
@@ -334,7 +384,9 @@ namespace Shard
 		{
 			return new Helper.Comparator()
 					.Append(ID, other.ID)
+#if STATE_ADV
 					.Append(Appearances, other.Appearances)
+#endif
 					//.Append(LogicState, other.LogicState)
 					.Finish();
 		}
@@ -363,20 +415,24 @@ namespace Shard
 
 			var other = (Entity)obj;
 			return ID == other.ID &&
+#if STATE_ADV
 				   Equals(Appearances, other.Appearances) &&
+				   Helper.AreEqual(Contacts, other.Contacts) &&
+#endif
 				   Helper.AreEqual(SerialLogicState, other.SerialLogicState) &&
-				   Helper.AreEqual(InboundMessages, other.InboundMessages) &&
-				   Helper.AreEqual(Contacts, other.Contacts);
+				   Helper.AreEqual(InboundMessages, other.InboundMessages);
 		}
 
 		public override int GetHashCode()
 		{
 			return Helper.Hash(this)
 				.Add(ID)
+#if STATE_ADV
 				.Add(Appearances)
+				.Add(Contacts)
+#endif
 				.Add(SerialLogicState)
 				.Add(InboundMessages)
-				.Add(Contacts)
 				.GetHashCode();
 		}
 	}

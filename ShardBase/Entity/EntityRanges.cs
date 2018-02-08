@@ -8,18 +8,22 @@ namespace Shard
 {
 	public struct EntityRanges
 	{
+#if STATE_ADV
 		/// <summary>
 		/// Maximum movement range
 		/// </summary>
 		public readonly float M;
 		/// <summary>
-		/// Maximum influence range
-		/// </summary>
-		public readonly float R;
-		/// <summary>
 		/// Maximum sensor range
 		/// </summary>
 		public readonly float S;
+#else
+		public float M => R;
+#endif
+		/// <summary>
+		/// Maximum influence range
+		/// </summary>
+		public readonly float R;
 
 		/// <summary>
 		/// Entire space available to simulation.
@@ -29,9 +33,11 @@ namespace Shard
 
 		public EntityRanges(float r, float m, float s, Box world)
 		{
+#if STATE_ADV
 			M = m;
-			R = r;
 			S = s;
+#endif
+			R = r;
 			World = world;
 		}
 

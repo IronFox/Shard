@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if STATE_ADV
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -149,3 +151,5 @@ namespace Shard
 		}
 	}
 }
+
+#endif

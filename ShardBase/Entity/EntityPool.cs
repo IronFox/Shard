@@ -52,7 +52,9 @@ namespace Shard
 			}
 			public Entity entity;
 			public ConcurrentDictionary<Guid, BySender> messages = new ConcurrentDictionary<Guid, BySender>();
+#if STATE_ADV
 			public ConcurrentDictionary<Guid, EntityContact> contacts = new ConcurrentDictionary<Guid, EntityContact>();
+#endif
 		}
 
 		private Supercluster.KDTree.KDTree<float, Container> tree;
@@ -146,8 +148,9 @@ namespace Shard
 			return false;
 		}
 
-		
 
+
+#if STATE_ADV
 		public void AddContact(EntityContact c)
 		{
 			var contacts = tree.RadialSearch(c.ID.Position.ToArray(), ctx.Ranges.S);
@@ -173,7 +176,7 @@ namespace Shard
 				}
 			}
 		}
-
+#endif
 
 		/// <summary>
 		/// Checks if the specified receiver exists, and is within influence range of <paramref name="senderPosition"/>.
@@ -253,13 +256,21 @@ namespace Shard
 				foreach (var p in ar)
 					p.Value.AddTo(messages);
 
+#if STATE_ADV
 				EntityContact[] ctx = Helper.ToArray(ctr.contacts.Values);
 				Array.Sort(ctx, (a, b) => a.ID.CompareTo(b.ID));
+#endif
 
-				ctr.entity = ctr.entity.SetIncoming(messages.ToArray(), ctx);
+				ctr.entity = ctr.entity.SetIncoming(messages.ToArray()
+#if STATE_ADV
+					, ctx
+#endif
+					);
 
 				ctr.messages.Clear();
+#if STATE_ADV
 				ctr.contacts.Clear();
+#endif
 			}
 			);
 		}

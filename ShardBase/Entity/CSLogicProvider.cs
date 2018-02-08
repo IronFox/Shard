@@ -118,12 +118,12 @@ namespace Shard
 			}
 		}
 
-		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent)
 		{
 			try
 			{
 				FinishLoading(currentState.ID,TimeSpan.FromMilliseconds(1));
-				nestedLogic.Execute(ref actions, currentState, generation, randomSource,ranges);
+				nestedLogic.Execute(ref actions, currentState, generation, randomSource,ranges,locationIsInconsistent);
 
 				actions.ReplaceInstantiations(inst =>
 				{
@@ -426,7 +426,7 @@ namespace Shard
 				// the "script"
 				options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
 				options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
-				options.ReferencedAssemblies.Add(typeof(EntityAppearance).Assembly.Location);
+				options.ReferencedAssemblies.Add(typeof(EntityChange.Abstract).Assembly.Location);
 				foreach (var a in assemblies)
 					options.ReferencedAssemblies.Add(a.Assembly.Location);
 

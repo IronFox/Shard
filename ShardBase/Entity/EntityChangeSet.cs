@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -137,7 +138,9 @@ namespace Shard
 		private Set<EntityChange.Removal> removals = new Set<EntityChange.Removal>();
 		private Set<EntityChange.Motion> motions = new Set<EntityChange.Motion>();
 		private Set<EntityChange.Broadcast> messages = new Set<EntityChange.Broadcast>();
+#if STATE_ADV
 		private Set<EntityChange.StateAdvertisement> advertisements = new Set<EntityChange.StateAdvertisement>();
+#endif
 
 		public void Add(EntityChange.Instantiation inst)
 		{
@@ -157,10 +160,12 @@ namespace Shard
 		{
 			messages.Add(mes);
 		}
+#if STATE_ADV
 		public void Add(EntityChange.StateAdvertisement adv)
 		{
 			advertisements.Add(adv);
 		}
+#endif
 
 		/// <summary>
 		/// Executes all local changes on the specified pool, and automatically dispatches queued pool events
@@ -169,15 +174,17 @@ namespace Shard
 		public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
 		{
 			int numErrors = 0;
-			if (messages.Size > 0)
-				pool.RequireTree();
-			numErrors += messages.Execute(pool,ctx);
 			numErrors += motions.Execute(pool, ctx);
 			numErrors += removals.Execute(pool, ctx);
 			numErrors += instantiations.Execute(pool, ctx);
+#if STATE_ADV
 			if (advertisements.Size > 0)
 				pool.RequireTree();
 			numErrors += advertisements.Execute(pool, ctx);
+#endif
+			if (messages.Size > 0)
+				pool.RequireTree();
+			numErrors += messages.Execute(pool, ctx);
 			pool.DispatchAll();
 			return numErrors;
 		}
@@ -185,10 +192,12 @@ namespace Shard
 
 
 
+#if STATE_ADV
 		public EntityChange.StateAdvertisement FindAdvertisementFor(EntityID id)
 		{
 			return advertisements.FindOrigin(id);
 		}
+#endif
 
 		public EntityChange.Motion FindMotionOf(Guid id)
 		{
@@ -198,7 +207,9 @@ namespace Shard
 		public EntityChangeSet Clone()
 		{
 			EntityChangeSet rs = new EntityChangeSet();
+#if STATE_ADV
 			rs.advertisements = advertisements.Clone();
+#endif
 			rs.instantiations = instantiations.Clone();
 			rs.messages = messages.Clone();
 			rs.motions = motions.Clone();
@@ -208,7 +219,9 @@ namespace Shard
 
 		public void Include(EntityChangeSet cs)
 		{
+#if STATE_ADV
 			advertisements.Include(cs.advertisements);
+#endif
 			instantiations.Include(cs.instantiations);
 			messages.Include(cs.messages);
 			motions.Include(cs.motions);
@@ -233,7 +246,9 @@ namespace Shard
 		{
 			get
 			{
+#if STATE_ADV
 				yield return new KeyValuePair<string, AbstractSet>("advertisements", advertisements);
+#endif
 				yield return new KeyValuePair<string, AbstractSet>("instantiations", instantiations);
 				yield return new KeyValuePair<string, AbstractSet>("messages", messages);
 				yield return new KeyValuePair<string, AbstractSet>("motions", motions);
@@ -244,7 +259,9 @@ namespace Shard
 		{
 			get
 			{
+#if STATE_ADV
 				yield return advertisements;
+#endif
 				yield return instantiations;
 				yield return messages;
 				yield return motions;
@@ -267,7 +284,9 @@ namespace Shard
 			motions.Include(source.motions, targetSpace, ctx);
 			removals.Include(source.removals, targetSpace, ctx);
 			instantiations.Include(source.instantiations, targetSpace, ctx);
+#if STATE_ADV
 			advertisements.Include(source.advertisements, targetSpace, ctx);
+#endif
 		}
 
 		public List<EntityError> Evolve(IReadOnlyList<Entity> entities,
@@ -303,12 +322,13 @@ namespace Shard
 
 
 				EntityLogic st = null;
+
 				try
 				{
 					if (!exceeded)
 					{
-						st = e.Evolve(t, this, Helper.Concat(clientBroadcasts, messages),ctx);
-						if (entities[i].transientDeserializedLogic != null)
+						st = e.Evolve(t, this, Helper.Concat(clientBroadcasts, messages), ctx, ic.IsInconsistentR(ctx.LocalSpace.Relativate(e.ID.Position)));
+						if (e.transientDeserializedLogic != null)
 							throw new IntegrityViolation("Transient deserialized logic was not whiped");
 					}
 					if (exceeded || watch0.Elapsed > budget)
@@ -317,12 +337,17 @@ namespace Shard
 						throw new TimeBudgetException(budget, t);
 					}
 				}
+				catch (AssertFailedException)
+				{
+					throw;
+				}
 				catch (Exception ex)
 				{
 					if (st == null)
 						st = (EntityLogic)Helper.Deserialize(e.SerialLogicState);
+					var error = new EntityError(e, st, ex);
 					lock (lazyLock)
-						rs.Add(new EntityError(e, st,ex) );
+						rs.Add(error);
 					ic.FlagInconsistentR(ctx.LocalSpace.Relativate(e.ID.Position));
 					Interlocked.Increment(ref numErrors);
 				}
@@ -398,7 +423,9 @@ namespace Shard
 			motions.FilterByTargetLocation(targetSpace, ctx);
 			removals.FilterByTargetLocation(targetSpace, ctx);
 			instantiations.FilterByTargetLocation(targetSpace, ctx);
+#if STATE_ADV
 			advertisements.FilterByTargetLocation(targetSpace, ctx);
+#endif
 		}
 
 		public bool IsEmpty
@@ -450,7 +477,9 @@ namespace Shard
 
 		public EntityChangeSet(SerializationInfo info, StreamingContext context)
 		{
+#if STATE_ADV
 			Get("advertisements", ref advertisements, info);
+#endif
 			Get("instantiations", ref instantiations, info);
 			Get("messages", ref messages, info);
 			Get("motions", ref motions, info);

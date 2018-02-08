@@ -13,6 +13,7 @@ namespace ShardTests1
 		static Random random = new Random();
 
 
+#if STATE_ADV
 		[Serializable]
 		private class ConsistencyAppearance : EntityAppearance
 		{
@@ -35,8 +36,6 @@ namespace ShardTests1
 			}
 		}
 
-
-
 		[Serializable]
 		private class ConsistentLogic : EntityLogic
 		{
@@ -47,6 +46,7 @@ namespace ShardTests1
 				var a = app.Get<ConsistencyAppearance>();
 				return a != null && a.IsConsistent;
 			}
+
 			public static void CheckRandom(EntityRandom random, string at)
 			{
 				int i0 = random.Next(), i1 = random.Next(), i2 = random.Next();
@@ -58,14 +58,7 @@ namespace ShardTests1
 			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random, Shard.EntityRanges ranges)
 			{
 				CheckRandom(random,"started");
-				bool isConsistent = true;
-				var old = currentState.GetAppearance<ConsistencyAppearance>();
-				if (old != null)
-				{
-					isConsistent = old.IsConsistent;
-				}
-
-
+		
 				if (isConsistent && currentState.Contacts != null)
 				{
 					foreach (var c in currentState.Contacts)
@@ -85,25 +78,75 @@ namespace ShardTests1
 				if (!Simulation.MySpace.Contains(currentState.ID.Position))
 					throw new IntegrityViolation(currentState+": not located in simulation space "+ Simulation.MySpace);
 
-				CheckRandom(random, "loop prior");
 				int cnt = 0;
-				float M = Simulation.M;
 				do
 				{
-					CheckRandom(random, "loop "+cnt);
-					Vec3 draw = random.NextVec3(-M, M);
-					newState.NewPosition = Simulation.MySpace.Clamp(currentState.ID.Position + draw);
+					Vec3 draw = random.NextVec3(-ranges.M, ranges.M);
+					newState.NewPosition = ranges.World.Clamp(currentState.ID.Position + draw);
 					if (++cnt > 1000)
 						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + M + "->"+draw+" in " + Simulation.MySpace+"; "+random.Next()+", "+random.Next()+", "+random.Next());
 				}
 				while (newState.NewPosition == currentState.ID.Position);
 			}
 		}
+#else
+		[Serializable]
+		private class ConsistentLogic : EntityLogic
+		{
+			public bool isConsistent = true;
+			public bool wasDeclaredInconsistent = false;
+
+			public static bool GrowingIC { get; internal set; }
+
+			public static void CheckRandom(EntityRandom random, string at)
+			{
+				int i0 = random.Next(), i1 = random.Next(), i2 = random.Next();
+				if (i0 == i1 && i1 == i2)
+					throw new Exception("Random generator is out of whack: " + at);
+
+			}
+
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom random, Shard.EntityRanges ranges, bool isInconsistent)
+			{
+				CheckRandom(random, "started");
+
+				wasDeclaredInconsistent = isInconsistent;
+
+				if (Helper.Length(currentState.InboundMessages) > 0)
+				{
+					foreach (var msg in currentState.InboundMessages)
+					{
+						var remote = (EntityID) Helper.Deserialize(msg.Payload);
+						float dist = Vec3.GetChebyshevDistance(remote.Position, currentState.ID.Position);
+						Assert.IsTrue(dist <= ranges.R);
+					}
+					isConsistent = false;
+				}
+				Assert.IsTrue(isConsistent || !GrowingIC || isInconsistent);
+
+				if (!isConsistent)
+					newState.Broadcast(0, Helper.SerializeToArray(currentState.ID));
+
+				if (!Simulation.MySpace.Contains(currentState.ID.Position))
+					throw new IntegrityViolation(currentState + ": not located in simulation space " + Simulation.MySpace);
+
+				int cnt = 0;
+				do
+				{
+					Vec3 draw = random.NextVec3(-ranges.M, ranges.M);
+					newState.NewPosition = ranges.World.Clamp(currentState.ID.Position + draw);
+					if (++cnt > 1000)
+						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + ranges.M + "->" + draw + " in " + ranges.World + "; " + random.Next() + ", " + random.Next() + ", " + random.Next());
+				}
+				while (newState.NewPosition == currentState.ID.Position);
+			}
+		}
+#endif
 
 		[Serializable]
 		public class RandomMotion : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges, bool isInconsistent)
 			{
 				while (newState.NewPosition == currentState.ID.Position)
 				{
@@ -122,9 +165,14 @@ namespace ShardTests1
 		[Serializable]
 		public class FaultLogic : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, Shard.EntityRanges ranges, bool isInconsistent)
 			{
+#if STATE_ADV
 				throw new NotImplementedException();
+#else
+				newState.Broadcast(0, Helper.SerializeToArray(currentState.ID));
+				newState.FlagInconsistent();
+#endif
 			}
 		}
 
@@ -183,7 +231,8 @@ namespace ShardTests1
 
 			for (int k = 0; k < 20; k++)
 			{
-				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
+				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon(),
+										nextIC = ic;
 
 				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())),ctx);
 
@@ -200,18 +249,21 @@ namespace ShardTests1
 				Assert.AreEqual(faultyCount, 1);
 
 				bool doGrow = k % 2 != 0;
+				ConsistentLogic.GrowingIC = doGrow;
+
 				for (int i = 0; i < InconsistencyCoverage.CommonResolution; i++)	//no point going further than current resolution
 				{
 					EntityChangeSet set = new EntityChangeSet();
 					ctx.SetGeneration(i);
+
 					var errors = pool.TestEvolve(set, ic, i, TimeSpan.FromSeconds(1));
 					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors));
 					Assert.AreEqual(0, set.Execute(pool,ctx));
 					//Assert.AreEqual(ic.OneCount, 1);
-
 					if (doGrow)
 						ic = ic.Grow(true);
-					else
+
+					if (!doGrow)
 						Assert.AreEqual(ic.OneCount, 1);
 
 
@@ -232,6 +284,7 @@ namespace ShardTests1
 					foreach (var e in entities)
 					{
 						bool isFaultOrigin = (Helper.Deserialize(e.SerialLogicState) is FaultLogic);
+#if STATE_ADV
 						if (!isFaultOrigin)
 						{
 							if (ctx.GetDistance(e.ID.Position, faulty.ID.Position) <= Simulation.SensorRange)
@@ -244,12 +297,18 @@ namespace ShardTests1
 							Assert.IsNotNull(e.Appearances);
 						}
 						bool consistent = ConsistentLogic.IsConsistent(e.Appearances);
+#else
+						ConsistentLogic c = e.MyLogic as ConsistentLogic;
+						bool consistent = c != null && c.isConsistent;
+#endif
 						bool icIsInc = ic.IsInconsistentR(Simulation.MySpace.Relativate(e.ID.Position));
 
 						if (!consistent && !icIsInc)
 						{
 							if (doGrow)
-								Assert.Fail("Inconsistent entity located outside IC area: " + e);
+							{
+								Assert.Fail("Inconsistent entity located outside IC area: " + e + ", " + e.MyLogic);
+							}
 							else
 							{
 								mismatched++;
@@ -272,6 +331,7 @@ namespace ShardTests1
 			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentLogic()),ctx);
 		}
 
+#if STATE_ADV
 		[TestMethod]
 		public void StateAdvertisementTest()
 		{
@@ -323,6 +383,7 @@ namespace ShardTests1
 				}
 			}
 		}
+#endif
 
 		[TestMethod]
 		public void EntityMotionTest()

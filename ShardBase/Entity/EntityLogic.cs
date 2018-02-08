@@ -29,7 +29,9 @@ namespace Shard
 		public struct Instantiation
 		{
 			public Vec3 targetLocation;
+#if STATE_ADV
 			public EntityAppearanceCollection appearances;
+#endif
 			public EntityLogic logic;
 		}
 
@@ -37,10 +39,12 @@ namespace Shard
 		{
 			private readonly EntityID id;
 			public Vec3 NewPosition { get; set; }
+			private bool nowInconsistent;
 			private LazyList<Broadcast> broadcasts;
 			private LazyList<Message> messages;
 			private LazyList<Instantiation> instantiations;
 			private LazyList<EntityID> removals;
+#if STATE_ADV
 			private EntityAppearanceCollection newAppearances;
 			/// <summary>
 			/// If true, advertisements are suppressed,
@@ -48,12 +52,15 @@ namespace Shard
 			/// False by default
 			/// </summary>
 			public bool SuppressAdvertisements { get; set; }
+#endif
 
 			public Actions(Entity source) : this()
 			{
 				id = source.ID;
 				NewPosition = source.ID.Position;
+#if STATE_ADV
 				newAppearances = source.Appearances?.Duplicate();
+#endif
 			}
 
 			
@@ -66,13 +73,29 @@ namespace Shard
 
 			public void ApplyTo(EntityChangeSet outChangeSet, EntityLogic logic, byte[] serialLogic, EntityChange.ExecutionContext ctx)
 			{
-				Vec3 dest = ctx.ClampDestination("Motion", NewPosition, id, SuppressAdvertisements ? ctx.Ranges.R : ctx.Ranges.M);
+				Vec3 dest = ctx.ClampDestination("Motion", NewPosition, id,
+#if STATE_ADV
+					SuppressAdvertisements ? ctx.Ranges.R : ctx.Ranges.M
+#else
+					ctx.Ranges.R
+#endif
+					);
 				var newID = id.Relocate(dest);
-				outChangeSet.Add(new EntityChange.Motion(id, dest, newAppearances, logic,serialLogic)); //motion doubles as logic-state-update
+				outChangeSet.Add(new EntityChange.Motion(id, dest,
+#if STATE_ADV
+					newAppearances, 
+#endif
+					logic,serialLogic)); //motion doubles as logic-state-update
+#if STATE_ADV
 				if (!SuppressAdvertisements)
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
+#endif
 				foreach (var inst in instantiations)
-					outChangeSet.Add(new EntityChange.Instantiation(newID, ctx.ClampDestination("Instantiation", inst.targetLocation, newID, ctx.Ranges.M), inst.appearances, inst.logic,Helper.SerializeToArray(inst.logic)));
+					outChangeSet.Add(new EntityChange.Instantiation(newID, ctx.ClampDestination("Instantiation", inst.targetLocation, newID, ctx.Ranges.M),
+#if STATE_ADV
+						inst.appearances, 
+#endif
+						inst.logic,Helper.SerializeToArray(inst.logic)));
 				foreach (var rem in removals)
 				{
 					if (ctx.CheckM("Removal", rem.Position, newID))
@@ -90,21 +113,37 @@ namespace Shard
 				}
 				foreach (var b in broadcasts)
 					outChangeSet.Add(new EntityChange.Broadcast(id, messageID++, b.channel, b.data));
+				if (nowInconsistent)
+					throw new ExecutionException(id,"Inconsistency by logic request");
 			}
 
 
-			public void Instantiate(Vec3 targetLocation, EntityLogic logic, EntityAppearanceCollection appearances)
+			public void Instantiate(Vec3 targetLocation, EntityLogic logic
+#if STATE_ADV
+				, EntityAppearanceCollection appearances
+#endif
+				)
 			{
 				instantiations.Add(new Instantiation()
 				{
+#if STATE_ADV
 					appearances = appearances,
+#endif
 					logic = logic,
 					targetLocation = targetLocation
 				});
 			}
-			public void Instantiate(Vec3 targetLocation, string assemblyName, string logicName, object[] constructorParameters, EntityAppearanceCollection appearances)
+			public void Instantiate(Vec3 targetLocation, string assemblyName, string logicName, object[] constructorParameters
+#if STATE_ADV
+				, EntityAppearanceCollection appearances
+#endif
+				)
 			{
-				Instantiate(targetLocation, new DynamicCSLogic(assemblyName, logicName, constructorParameters), appearances);
+				Instantiate(targetLocation, new DynamicCSLogic(assemblyName, logicName, constructorParameters)
+#if STATE_ADV
+					, appearances
+#endif
+					);
 			}
 
 			public void Kill(EntityID entityID)
@@ -112,6 +151,7 @@ namespace Shard
 				removals.Add(entityID);
 			}
 
+#if STATE_ADV
 			public void Add(EntityAppearance app)
 			{
 				if (newAppearances == null)
@@ -130,6 +170,7 @@ namespace Shard
 					newAppearances = new EntityAppearanceCollection();
 				newAppearances.AddOrReplace(app);
 			}
+#endif
 
 			public void Send(Actor receiver, int channel, byte[] data)
 			{
@@ -143,15 +184,20 @@ namespace Shard
 			{
 				broadcasts.Add(new Broadcast() { channel = channel, data = data });
 			}
+
+			public void FlagInconsistent()
+			{
+				nowInconsistent = true;
+			}
 		}
 
 		[NonSerialized]
 		private int myGeneration;	//cannot initialize with anything explicitly. Assume is 0
 
-		public void Execute(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+		public void Execute(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent)
 		{
 			VerifyGeneration(generation);
-			Evolve(ref newState, currentState, generation, randomSource,ranges);
+			Evolve(ref newState, currentState, generation, randomSource,ranges, locationIsInconsistent);
 			myGeneration = generation+2;
 			//Console.WriteLine(this + "->" + myGeneration);
 		}
@@ -167,7 +213,9 @@ namespace Shard
 		/// <param name="currentState">Current entity state</param>
 		/// <param name="generation">Evolution generation index, starting from 0</param>
 		/// <param name="randomSource">Random source to be used exclusively for random values</param>
-		protected abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges);
+		/// <param name="ranges">Simulation range configuration</param>
+		/// <param name="locationIsInconsistent">Set true if the location of the local entity is currently considered possibly inconsistent</param>
+		protected abstract void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent);
 
 		public void VerifyGeneration(int generation)
 		{

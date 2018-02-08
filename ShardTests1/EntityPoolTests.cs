@@ -98,7 +98,11 @@ namespace Shard.Tests
 			}
 			while (rs == entity.ID);
 
-			return new Entity(rs, rs.Position - entity.ID.Position, entity.MyLogic, entity.Appearances);
+			return new Entity(rs, rs.Position - entity.ID.Position, entity.MyLogic
+#if STATE_ADV
+				, entity.Appearances
+#endif
+				);
 		}
 	}
 }

@@ -62,18 +62,19 @@ namespace Shard
 
 
 
-			InconsistencyCoverage untrimmed = input.SDS.IC.Grow(false);
-			if (untrimmed.Size != InconsistencyCoverage.CommonResolution + 2)
-				throw new IntegrityViolation("IC of unsupported size: " + untrimmed.Size);
 			data.entities = new EntityPool(input.SDS.FinalEntities, ctx);
 			data.localChangeSet = new EntityChangeSet();
-
-
-			data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
+			data.ic = input.SDS.IC.Clone();
 			bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
 			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, clientMessages, data.ic, entityLogicTimeout,ctx);
 			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
 				throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");
+
+			InconsistencyCoverage untrimmed = data.ic.Grow(false);
+			if (untrimmed.Size != InconsistencyCoverage.CommonResolution + 2)
+				throw new IntegrityViolation("IC of unsupported size: " + untrimmed.Size);
+			data.ic = untrimmed.Sub(new Int3(1), new Int3(InconsistencyCoverage.CommonResolution));
+
 
 
 			foreach (var n in Simulation.Neighbors)

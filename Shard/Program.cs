@@ -104,9 +104,15 @@ namespace Shard
 					else
 						throw new Exception("Invalid position declaration: " + se.position);
 
+#if STATE_ADV
 					EntityAppearanceCollection appearances = new EntityAppearanceCollection();
+#endif
 					DynamicCSLogic logic = new DynamicCSLogic(provider, inst.LogicName, inst.Parameters);
-					yield return new Entity(new EntityID(pos), Vec3.Zero, logic, appearances);
+					yield return new Entity(new EntityID(pos), Vec3.Zero, logic
+#if STATE_ADV
+						, appearances
+#endif
+						);
 				}
 				
 			}

@@ -20,7 +20,7 @@ namespace Shard.Tests
 		[Serializable]
 		class ExceedingMovementLogic : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{
 				newState.NewPosition = currentState.ID.Position + new Vec3(ranges.R);
 			}
@@ -37,7 +37,7 @@ namespace Shard.Tests
 				Assert.IsTrue(Vec3.GetChebyshevDistance(Motion, Vec3.Zero) <= Simulation.M);
 			}
 
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{
 				newState.NewPosition = currentState.ID.Position + Motion;
 			}
@@ -46,7 +46,7 @@ namespace Shard.Tests
 		[Serializable]
 		class StationaryLogic : EntityLogic
 		{
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{}
 		}
 
@@ -71,7 +71,7 @@ namespace Shard.Tests
 		class RoundState : EntityLogic
 		{
 			public int state = 0;
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{
 				state++;
 			}
@@ -91,7 +91,7 @@ namespace Shard.Tests
 				p = packet;
 				this.amPong = amPong;
 			}
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{
 				if (!amPong)
 				{

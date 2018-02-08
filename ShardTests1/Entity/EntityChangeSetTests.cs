@@ -24,11 +24,12 @@ namespace Shard.Tests
 			return new EntityID(Guid.NewGuid(), random.NextVec3(Simulation.MySpace));
 		}
 
+#if STATE_ADV
 		public static EntityAppearanceCollection RandomAppearance()
 		{
 			return null;    //later
 		}
-
+#endif
 
 
 		public static byte[] RandomByteArray(bool mayBeNull = false)
@@ -43,7 +44,11 @@ namespace Shard.Tests
 		{
 			var id = RandomID();
 			var inst = ClampedDestination(id.Position);
-			return new Instantiation(id, inst, RandomAppearance(), null,RandomLogic());
+			return new Instantiation(id, inst,
+#if STATE_ADV
+				RandomAppearance(), 
+#endif
+				null,RandomLogic());
 		}
 
 		private static byte[] RandomLogic()
@@ -67,7 +72,11 @@ namespace Shard.Tests
 		{
 			var id = RandomID();
 			var to = ClampedDestination(id.Position);
-			return new Motion(id, to, RandomAppearance(), null,RandomLogic());
+			return new Motion(id, to,
+#if STATE_ADV
+				RandomAppearance(), 
+#endif
+				null,RandomLogic());
 		}
 
 		public static Broadcast RandomBroadcast()

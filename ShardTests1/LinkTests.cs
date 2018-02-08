@@ -254,7 +254,7 @@ namespace Shard.Tests
 			public SineLogic()
 			{}
 
-			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges)
+			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
 			{
 				if (currentState.InboundMessages != null)
 					foreach (var m in currentState.InboundMessages)

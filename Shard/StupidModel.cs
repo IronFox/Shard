@@ -164,9 +164,11 @@ namespace Shard
 			predator = new GridLogic(1, putPredator ? 0.01f : 0);
 		}
 
-		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom random, EntityRanges ranges)
+		protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom random, EntityRanges ranges, bool isInconsistent)
 		{
+#if STATE_ADV
 			actions.SuppressAdvertisements = true;
+#endif
 			int zero = 0;
 			bool killBug = predator.ExecuteMotion(ref actions, currentState, generation - 1, random, bug.AnimalSize, ref zero);
 

@@ -171,6 +171,8 @@ namespace Shard
 
 		public static object Deserialize(byte[] serial)
 		{
+			if (serial == null)
+				return null;
 			var f = new BinaryFormatter();
 
 			using (MemoryStream ms = new MemoryStream(serial))
