@@ -81,5 +81,10 @@ namespace Shard
 			ShardID = id;
 			Address = addr;
 		}
+
+		public override string ToString()
+		{
+			return ShardID + "->" + Address;
+		}
 	}
 }
