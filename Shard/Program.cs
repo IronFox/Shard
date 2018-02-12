@@ -167,7 +167,7 @@ namespace Shard
 			try
 			{
 				int at = 0;
-				var dbHost = new Host(args[at++]);
+				var dbHost = new PeerAddress(args[at++]);
 				DB.Connect(dbHost);
 
 				if (args[at] == "setup")

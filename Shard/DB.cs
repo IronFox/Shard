@@ -26,9 +26,26 @@ namespace Shard
 			public float r = 0.5f, m=0.25f;
 		}
 
-		public class HostEntry : Entity
+		public class AddressEntry : Entity
 		{
-			public string host;
+			public string address;
+			public int port;
+
+			public AddressEntry(ShardPeerAddress addr)
+			{
+				_id = addr.ShardID.ToString();
+				address = addr.Address.Address;
+				port = addr.Address.Port;
+			}
+
+			[JsonIgnore]
+			public PeerAddress PeerAddress
+			{
+				get
+				{
+					return new PeerAddress(address, port);
+				}
+			}
 		}
 
 		public class TimingContainer : Entity
@@ -46,7 +63,7 @@ namespace Shard
 		public static ConfigContainer Config { get; private set; }
 
 
-		public static Host Host { get; private set; }
+		public static PeerAddress Host { get; private set; }
 
 		private static DataBase sdsStore, rcsStore, logicStore,controlStore, hostsStore;
 
@@ -93,7 +110,7 @@ namespace Shard
 			return await script.DeserializeAsync();
 		}
 
-		public static void Connect(Host host, string username = null, string password = null)
+		public static void Connect(PeerAddress host, string username = null, string password = null)
 		{
 			url = "http://";
 			if (username != null && password != null)
@@ -215,7 +232,7 @@ namespace Shard
 			public RevisionChange[] changes = null;
 		}
 
-		class DataBase : MyCouchStore
+		public class DataBase : MyCouchStore
 		{
 			public readonly string DBName;
 
@@ -230,14 +247,19 @@ namespace Shard
 		{
 			private DataBase store;
 			private string id;
-			T lastValue;
+			T lastQueriedValue;
+			//TaskCompletionSource<T> anyValueAsync;
+
 			public Action<T> OnChange { get; set; }
 			SpinLock sl = new SpinLock();
 			CancellationTokenSource cancellation;
 
 			public ContinuousPoller(T initial)
 			{
-				lastValue = initial;
+				lastQueriedValue = initial;
+				//anyValueAsync = new TaskCompletionSource<T>();
+				//if (initial != null)
+				//	anyValueAsync.SetResult(initial);
 			}
 
 
@@ -245,9 +267,16 @@ namespace Shard
 			{
 				get
 				{
-					return lastValue;
+					return lastQueriedValue;
 				}
 			}
+
+			//public async Task<T> GetLatestAsync()
+			//{
+			//	if (lastQueriedValue != null)
+			//		return lastQueriedValue;
+			//	return await anyValueAsync.Task;
+			//}
 
 			public void Start(DataBase store, string id)
 			{
@@ -278,7 +307,7 @@ namespace Shard
 							foreach (var ch in d.changes)
 							{
 								revs.Append(' ').Append(ch.rev);
-								if (lastValue == null || ch.rev != lastValue._rev)
+								if (lastQueriedValue == null || ch.rev != lastQueriedValue._rev)
 									actualChange = true;
 							}
 							if (actualChange)
@@ -299,13 +328,15 @@ namespace Shard
 					try
 					{
 						var header = await store.GetHeaderAsync(id);
-						if (lastValue == null || header.Rev != lastValue._rev)
+						if (lastQueriedValue == null || header.Rev != lastQueriedValue._rev)
 						{
 							var data = await store.GetByIdAsync<T>(id);
 							sl.DoLocked(() =>
 							{
 								Log.Minor("Got new data on " + store.DBName + "['" + id + "']: rev " + header.Rev);
-								lastValue = data;
+								//if (lastQueriedValue == null)
+								//	anyValueAsync.SetResult(data);
+								lastQueriedValue = data;
 								OnChange?.Invoke(data);
 							});
 						}
@@ -327,34 +358,62 @@ namespace Shard
 		}
 
 
+		public class MappedContinuousLookup<K,D> where D: Entity
+		{
+			private ConcurrentDictionary<K, ContinuousPoller<D>> requests = new ConcurrentDictionary<K, ContinuousPoller<D>>();
 
-		private static ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>> rcsRequests = new ConcurrentDictionary<RCS.ID, ContinuousPoller<SerialRCSStack>>();
-		//private static ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>> sdsRequests = new ConcurrentDictionary<SDS.ID, ContinuousPoller<SDS.Serial>>();
+			public void BeginFetch(DataBase store, K id)
+			{
+				if (requests.ContainsKey(id))
+					return;
+				if (store == null)
+					return;
+				ContinuousPoller<D> poller = new ContinuousPoller<D>(null);
+				if (!requests.TryAdd(id, poller))
+					return;
+				poller.Start(store, id.ToString());
+			}
+
+			public D TryGet(DataBase store, K id)
+			{
+				ContinuousPoller<D> poller;
+				if (requests.TryGetValue(id, out poller))
+					return poller.Latest;
+
+				if (store == null)
+					return null;
+				BeginFetch(store, id);
+				return TryGet(store,id);
+			}
+		}
+
+
+		private static MappedContinuousLookup<RCS.ID, SerialRCSStack> rcsRequests = new MappedContinuousLookup<RCS.ID, SerialRCSStack>();
+		private static MappedContinuousLookup<ShardID, AddressEntry> hostRequests = new MappedContinuousLookup<ShardID, AddressEntry>();
 
 		public static void BeginFetch(RCS.ID id)
 		{
-			if (rcsRequests.ContainsKey(id))
-				return;
-			if (rcsStore == null)
-				return;
-			ContinuousPoller<SerialRCSStack> poller = new ContinuousPoller<SerialRCSStack>(null);
-			if (!rcsRequests.TryAdd(id, poller))
-				return;
-			poller.Start(rcsStore, id.ToString());
+			rcsRequests.BeginFetch(rcsStore, id);
 		}
 
 		public static SerialRCSStack TryGet(RCS.ID id)
 		{
-			ContinuousPoller<SerialRCSStack> poller;
-			if (rcsRequests.TryGetValue(id,out poller))
-				return poller.Latest;
-			if (rcsStore == null)
-				return null;
-			BeginFetch(id);
-			return TryGet(id);
+			return rcsRequests.TryGet(rcsStore, id);
 		}
 
-		
+		public static void BeginFetch(ShardID id)
+		{
+			hostRequests.BeginFetch(hostsStore, id);
+		}
+
+		public static PeerAddress TryGet(ShardID id)
+		{
+			var h = hostRequests.TryGet(hostsStore, id);
+			if (h == null)
+				return new PeerAddress();
+			return h.PeerAddress;
+		}
+
 
 		public static void BeginFetch(IEnumerable<RCS.ID> ids)
 		{
@@ -363,6 +422,7 @@ namespace Shard
 		}
 
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
+		public static Action<ShardPeerAddress> OnPutLocalAddress { get; set; } = null;
 		public static EntityRanges EntityRanges
 		{
 			get
@@ -517,19 +577,6 @@ namespace Shard
 			
 		}
 
-		public static async Task<PublicHostReference> GetPublicHostOfAync(ShardID id)
-		{
-			string host;
-			if (hostsStore != null)
-				host = (await hostsStore.GetByIdAsync<HostEntry>(id.Encode())).host;
-			else
-			{
-				var h = new Host(id);
-				host = h.URL + ":" + h.Port;
-			}
-			return new PublicHostReference(id, host);
-		}
-
 		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{
 			if (OnPutSDS != null)
@@ -540,6 +587,18 @@ namespace Shard
 				return true;
 			}, 3);
 		}
+
+		internal static void PutNow(ShardPeerAddress addr, bool forceReplace)
+		{
+			if (OnPutLocalAddress != null)
+				OnPutLocalAddress(addr);
+			Try(() =>
+			{
+				PutAsync(null, hostsStore, new AddressEntry(addr), forceReplace).Wait();
+				return true;
+			}, 3);
+		}
+
 
 		private static SerialSDS latestPut = null;
 		public static async Task PutAsync(SerialSDS serial, bool forceReplace)

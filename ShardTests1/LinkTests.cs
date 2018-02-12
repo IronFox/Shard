@@ -120,7 +120,7 @@ namespace Shard.Tests
 			public Receiver(DataSetReceiverState state)
 			{
 				this.state = state;
-				Passive = new Link(new Host("localhost"), false, 0, false);
+				Passive = new Link(new PeerAddress("localhost"), false, 0, false);
 				Passive.OnData = OnData;
 				Listener = new Listener(h => Passive);
 			}
@@ -307,7 +307,7 @@ namespace Shard.Tests
 				}
 			});
 
-			Host.DefaultPort = random.Next(1024, 32768);
+			PeerAddress.DefaultPort = random.Next(1024, 32768);
 			using (Listener listener = new Listener(null))
 			{
 				InteractionLink myLink = null;
@@ -343,7 +343,7 @@ namespace Shard.Tests
 
 
 
-				using (TcpClient client = new TcpClient("localhost", Host.DefaultPort))
+				using (TcpClient client = new TcpClient("localhost", PeerAddress.DefaultPort))
 				{
 					var stream = client.GetStream();
 					Assert.IsTrue(onLink.WaitOne());
@@ -385,7 +385,7 @@ namespace Shard.Tests
 		public void InteractionLinkTest()
 		{
 			Random random = new Random();
-			Host.DefaultPort = random.Next(1024, 32768);
+			PeerAddress.DefaultPort = random.Next(1024, 32768);
 			using (Listener listener = new Listener(null))
 			{
 				InteractionLink myLink = null;
@@ -418,7 +418,7 @@ namespace Shard.Tests
 					};
 					onLink.Set();
 				};
-				using (TcpClient client = new TcpClient("localhost", Host.DefaultPort))
+				using (TcpClient client = new TcpClient("localhost", PeerAddress.DefaultPort))
 				{
 					Assert.IsTrue(onLink.WaitOne());
 
@@ -454,9 +454,9 @@ namespace Shard.Tests
 		public void LinkTest()
 		{
 			Random random = new Random();
-			Host.DefaultPort = random.Next(1024, 32768);
+			PeerAddress.DefaultPort = random.Next(1024, 32768);
 
-			Link active = new Link(new Host("localhost"), true, 0, false);
+			Link active = new Link(new PeerAddress("localhost"), true, 0, false);
 			active.VerboseWriter = true;
 			active.OnData = OnActiveData;
 

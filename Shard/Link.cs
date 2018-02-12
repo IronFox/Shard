@@ -151,27 +151,27 @@ namespace Shard
 		public readonly ShardID ID;
 		private Thread readThread,writeThread,connectThread;
 		private TcpClient client;
-		private readonly Host host;
 		private NetworkStream stream;
 		public readonly int LinearIndex;
 		public readonly bool IsSibling;
 		public readonly DB.RCSStack OutStack;
+		private PeerAddress lastAddress;
 
 		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
 
 
 		public readonly bool IsActive;
-		public Link(ShardID remoteAddr, bool isActive, int linearIndex, bool isSibling) : this(new Host(remoteAddr),isActive,linearIndex,isSibling)
+		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(DB.TryGet(id),isActive,linearIndex,isSibling)
 		{
-			ID = remoteAddr;
+			ID = id;
 			OutStack = new DB.RCSStack(OutboundRCS);
 		}
 
-		public Link(Host remoteHost, bool isActive, int linearIndex, bool isSibling)
+		public Link(PeerAddress remoteHost, bool isActive, int linearIndex, bool isSibling)
 		{
 			IsSibling = isSibling;
 			LinearIndex = linearIndex;
-			host  = remoteHost;
+			lastAddress  = remoteHost;
 			IsActive = isActive;
 			if (isActive)
 				StartConnectionThread();
@@ -218,15 +218,25 @@ namespace Shard
 			{
 				try
 				{
-					client = new TcpClient(host.URL, host.Port);
+					if (lastAddress.IsEmpty)
+						TryRefreshAddress();
+					client = new TcpClient(lastAddress.Address, lastAddress.Port);
 					break;
 				}
 				catch (Exception)
 				{ }
 
 				Thread.Sleep(1000);
+				TryRefreshAddress();
 			}
 			StartCommunication();
+		}
+
+		private void TryRefreshAddress()
+		{
+			var addr = DB.TryGet(ID);
+			if (!addr.IsEmpty)
+				lastAddress = addr;
 		}
 
 		public void SetPassiveClient(TcpClient newClient)
@@ -300,7 +310,7 @@ namespace Shard
 			writerIsWaiting.WaitOne();
 			outbound = newOutbound;
 			writerShouldStart.Set();
-			Log.Message(Name+ ": Connected to "+host);
+			Log.Message(Name+ ": Connected to "+lastAddress);
 			onComm.Set();
 		}
 
@@ -393,17 +403,12 @@ namespace Shard
 		private void ReadMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();
-			//byte[] frame = new byte[4];
-			//byte[] buffer = new byte[client.ReceiveBufferSize];
 			//outer loop
 			try
 			{
 				//communication loop
 				while (ConnectionIsActive)
 				{
-					//Read(frame, 4);
-					//int size = BitConverter.ToInt32(frame,0);
-					//Log.Debug(this + ": ReadMain() read frame of size "+size);
 					OnData(this, formatter.Deserialize(stream));
 				}
 			}
@@ -413,7 +418,7 @@ namespace Shard
 				client.Close();
 			}
 			onComm.Reset();
-			//Log.Debug(this + ": ReadMain() exit");
+			TryRefreshAddress();
 			if (IsActive)
 				StartConnectionThread();
 		}
@@ -469,9 +474,12 @@ namespace Shard
 			}
 		}
 
-		public Task<PublicHostReference> GetPublicHostAsync()
+		public ShardPeerAddress ShardPeerAddress
 		{
-			return DB.GetPublicHostOfAync(this.ID);
+			get
+			{
+				return new ShardPeerAddress(ID, lastAddress);
+			}
 		}
 
 		private void WriteMain()

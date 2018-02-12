@@ -10,15 +10,30 @@ namespace Shard
 	{
 		private readonly TcpListener server;
 		private readonly Thread listenerThread;
-		private readonly Func<Host, Link> linkLookup;
+		private readonly Func<PeerAddress, Link> linkLookup;
+		private int port = PeerAddress.DefaultPort;
 
 		public Action<InteractionLink> OnNewInteractionLink { get; set; }
 
-		public Listener(Func<Host, Link> linkLookup)
+		public int Port => port;
+
+		public Listener(Func<PeerAddress, Link> linkLookup)
 		{
 			this.linkLookup = linkLookup;
-			server = new TcpListener(IPAddress.Any, new Host(Simulation.ID).Port);
-			server.Start();
+			for (port = PeerAddress.DefaultPort; port < PeerAddress.DefaultPort + 1024; port++)
+			{
+				try
+				{
+					server = new TcpListener(IPAddress.Any, port);
+					server.Start();
+					break;
+				}
+				catch (SocketException)
+				{
+					try {server.Server.Dispose();} catch { };
+					server = null;
+				}
+			}
 			listenerThread = new Thread(new ThreadStart(Listen));
 			listenerThread.Start();
 		}
@@ -40,7 +55,7 @@ namespace Shard
 					try
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
-						Host host = new Host(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
+						PeerAddress host = new PeerAddress(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
 						Link link = linkLookup?.Invoke(host);
 						if (link == null)
 						{

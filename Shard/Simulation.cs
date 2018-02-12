@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Globalization;
 using System.Collections.Concurrent;
+using System.Net.Sockets;
+using System.Net;
 
 namespace Shard
 {
@@ -137,6 +139,13 @@ namespace Shard
 				return siblings.Find(id);
 			return neighbors.Find(id);
 		}
+		public static Link FindLink(PeerAddress addr)
+		{
+			var s = siblings.Find(addr);
+			if (s == null)
+				s = neighbors.Find(addr);
+			return s;
+		}
 
 		public static bool NeighborExists(Int3 coordinates)
 		{
@@ -187,7 +196,22 @@ namespace Shard
 
 			AdvertiseOldestGeneration(0);
 
-			listener = new Listener(h => Simulation.FindLink(h.ID));
+			listener = new Listener(h => FindLink(h));
+			{
+				Console.Write("Detecting address...");
+				//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
+				string localIP;
+				using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+				{
+					socket.Connect("8.8.8.8", 65530);
+					IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
+					localIP = endPoint.Address.ToString();
+				}
+				var address = new ShardPeerAddress(addr, new PeerAddress(localIP, listener.Port));
+				Console.Write("Publishing address: "+address);
+				DB.PutNow(address, true);
+			}
+
 			observationListener = new ObservationLink.Listener();
 
 			Console.Write("Polling SDS state...");

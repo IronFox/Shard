@@ -96,7 +96,7 @@ namespace Shard
 			SendCompressed(Simulation.ID);
 
 			foreach (var n in Simulation.Neighbors)
-				SendCompressed(n.GetPublicHostAsync().Result);
+				SendCompressed(n.ShardPeerAddress);
 
 			if (sentProviders.Count != 0)
 				throw new Exception("Inconsistent start");

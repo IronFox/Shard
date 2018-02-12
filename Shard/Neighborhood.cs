@@ -42,6 +42,13 @@ namespace Shard
 					return n;
 			return null;
 		}
+		public Link Find(PeerAddress addr)
+		{
+			foreach (var n in links)
+				if (n.ShardPeerAddress.Address == addr)
+					return n;
+			return null;
+		}
 
 		public Link Find(Int3 coordinates)
 		{

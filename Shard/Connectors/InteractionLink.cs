@@ -21,7 +21,7 @@ namespace Shard
 	{
 		public enum ChannelID
 		{
-			RegisterLink = 1,		//[int[4]: shardID]
+			//RegisterLink = 1,		//[int[4]: shardID]
 			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
 			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
 			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
@@ -51,11 +51,11 @@ namespace Shard
 		//private readonly MemoryStream writeStream = new MemoryStream();
 		private readonly BlockingCollection<OutPackage> writeQueue = new BlockingCollection<OutPackage>();
 		private bool closed = false;
-		private readonly Func<Host, Link> linkLookup;
+		private readonly Func<PeerAddress, Link> linkLookup;
 
 		private HashSet<Guid> guids = new HashSet<Guid>();
 
-		public InteractionLink(TcpClient client, Func<Host, Link> linkLookup)
+		public InteractionLink(TcpClient client, Func<PeerAddress, Link> linkLookup)
 		{
 			this.linkLookup = linkLookup;
 			this.client = client;
@@ -195,12 +195,12 @@ namespace Shard
 					{
 						switch (channel)
 						{
-							case (uint)ChannelID.RegisterLink:
-								ShardID id = NextShardID();
-								var lnk = linkLookup?.Invoke(new Host(id));
-								lnk.SetPassiveClient(client);
-								Abandon();
-								break;
+							//case (uint)ChannelID.RegisterLink:
+							//	ShardID id = NextShardID();
+							//	var lnk = linkLookup?.Invoke(new HostAddress(id));
+							//	lnk.SetPassiveClient(client);
+							//	Abandon();
+							//	break;
 							case (uint)ChannelID.RegisterReceiver:
 								Guid guid = NextGuid();
 								if (!guids.Contains(guid))
@@ -283,7 +283,7 @@ namespace Shard
 			}
 		}
 
-		public static InteractionLink Establish(TcpClient client, Func<Host, Link> linkLookup)
+		public static InteractionLink Establish(TcpClient client, Func<PeerAddress, Link> linkLookup)
 		{
 			try
 			{
