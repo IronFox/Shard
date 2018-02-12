@@ -23,6 +23,7 @@ namespace Shard
 		public struct Broadcast
 		{
 			public int channel;
+			public float maxRange;
 			public byte[] data;
 		}
 
@@ -112,7 +113,7 @@ namespace Shard
 						outChangeSet.Add(new EntityChange.Message(id, messageID++, m.receiver.Guid, m.channel, m.data));
 				}
 				foreach (var b in broadcasts)
-					outChangeSet.Add(new EntityChange.Broadcast(id, messageID++, b.channel, b.data));
+					outChangeSet.Add(new EntityChange.Broadcast(id, messageID++, b.maxRange,  b.channel, b.data));
 				if (nowInconsistent)
 					throw new ExecutionException(id,"Inconsistency by logic request");
 			}
@@ -180,9 +181,9 @@ namespace Shard
 			{
 				messages.Add(message);
 			}
-			public void Broadcast(int channel, byte[] data)
+			public void Broadcast(int channel, byte[] data, float maxRange = float.MaxValue)
 			{
-				broadcasts.Add(new Broadcast() { channel = channel, data = data });
+				broadcasts.Add(new Broadcast() { channel = channel, data = data, maxRange = maxRange });
 			}
 
 			public void FlagInconsistent()

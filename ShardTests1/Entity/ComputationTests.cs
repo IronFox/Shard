@@ -499,5 +499,64 @@ namespace Shard.Tests
 		}
 
 
+		[TestMethod()]
+		public void BroadcastRangeTest()
+		{
+			SimulationRun run = new SimulationRun(
+				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f, m = 1f },
+				new ShardID(Int3.Zero, 0));
+
+			Entity[] entities = new Entity[16];
+			entities[0] = new Entity(new EntityID(Guid.NewGuid(), Vec3.Zero), Vec3.Zero, new BroadcastLogic(entities.Length-1));
+			for (int i = 1; i < entities.Length; i++)
+				entities[i] = new Entity(new EntityID(Guid.NewGuid(), new Vec3(1f / (entities.Length-1) * i, 0, 0)), Vec3.Zero, new BroadcastReceiverLogic(entities.Length - i));
+
+
+			run.FeedEntities(entities);
+			run.AdvanceTLG(true, true);	//send messages here
+			run.AdvanceTLG(true, true);	//receive messages here
+
+			for (int i = 0; i < run.tlgEntry.SDS.FinalEntities.Length; i++)
+			{
+				var e = run.tlgEntry.SDS.FinalEntities[i];
+				BroadcastReceiverLogic logic = e.MyLogic as BroadcastReceiverLogic;
+				if (logic != null)
+					Assert.AreEqual(logic.ShouldReceive,  logic.numReceived, i.ToString());
+			}
+		}
+
+
+	}
+
+	[Serializable]
+	internal class BroadcastReceiverLogic : EntityLogic
+	{
+		public int numReceived = 0;
+		public readonly int ShouldReceive;
+		public BroadcastReceiverLogic(int shouldReceive)
+		{
+			ShouldReceive = shouldReceive;
+		}
+		protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent)
+		{
+			numReceived += Helper.Length(currentState.InboundMessages);
+		}
+	}
+
+	[Serializable]
+	internal class BroadcastLogic : EntityLogic
+	{
+		private int numMessages;
+
+		public BroadcastLogic(int numMessages)
+		{
+			this.numMessages = numMessages;
+		}
+
+		protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent)
+		{
+			for (int i = 0; i < numMessages; i++)
+				newState.Broadcast(0, null, ranges.R / numMessages * (1.5f + i));
+		}
 	}
 }

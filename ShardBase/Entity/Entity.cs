@@ -85,12 +85,18 @@ namespace Shard
 			var other = obj as EntityMessage;
 			if (other == null)
 				return false;
-			return Sender == other.Sender && Channel == other.Channel && Helper.AreEqual(Payload, other.Payload); 
+			return Sender == other.Sender 
+				&& Channel == other.Channel 
+				&& Helper.AreEqual(Payload, other.Payload); 
 		}
 
 		public override int GetHashCode()
 		{
-			return Helper.Hash(this).Add(Sender).Add(Channel).Add(Payload).GetHashCode();
+			return Helper.Hash(this)
+				.Add(Sender)
+				.Add(Channel)
+				.Add(Payload)
+				.GetHashCode();
 		}
 
 		public override string ToString()

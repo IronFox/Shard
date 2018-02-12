@@ -317,31 +317,26 @@ namespace Shard.EntityChange
 
 	}
 
-
-
 	[Serializable]
-	public class Broadcast : Abstract
+	public abstract class CommonMessage : Abstract
 	{
 		public readonly int Channel;
 		public readonly byte[] Payload;
 		public readonly int SentOrderID;
 
-
-		public Broadcast(EntityID origin, int sentOrderID, int channel, byte[] payload) : base(origin)
+		protected CommonMessage(EntityID origin, int sentOrderID, int channel, byte[] payload) : base(origin)
 		{
 			Channel = channel;
 			SentOrderID = sentOrderID;
 			Payload = payload;
 		}
-
 		public OrderedEntityMessage MakeMessage(bool isBroadcast)
 		{
-			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid,true), isBroadcast,Channel,Payload));
+			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid, true), isBroadcast, Channel, Payload));
 		}
-
 		public override int CompareTo(object obj)
 		{
-			var other = obj as Broadcast;
+			var other = obj as CommonMessage;
 			if (other == null)
 				return 1;
 			if (other == this)
@@ -349,11 +344,10 @@ namespace Shard.EntityChange
 			var c = new Helper.Comparator()
 					.Append(Origin, other.Origin)
 					.Append(SentOrderID, other.SentOrderID)
-					.Append(Channel,other.Channel)
+					.Append(Channel, other.Channel)
 					.Append(Payload, other.Payload);
 			return c.Finish();
 		}
-
 		public override int GetHashCode()
 		{
 			return Helper.Hash(this)
@@ -363,25 +357,65 @@ namespace Shard.EntityChange
 					.Add(Payload)
 					.GetHashCode();
 		}
+	}
+
+
+	[Serializable]
+	public class Broadcast : CommonMessage
+	{
+		public readonly float MaxRange;
+
+		public Broadcast(EntityID origin, int sentOrderID, float maxRange, int channel, byte[] payload) : base(origin,sentOrderID,channel,payload)
+		{
+			MaxRange = maxRange;
+		}
+
+		public OrderedEntityMessage MakeMessage()
+		{
+			return base.MakeMessage(true);
+		}
+
+		public override int CompareTo(object obj)
+		{
+			if (obj == null)
+				return 1;
+			if (obj == this)
+				return 0;
+			var other = obj as Broadcast;
+			if (other == null)  //nothing i know
+				return base.CompareTo(obj);
+			var c = new Helper.Comparator()
+					.Append(base.CompareTo(other))
+					.Append(MaxRange, other.MaxRange);
+			return c.Finish();
+		}
+
+		public override int GetHashCode()
+		{
+			return Helper.Hash(this)
+					.Add(base.GetHashCode())
+					.Add(MaxRange)
+					.GetHashCode();
+		}
 
 		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
-			pool.BroadcastMessage(Origin.Position, MakeMessage(true));
+			pool.BroadcastMessage(Origin.Position, MaxRange, MakeMessage(true));
 			return true;
 		}
 
 		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
-			return cube.Intersects(Box.CenterExtent(Origin.Position,ctx.Ranges.R, Bool3.True));
+			return cube.Intersects(Box.CenterExtent(Origin.Position,Math.Min(MaxRange, ctx.Ranges.R), Bool3.True));
 		}
 	}
 
 	[Serializable]
-	public class Message : Broadcast
+	public class Message : CommonMessage
 	{
 		public readonly Guid TargetEntityID;
 
-		public Message(EntityID origin, int sentOrderID, Guid targetEntityID, int channel, byte[] payload) : base(origin, sentOrderID, channel, payload)
+		public Message(EntityID origin, int sentOrderID, Guid targetEntityID, int channel, byte[] payload) : base(origin, sentOrderID,channel, payload)
 		{
 			TargetEntityID = targetEntityID;
 		}
@@ -410,6 +444,11 @@ namespace Shard.EntityChange
 		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			return pool.RelayMessage(Origin.Position, TargetEntityID, MakeMessage(false));
+		}
+
+		public override bool Affects(Box cube, ExecutionContext ctx)
+		{
+			return cube.Intersects(Box.CenterExtent(Origin.Position, ctx.Ranges.R, Bool3.True));
 		}
 	}
 

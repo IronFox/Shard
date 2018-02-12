@@ -137,7 +137,8 @@ namespace Shard
 		private Set<EntityChange.Instantiation> instantiations = new Set<EntityChange.Instantiation>();
 		private Set<EntityChange.Removal> removals = new Set<EntityChange.Removal>();
 		private Set<EntityChange.Motion> motions = new Set<EntityChange.Motion>();
-		private Set<EntityChange.Broadcast> messages = new Set<EntityChange.Broadcast>();
+		private Set<EntityChange.Broadcast> broadcasts = new Set<EntityChange.Broadcast>();
+		private Set<EntityChange.Message> messages = new Set<EntityChange.Message>();
 #if STATE_ADV
 		private Set<EntityChange.StateAdvertisement> advertisements = new Set<EntityChange.StateAdvertisement>();
 #endif
@@ -158,8 +159,13 @@ namespace Shard
 
 		public void Add(EntityChange.Broadcast mes)
 		{
+			broadcasts.Add(mes);
+		}
+		public void Add(EntityChange.Message mes)
+		{
 			messages.Add(mes);
 		}
+
 #if STATE_ADV
 		public void Add(EntityChange.StateAdvertisement adv)
 		{
@@ -182,9 +188,10 @@ namespace Shard
 				pool.RequireTree();
 			numErrors += advertisements.Execute(pool, ctx);
 #endif
-			if (messages.Size > 0)
-				pool.RequireTree();
 			numErrors += messages.Execute(pool, ctx);
+			if (broadcasts.Size > 0)
+				pool.RequireTree();
+			numErrors += broadcasts.Execute(pool, ctx);
 			pool.DispatchAll();
 			return numErrors;
 		}
@@ -211,6 +218,7 @@ namespace Shard
 			rs.advertisements = advertisements.Clone();
 #endif
 			rs.instantiations = instantiations.Clone();
+			rs.broadcasts = broadcasts.Clone();
 			rs.messages = messages.Clone();
 			rs.motions = motions.Clone();
 			rs.removals = removals.Clone();
@@ -223,6 +231,7 @@ namespace Shard
 			advertisements.Include(cs.advertisements);
 #endif
 			instantiations.Include(cs.instantiations);
+			broadcasts.Include(cs.broadcasts);
 			messages.Include(cs.messages);
 			motions.Include(cs.motions);
 			removals.Include(cs.removals);
@@ -250,6 +259,7 @@ namespace Shard
 				yield return new KeyValuePair<string, AbstractSet>("advertisements", advertisements);
 #endif
 				yield return new KeyValuePair<string, AbstractSet>("instantiations", instantiations);
+				yield return new KeyValuePair<string, AbstractSet>("broadcasts", broadcasts);
 				yield return new KeyValuePair<string, AbstractSet>("messages", messages);
 				yield return new KeyValuePair<string, AbstractSet>("motions", motions);
 				yield return new KeyValuePair<string, AbstractSet>("removals", removals);
@@ -263,6 +273,7 @@ namespace Shard
 				yield return advertisements;
 #endif
 				yield return instantiations;
+				yield return broadcasts;
 				yield return messages;
 				yield return motions;
 				yield return removals;
@@ -280,6 +291,7 @@ namespace Shard
 		/// <param name="targetSpace"></param>
 		public EntityChangeSet(EntityChangeSet source, Box targetSpace, EntityChange.ExecutionContext ctx)
 		{
+			broadcasts.Include(source.broadcasts, targetSpace, ctx);
 			messages.Include(source.messages, targetSpace, ctx);
 			motions.Include(source.motions, targetSpace, ctx);
 			removals.Include(source.removals, targetSpace, ctx);
@@ -419,6 +431,7 @@ namespace Shard
 
 		public void FilterByTargetLocation(Box targetSpace, EntityChange.ExecutionContext ctx)
 		{
+			broadcasts.FilterByTargetLocation(targetSpace, ctx);
 			messages.FilterByTargetLocation(targetSpace, ctx);
 			motions.FilterByTargetLocation(targetSpace, ctx);
 			removals.FilterByTargetLocation(targetSpace, ctx);
@@ -481,6 +494,7 @@ namespace Shard
 			Get("advertisements", ref advertisements, info);
 #endif
 			Get("instantiations", ref instantiations, info);
+			Get("broadcasts", ref broadcasts, info);
 			Get("messages", ref messages, info);
 			Get("motions", ref motions, info);
 			Get("removals", ref removals, info);

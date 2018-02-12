@@ -85,6 +85,7 @@ namespace Shard
 		/// </summary>
 		/// <param name="fromClient">GUID of the sender client</param>
 		/// <param name="toEntity">GUID of the targeted entity. Set to Guid.Empty to broadcast</param>
+		/// <param name="channel">Channel to send the message on</param>
 		/// <param name="data">Data to send. May be null</param>
 		/// <param name="orderIndex">Sender message order index. The same sender must not reuse the same order index</param>
 		public void HandleIncomingMessage(Guid fromClient, Guid toEntity, int channel, byte[] data, int orderIndex)

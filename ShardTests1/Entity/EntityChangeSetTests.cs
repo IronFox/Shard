@@ -81,7 +81,7 @@ namespace Shard.Tests
 
 		public static Broadcast RandomBroadcast()
 		{
-			return new Broadcast(RandomID(), random.Next(16),random.Next(3), RandomByteArray(true));
+			return new Broadcast(RandomID(), random.Next(16), random.NextFloat(0.0001f,1),  random.Next(3), RandomByteArray(true));
 		}
 
 		public static Message RandomMessage()

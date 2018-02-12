@@ -201,11 +201,11 @@ namespace Shard
 			var t = Tree;
 		}
 
-		public int BroadcastMessage(Vec3 senderPosition, OrderedEntityMessage message)
+		public int BroadcastMessage(Vec3 senderPosition, float maxRange, OrderedEntityMessage message)
 		{
 			int counter = 0;
 			
-			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), ctx.Ranges.R))
+			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), Math.Min(maxRange, ctx.Ranges.R)))
 			{
 				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
 				{
