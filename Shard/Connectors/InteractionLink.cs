@@ -91,6 +91,8 @@ namespace Shard
 				foreach (var g in guids)
 					guidMap.TryRemove(g);
 				guids.Clear();
+				lock (registry)
+					registry.Remove(this);
 			}
 		}
 
