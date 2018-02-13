@@ -583,10 +583,10 @@ namespace Shard
 			}
 			catch { }
 
-			client.Dispose();
-			stream.Dispose();
-			writerShouldStart.Dispose();
-			writerIsWaiting.Dispose();
+			Helper.Dispose(client);
+			Helper.Dispose(stream);
+			Helper.Dispose(writerShouldStart);
+			Helper.Dispose(writerIsWaiting);
 		}
 
 		public void AwaitConnection()

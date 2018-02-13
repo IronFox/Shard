@@ -91,7 +91,7 @@ namespace Shard.EntityChange
 				return newPosition;
 
 			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + maxDistance + "): " + dist);
-			newPosition = currentEntityPosition.Position + (newPosition - currentEntityPosition.Position) * maxDistance / dist;
+			newPosition = currentEntityPosition.Position + (newPosition - currentEntityPosition.Position) * maxDistance * 0.9999999f / dist;
 
 			Debug.Assert(GetDistance(newPosition, currentEntityPosition.Position) <= maxDistance);
 

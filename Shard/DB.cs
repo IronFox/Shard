@@ -328,6 +328,8 @@ namespace Shard
 					try
 					{
 						var header = await store.GetHeaderAsync(id);
+						if (header == null)
+							return;
 						if (lastQueriedValue == null || header.Rev != lastQueriedValue._rev)
 						{
 							var data = await store.GetByIdAsync<T>(id);
@@ -637,9 +639,16 @@ namespace Shard
 
 			if (forceReplace)
 			{
-				await store.SetAsync(e._id, doc);
-				return;
-
+				while (true)
+				{
+					try
+					{
+						await store.SetAsync(e._id, doc);
+						return;
+					}
+					catch (MyCouchResponseException)
+					{ }
+				}
 				//await store.DeleteAsync(e._id);
 			}
 			try

@@ -255,9 +255,10 @@ namespace Shard
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestRegisteredSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
-				Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
-//				Console.Write(".");
-	//			Console.Out.Flush();
+				Console.Title = "Catching up g" + stack.NewestRegisteredSDSGeneration + "/" + TimingInfo.Current.TopLevelGeneration;
+				//Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
+				Console.Write(".");
+				Console.Out.Flush();
 				int nextGen = stack.NewestRegisteredSDSGeneration + 1;
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
@@ -274,6 +275,7 @@ namespace Shard
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration);
 				Log.Minor("TLG "+stack.NewestRegisteredSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
+				Console.Title = "Simulating at g" + stack.NewestRegisteredSDSGeneration;
 
 				if (comp != null)
 				{
@@ -535,7 +537,7 @@ namespace Shard
 					if (merged.Inconsistency < existing.SDS.Inconsistency)
 						stack.Insert(merged);
 					if (merged.Inconsistency < sds.Inconsistency)
-						lnk.Set(new SDS.ID(ID.XYZ, raw.Generation).P2PKey, new SerialSDS(merged));
+						lnk.Set(new SDS.ID(ID.XYZ, raw.Generation).P2PKey, new SerialSDS(merged, Simulation.ID.XYZ));
 					return;
 				}
 
@@ -552,6 +554,17 @@ namespace Shard
 			return false;
 		}
 
+		internal static void Shutdown()
+		{
+			if (neighbors != null)
+				foreach (var n in neighbors)
+					n.Dispose();
+			if (siblings != null)
+				foreach (var s in siblings)
+					s.Dispose();
+			siblings = null;
+			neighbors = null;
+		}
 	}
 
 	public class OldestGeneration

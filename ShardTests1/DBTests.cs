@@ -160,7 +160,7 @@ namespace Shard.Tests
 			for (int i = 0; i < 100; i++)
 			{
 				SDS sds = RandomSDS();
-				var s = new SerialSDS( sds );
+				var s = new SerialSDS( sds, Simulation.ID.XYZ );
 				string json = serializer.Serialize(s);
 				var reverse = serializer.Deserialize<SerialSDS>(json);
 				Assert.AreEqual(s, reverse);

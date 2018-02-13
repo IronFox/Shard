@@ -17,11 +17,13 @@ namespace Shard
 		{
 			private Box box;
 			private EntityPool pool;
+			private Int3 sector;
 
-			public SDSFactory(Box box, EntityChange.ExecutionContext ctx)
+			public SDSFactory(Int3 sector, EntityChange.ExecutionContext ctx, Int3 space)
 			{
-				this.box = box;
+				box = Box.OffsetSize(new Vec3(sector), Vec3.One, sector + 1 >= space);
 				pool = new EntityPool(ctx);
+				this.sector = sector;
 			}
 
 			public void Include(Entity e)
@@ -34,7 +36,7 @@ namespace Shard
 			public SerialSDS Finish()
 			{
 				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(),null);
-				return new SerialSDS(sds);
+				return new SerialSDS(sds,sector);
 			}
 		}
 
@@ -46,7 +48,7 @@ namespace Shard
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
 				{
-					grid[at.X, at.Y, at.Z] = new SDSFactory(Box.OffsetSize(new Vec3(at), Vec3.One, at+1 >= cfg.extent.XYZ),new SimulationContext());
+					grid[at.X, at.Y, at.Z] = new SDSFactory(at,new SimulationContext(),cfg.extent.XYZ);
 				}
 			);
 			var gridBox = IntBox.FromMinAndMax(Int3.Zero, cfg.extent.XYZ, Bool3.False);
@@ -67,7 +69,7 @@ namespace Shard
 			}
 
 			Task.WaitAll(tasks);
-
+			Simulation.Shutdown();
 		}
 
 

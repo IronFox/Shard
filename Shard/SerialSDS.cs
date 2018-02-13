@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard
 {
@@ -11,13 +12,13 @@ namespace Shard
 		public SerialSDS()
 		{ }
 
-		public SerialSDS(SDS sds)
+		public SerialSDS(SDS sds, Int3 sectorID)
 		{
 			SerialEntities = Entity.Export(sds.FinalEntities);
 			Generation = sds.Generation;
 			IC = sds.IC.Export();
 			SerialMessages = sds.ClientMessages != null ? Helper.SerializeToArray(sds.ClientMessages) : null;
-			_id = Simulation.ID.XYZ.Encoded;
+			_id = sectorID.Encoded;
 		}
 
 		public byte[] SerialEntities { get; set; }

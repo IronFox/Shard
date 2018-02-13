@@ -1,28 +1,15 @@
 {
-	"worldSize" : [1,1,1],
+	"worldSize" : [2,1,1],
 	
 	"R" : 0.025,
-	"M" : 0.0025,
+	"M" : 0.025,
 	
 	"entities" :
 	[
 		{
-			"position" : [0.2,0.4,0.1],
+			"position" : [0,0,0, 2,1,1],
 			"logic" : "randomMotion.v1",
-			"appearances" : 
-			[
-				{"color" : "red"}
-			]
-		},
-		
-		{
-			"position" : [0,0,0, 1,1,1],
-			"logic" : "randomMotion.v1",
-			"appearances" : 
-			[
-				{"color" : "<RandomColor>"}
-			],
-			"instances" : 100
+			"instances" : 200
 		}
 	]
 }

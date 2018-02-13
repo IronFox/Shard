@@ -119,7 +119,7 @@ namespace Shard
 
 			if (!ic.AnySet)
 			{
-				DB.PutAsync(new SerialSDS( rs ), false).Wait();
+				DB.PutAsync(new SerialSDS( rs, Simulation.ID.XYZ ), false).Wait();
 			}
 			return new Tuple<SDS, IntermediateSDS>( rs,data);
 		}
