@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="BitCube.cs" />
     <Compile Include="Box.cs" />
+    <Compile Include="BinaryReader.cs" />
     <Compile Include="Entity\EntityAppearance.cs" />
     <Compile Include="Entity\EntityContact.cs" />
     <Compile Include="EntityID.cs" />

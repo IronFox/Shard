@@ -24,10 +24,12 @@ namespace Shard
 		{
 			Outbound rs = new Outbound();
 			Tuple<string,object> item;
-			while (dispatch.TryDequeue(out item))
-				rs.Set(item.Item1, item.Item2);
-			while (sent.TryDequeue(out item))
-				rs.Set(item.Item1, item.Item2);
+			if (dispatch != null)
+				while (dispatch.TryDequeue(out item))
+					rs.Set(item.Item1, item.Item2);
+			if (sent != null)
+				while (sent.TryDequeue(out item))
+					rs.Set(item.Item1, item.Item2);
 
 			Dispose();
 			return rs;
@@ -221,6 +223,15 @@ namespace Shard
 					if (lastAddress.IsEmpty)
 						TryRefreshAddress();
 					client = new TcpClient(lastAddress.Address, lastAddress.Port);
+
+					var stream = client.GetStream();
+					stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
+					stream.Write(BitConverter.GetBytes(16), 0, 4);
+					var id = Simulation.ID;
+					stream.Write(BitConverter.GetBytes(id.X), 0, 4);
+					stream.Write(BitConverter.GetBytes(id.Y), 0, 4);
+					stream.Write(BitConverter.GetBytes(id.Z), 0, 4);
+					stream.Write(BitConverter.GetBytes(id.ReplicaLevel), 0, 4);
 					break;
 				}
 				catch (Exception)

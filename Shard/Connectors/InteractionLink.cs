@@ -21,7 +21,7 @@ namespace Shard
 	{
 		public enum ChannelID
 		{
-			//RegisterLink = 1,		//[int[4]: shardID]
+			RegisterLink = 1,		//[int[4]: shardID]
 			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
 			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
 			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
@@ -51,11 +51,11 @@ namespace Shard
 		//private readonly MemoryStream writeStream = new MemoryStream();
 		private readonly BlockingCollection<OutPackage> writeQueue = new BlockingCollection<OutPackage>();
 		private bool closed = false;
-		private readonly Func<PeerAddress, Link> linkLookup;
+		private readonly Func<ShardID, Link> linkLookup;
 
 		private HashSet<Guid> guids = new HashSet<Guid>();
 
-		public InteractionLink(TcpClient client, Func<PeerAddress, Link> linkLookup)
+		public InteractionLink(TcpClient client, Func<ShardID, Link> linkLookup)
 		{
 			this.linkLookup = linkLookup;
 			this.client = client;
@@ -80,63 +80,7 @@ namespace Shard
 			Log.Error(endPoint + ": " + ex);
 		}
 
-		private int remainingBytes = 0;
-
-		private byte[] ReadBytes(int numBytes)
-		{
-			if (remainingBytes < numBytes)
-				throw new SerializationException("Not enough bytes left in packet to deserialize "+numBytes+" byte(s)");
-			byte[] rs = new byte[numBytes];
-			netStream.Read(rs, numBytes);
-			remainingBytes -= numBytes;
-			return rs;
-		}
-
-		private static byte[] skipBuffer = new byte[1024];
-		private void Skip(int bytes)
-		{
-			while (bytes > skipBuffer.Length)
-			{
-				netStream.Read(skipBuffer, skipBuffer.Length);
-				bytes -= skipBuffer.Length;
-			}
-			if (bytes == 0)
-				return;
-			netStream.Read(skipBuffer, bytes);
-		}
-
-		private Guid NextGuid()
-		{
-			return new Guid(ReadBytes(16));
-		}
-
-		private int NextInt()
-		{
-			return BitConverter.ToInt32(ReadBytes(4), 0);
-		}
-		private float NextFloat()
-		{
-			return BitConverter.ToSingle(ReadBytes(4), 0);
-		}
-
-		private Vec3 NextVec3()
-		{
-			byte[] data = ReadBytes(12);
-			return new Vec3(BitConverter.ToSingle(data,0), BitConverter.ToSingle(data, 4), BitConverter.ToSingle(data, 8));
-		}
-
-		private ShardID NextShardID()
-		{
-			byte[] raw = ReadBytes(4 * 4);
-			return new ShardID(BitConverter.ToInt32(raw, 0), BitConverter.ToInt32(raw, 4), BitConverter.ToInt32(raw, 8), BitConverter.ToInt32(raw, 12));
-		}
-
-		private byte[] NextBytes()
-		{
-			int numBytes = BitConverter.ToInt32(ReadBytes(4),0);
-			return ReadBytes(numBytes);
-		}
-
+		
 
 		private void Abandon()
 		{
@@ -163,6 +107,8 @@ namespace Shard
 					netStream.Write(p.Data, 0, p.Data.Length);
 				}
 			}
+			catch (ArgumentNullException)
+			{ }
 			catch (ObjectDisposedException)
 			{ }
 			catch (SocketException)
@@ -179,6 +125,7 @@ namespace Shard
 
 			Message("Starting Read");
 
+			BinaryReader reader = new BinaryReader(netStream);
 			try
 			{
 				var f = new BinaryFormatter();
@@ -186,23 +133,23 @@ namespace Shard
 				byte[] header = new byte[8];
 				while (!closed)
 				{
-					netStream.Read(header, 8);    //channel + size
-					uint channel = BitConverter.ToUInt32(header, 0);
-					remainingBytes = BitConverter.ToInt32(header, 4);
+					reader.RemainingBytes = 8;
+					uint channel = reader.NextUInt();
+					reader.RemainingBytes = reader.NextInt();
 
 
 					try
 					{
 						switch (channel)
 						{
-							//case (uint)ChannelID.RegisterLink:
-							//	ShardID id = NextShardID();
-							//	var lnk = linkLookup?.Invoke(new HostAddress(id));
-							//	lnk.SetPassiveClient(client);
-							//	Abandon();
-							//	break;
+							case (uint)ChannelID.RegisterLink:
+								ShardID id = reader.NextShardID();
+								var lnk = linkLookup?.Invoke(id);
+								lnk.SetPassiveClient(client);
+								Abandon();
+								break;
 							case (uint)ChannelID.RegisterReceiver:
-								Guid guid = NextGuid();
+								Guid guid = reader.NextGuid();
 								if (!guids.Contains(guid))
 								{
 									Message("Authenticating as " + guid);
@@ -218,7 +165,7 @@ namespace Shard
 								}
 								break;
 							case (uint)ChannelID.UnregisterReceiver:
-								guid = NextGuid();
+								guid = reader.NextGuid();
 								if (guids.Contains(guid))
 								{
 									Message("De-Authenticating as " + guid);
@@ -228,10 +175,10 @@ namespace Shard
 								}
 								break;
 							case (uint)ChannelID.SendMessage:
-								Guid from = NextGuid();
-								Guid to = NextGuid();
-								int msgChannel = NextInt();
-								byte[] data = NextBytes();
+								Guid from = reader.NextGuid();
+								Guid to = reader.NextGuid();
+								int msgChannel = reader.NextInt();
+								byte[] data = reader.NextBytes();
 								if (!guids.Contains(from))
 									Error("Not registered as " + from + ". Ignoring message");
 								else
@@ -248,7 +195,7 @@ namespace Shard
 					{
 						Error(ex);
 					}
-					Skip(remainingBytes);
+					reader.SkipRemaining();
 
 				}
 
@@ -283,7 +230,7 @@ namespace Shard
 			}
 		}
 
-		public static InteractionLink Establish(TcpClient client, Func<PeerAddress, Link> linkLookup)
+		public static InteractionLink Establish(TcpClient client, Func<ShardID, Link> linkLookup)
 		{
 			try
 			{

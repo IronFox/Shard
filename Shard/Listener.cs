@@ -10,14 +10,14 @@ namespace Shard
 	{
 		private readonly TcpListener server;
 		private readonly Thread listenerThread;
-		private readonly Func<PeerAddress, Link> linkLookup;
+		private readonly Func<ShardID, Link> linkLookup;
 		private int port = PeerAddress.DefaultPort;
 
 		public Action<InteractionLink> OnNewInteractionLink { get; set; }
 
 		public int Port => port;
 
-		public Listener(Func<PeerAddress, Link> linkLookup)
+		public Listener(Func<ShardID, Link> linkLookup)
 		{
 			this.linkLookup = linkLookup;
 			for (port = PeerAddress.DefaultPort; port < PeerAddress.DefaultPort + 1024; port++)
@@ -56,15 +56,15 @@ namespace Shard
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
 						PeerAddress host = new PeerAddress(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
-						Link link = linkLookup?.Invoke(host);
-						if (link == null)
+						//Link link = linkLookup?.Invoke(host);
+						//if (link == null)
 						{
 							var lnk = InteractionLink.Establish(client,linkLookup);
 							OnNewInteractionLink?.Invoke(lnk);
 							continue;
 						}
 							//Simulation.FindLink(host.ID);
-						link.SetPassiveClient(client);
+						//link.SetPassiveClient(client);
 					}
 					catch (Exception ex)
 					{
