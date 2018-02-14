@@ -21,7 +21,7 @@ namespace Shard
 	{
 		public enum ChannelID
 		{
-			RegisterLink = 1,		//[int[4]: shardID]
+			RegisterLink = 1,       //[int[4]: remote shardID][int[4]: local shardID]
 			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
 			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
 			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
@@ -145,8 +145,13 @@ namespace Shard
 						switch (channel)
 						{
 							case (uint)ChannelID.RegisterLink:
-								ShardID id = reader.NextShardID();
-								var lnk = linkLookup?.Invoke(id);
+								ShardID remoteID = reader.NextShardID();
+								ShardID localID = reader.NextShardID();
+								if (localID != Simulation.ID)
+									throw new IntegrityViolation("Remote shard expected this shard to be " + localID + ", not " + Simulation.ID);
+								var lnk = linkLookup?.Invoke(remoteID);
+								if (lnk == null)
+									throw new IntegrityViolation("Remote shard identifies as " + remoteID + ", but this is not a known neighbor of this shard " + Simulation.ID);
 								lnk.SetPassiveClient(client);
 								Abandon();
 								break;

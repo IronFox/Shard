@@ -226,12 +226,9 @@ namespace Shard
 
 					var stream = client.GetStream();
 					stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
-					stream.Write(BitConverter.GetBytes(16), 0, 4);
-					var id = Simulation.ID;
-					stream.Write(BitConverter.GetBytes(id.X), 0, 4);
-					stream.Write(BitConverter.GetBytes(id.Y), 0, 4);
-					stream.Write(BitConverter.GetBytes(id.Z), 0, 4);
-					stream.Write(BitConverter.GetBytes(id.ReplicaLevel), 0, 4);
+					stream.Write(BitConverter.GetBytes(32), 0, 4);
+					WriteID(stream, Simulation.ID);
+					WriteID(stream, ID);
 					break;
 				}
 				catch (Exception)
@@ -241,6 +238,14 @@ namespace Shard
 				TryRefreshAddress();
 			}
 			StartCommunication();
+		}
+
+		private static void WriteID(NetworkStream stream, ShardID id)
+		{
+			stream.Write(BitConverter.GetBytes(id.X), 0, 4);
+			stream.Write(BitConverter.GetBytes(id.Y), 0, 4);
+			stream.Write(BitConverter.GetBytes(id.Z), 0, 4);
+			stream.Write(BitConverter.GetBytes(id.ReplicaLevel), 0, 4);
 		}
 
 		private void TryRefreshAddress()
