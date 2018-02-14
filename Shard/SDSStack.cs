@@ -14,7 +14,7 @@ namespace Shard
 			public readonly int Generation;
 			public SDS SDS { get; set; }
 			public IntermediateSDS IntermediateSDS	{get;set;}
-			public bool IsFullyConsistent;
+			public bool IsFullyConsistent => IsFinished && SDS.IsFullyConsistent;
 			public readonly RCS[] InboundRCS = new RCS[Simulation.NeighborCount];
 			public bool SignificantInboundChange { get; set; }
 			public bool IsFinished => SDS != null && SDS.IsSet;
@@ -27,7 +27,6 @@ namespace Shard
 			{
 				SDS = sds;
 				Generation = sds.Generation;
-				IsFullyConsistent = sds.IsFullyConsistent;
 			}
 
 			public Entry(SDS sds, IntermediateSDS intermediate) : this(sds)
@@ -59,6 +58,14 @@ namespace Shard
 				sdsList.RemoveRange(0, newest);
 
 				Simulation.AdvertiseOldestGeneration(OldestSDS.Generation);
+			}
+		}
+		public Entry NewestRegisteredEntry
+		{
+			get
+			{
+				lock (this)
+					return sdsList[sdsList.Count - 1];
 			}
 		}
 
@@ -180,7 +187,6 @@ namespace Shard
 					Entry e = sdsList[at];
 					e.SDS = tuple.Item1;
 					e.IntermediateSDS = tuple.Item2;
-					e.IsFullyConsistent = tuple.Item1.IsFullyConsistent;
 					e.SignificantInboundChange = false;
 					rs = e;
 				}
