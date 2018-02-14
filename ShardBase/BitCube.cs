@@ -162,6 +162,7 @@ namespace Shard
 					if (GridSize.Product * 4 != (serial.data.Length))
 						throw new ArgumentOutOfRangeException("Got " + (serial.data.Length) + " byte(s), but needed " + GridSize + "*4 = " + GridSize.Product * 4);
 					Buffer.BlockCopy(serial.data, 0, grid, 0, serial.data.Length);
+					oneCount = -1;
 				}
 			}
 		}
