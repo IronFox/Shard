@@ -362,6 +362,7 @@ namespace Shard
 			oldestGeneration = newOldestGeneration;
 			if (OutStack != null)
 				OutStack.SignalOldestGenerationUpdateAsync(Simulation.ID.ReplicaLevel, newOldestGeneration, currentTLG).Wait();
+			Log.Message(Name + ": ->g" + newOldestGeneration);
 		}
 
 		public bool ConnectionIsActive

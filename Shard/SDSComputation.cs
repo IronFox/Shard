@@ -109,6 +109,7 @@ namespace Shard
 				}
 				else
 				{
+					Log.Message(n.Name + ": Missing RCS @g"+generation);
 					ic.SetOne(box);
 				}
 			}
@@ -121,6 +122,7 @@ namespace Shard
 			{
 				DB.PutAsync(new SerialSDS( rs, Simulation.ID.XYZ ), false).Wait();
 			}
+			Log.Message("Completed g" + Generation+" with IC ones: "+ic.OneCount);
 			return new Tuple<SDS, IntermediateSDS>( rs,data);
 		}
 	}

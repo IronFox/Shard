@@ -171,12 +171,13 @@ namespace Shard
 			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
 			if (existing != null && candidate.IC.OneCount > existing.IC.OneCount)
 			{
-				Log.Minor("Unable to incorportate RCS from " + neighbor + ": RCS at generation " + target.Generation + " is worse than known");
+				Log.Error("Unable to incorportate RCS from " + neighbor + ": RCS at generation " + target.Generation + " is worse than known");
 				return;
 			}
 			target.InboundRCS[neighbor.LinearIndex] = candidate;
 			if (significant)
 				target.SignificantInboundChange = true;
+			Log.Message(neighbor.Name + ": RCS[" + neighbor.LinearIndex + "] @g" + target.Generation + " IC ones: " + candidate.IC.OneCount);
 		}
 
 
@@ -198,7 +199,7 @@ namespace Shard
 
 			listener = new Listener(h => FindLink(h));
 			{
-				Console.Write("Detecting address...");
+				Log.Message("Detecting address...");
 				//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
 				string localIP;
 				using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
@@ -208,14 +209,13 @@ namespace Shard
 					localIP = endPoint.Address.ToString();
 				}
 				var address = new ShardPeerAddress(addr, new PeerAddress(localIP, listener.Port));
-				Console.Write("Publishing address: "+address);
+				Log.Message("Publishing address: "+address);
 				DB.PutNow(address, true);
 			}
 
 			observationListener = new ObservationLink.Listener();
 
-			Console.Write("Polling SDS state...");
-			Console.Out.Flush();
+			Log.Message("Polling SDS state...");
 
 			SDS sds;
 			while (true)
@@ -275,13 +275,18 @@ namespace Shard
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration);
 				Log.Minor("TLG "+stack.NewestRegisteredSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
-				Console.Title = "Simulating at g" + stack.NewestRegisteredSDSGeneration;
+				{
+					var newest = stack.NewestFinishedSDS;
+					Console.Title = ID+" g" + newest.Generation + " " + (float)(newest.IC.Size.Product - newest.IC.OneCount)*100/ newest.IC.Size.Product+"% consistent";
+					var con = stack.NewestConsistentSDS;
+					if (con != newest)
+						Console.Title += ", newest consistent at g" + con.Generation;
+				}
 
 				if (comp != null)
 				{
 					if (Clock.Now >= comp.Deadline)
 					{
-						Log.Message("Completing g"+comp.Generation);
 						stack.Insert(comp.Complete());
 						comp = null;
 					}
@@ -503,7 +508,7 @@ namespace Shard
 					RCS.Serial rcs = (RCS.Serial)obj;
 					if (rcs.Generation <= stack.NewestConsistentSDSGeneration)
 					{
-						Log.Minor("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
+						Log.Error("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Generation);
 						return;
 					}
 					FetchNeighborUpdate(stack.AllocateGeneration(rcs.Generation),lnk, rcs.Data);
