@@ -86,7 +86,12 @@ namespace Shard
 				RCS rcs = new RCS(new EntityChangeSet(data.localChangeSet, n.WorldSpace,ctx), ic);
 				var oID = n.GetOutboundRCSID(Generation);
 				if (generation >= n.OldestGeneration)
-					n.Set(oID.ToString(), new RCS.Serial( rcs,generation));
+				{
+					Log.Message("Dispatched "+oID);
+					n.Set(oID.ToString(), new RCS.Serial(rcs, generation));
+				}
+				else
+					Log.Error("Recomputed generation, but remote shard will not want generated RCS");
 #if !DRY_RUN
 				if (rcs.IsFullyConsistent)
 					n.OutStack.Put(generation, rcs);
@@ -110,6 +115,8 @@ namespace Shard
 				{
 					cs.Include(rcs.CS);
 					ic.Include(rcs.IC, box.Min);
+					if (rcs.IC.OneCount > 0)
+						Log.Message(n.Name + ": Inconsistent RCS @g"+generation+": "+rcs.IC.OneCount);
 				}
 				else
 				{
