@@ -82,6 +82,7 @@ namespace UnityShardViewer
 							{
 								privateID = (ShardID)obj;
 								Debug.Log("Sector: ID updated to " + privateID);
+								OnNewNeighbor(new ShardPeerAddress(privateID, lastHost));
 							}
 							else if (obj is CSLogicProvider)
 							{
@@ -126,9 +127,10 @@ namespace UnityShardViewer
 									{
 										deltaSum += delta;
 										deltaNum++;
+										//Debug.Log("Delta estimation now at "+deltaSum/deltaNum);
 									});
-									sdsDelta.Restart();
 								}
+								sdsDelta.Restart();
 							}
 						}
 					}
