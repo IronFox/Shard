@@ -2,6 +2,7 @@
 using System.CodeDom.Compiler;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -24,6 +25,7 @@ namespace Shard
 		class Constructor
 		{
 			Task task;
+			Stopwatch watch;
 			CSLogicProvider provider;
 			EntityLogic instance;
 			public readonly string AssemblyName,LogicName;
@@ -54,6 +56,7 @@ namespace Shard
 				SerialData = data;
 				LogicName = null;
 
+				watch = Stopwatch.StartNew();
 				task = Load();
 			}
 			public Constructor(string assemblyName, string logicName, object[] constructorParameters)
@@ -87,7 +90,7 @@ namespace Shard
 			public void Finish(DynamicCSLogic target, EntityID parent, TimeSpan timeout)
 			{
 				if (!task.Wait(timeout))
-					throw new ExecutionException(parent, AssemblyName+": Failed to load/deserialize in "+timeout);
+					throw new ExecutionException(parent, AssemblyName+": Failed to load/deserialize in "+timeout+", after "+ watch.Elapsed);
 				target.provider = provider;
 				target.nestedLogic = instance;
 			}
