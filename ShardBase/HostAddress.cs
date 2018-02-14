@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Shard
@@ -6,6 +7,7 @@ namespace Shard
 	/// <summary>
 	/// Internet host address
 	/// </summary>
+	[Serializable]
 	public struct PeerAddress
 	{
 		public readonly string Address;
@@ -71,6 +73,7 @@ namespace Shard
 
 
 
+	[Serializable]
 	public struct ShardPeerAddress
 	{
 		public readonly ShardID ShardID;
