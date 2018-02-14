@@ -230,14 +230,17 @@ namespace Shard
 				{
 					if (lastAddress.IsEmpty)
 						TryRefreshAddress();
-					client = new TcpClient(lastAddress.Address, lastAddress.Port);
+					if (!lastAddress.IsEmpty)
+					{
+						client = new TcpClient(lastAddress.Address, lastAddress.Port);
 
-					var stream = client.GetStream();
-					stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
-					stream.Write(BitConverter.GetBytes(32), 0, 4);
-					WriteID(stream, Simulation.ID);
-					WriteID(stream, ID);
-					break;
+						var stream = client.GetStream();
+						stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
+						stream.Write(BitConverter.GetBytes(32), 0, 4);
+						WriteID(stream, Simulation.ID);
+						WriteID(stream, ID);
+						break;
+					}
 				}
 				catch (Exception)
 				{ }
