@@ -193,6 +193,28 @@ namespace Shard
 				DB.PullConfig();
 				ShardID addr = ShardID.Decode(args[at++]);
 
+
+#if DRY_RUN
+				if (addr == new ShardID())  //root
+				{
+					Log.Message("Resetting timer");
+					while (true)
+					{
+						Thread.Sleep(100);
+						var t = DB.Timing;
+						if (t == null)
+							continue;
+
+						var n = Clock.Now + TimeSpan.FromSeconds(10);
+						t.startTime = n.ToShortDateString()+" "+n.ToLongTimeString();
+						t.msStep = 1000;	//make sure we compute slowly
+						DB.Timing = t;
+						break;
+					}
+				}
+#endif
+
+
 				if ((addr >= DB.Config.extent).Any)
 					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + DB.Config.extent);
 				if ((addr < ShardID.Zero).Any)

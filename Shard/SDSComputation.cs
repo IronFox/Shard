@@ -85,8 +85,10 @@ namespace Shard
 				var oID = n.OutboundRCS;
 				if (generation >= n.OldestGeneration)
 					n.Set(oID.ToString(), new RCS.Serial( rcs,generation));
+#if !DRY_RUN
 				if (rcs.IsFullyConsistent)
 					n.OutStack.Put(generation, rcs);
+#endif
 			}
 			data.localChangeSet.FilterByTargetLocation(Simulation.MySpace,ctx);
 		}
@@ -118,10 +120,12 @@ namespace Shard
 
 			SDS rs = new SDS(generation, p2.ToArray(), ic, clientMessages);
 
+#if !DRY_RUN
 			if (!ic.AnySet)
 			{
 				DB.PutAsync(new SerialSDS( rs, Simulation.ID.XYZ ), false).Wait();
 			}
+#endif
 			Log.Message("Completed g" + Generation+" with IC ones: "+ic.OneCount);
 			return new Tuple<SDS, IntermediateSDS>( rs,data);
 		}

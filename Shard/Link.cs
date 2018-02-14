@@ -360,8 +360,10 @@ namespace Shard
 			if (oldestGeneration == newOldestGeneration)
 				return;
 			oldestGeneration = newOldestGeneration;
+#if !DRY_RUN
 			if (OutStack != null)
 				OutStack.SignalOldestGenerationUpdateAsync(Simulation.ID.ReplicaLevel, newOldestGeneration, currentTLG).Wait();
+#endif
 			Log.Message(Name + ": ->g" + newOldestGeneration);
 		}
 

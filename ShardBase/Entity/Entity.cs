@@ -245,6 +245,9 @@ namespace Shard
 
 
 					var actions = new EntityLogic.Actions(this);
+#if DRY_RUN
+					Debug.Assert(transientDeserializedLogic == null,"Should be null");
+#endif
 					state.Execute(ref actions,AddClientMessages(clientMessages), ctx.GenerationNumber, new EntityRandom(this, ctx.GenerationNumber),ctx.Ranges, locationIsInconsistent);
 					evolutionState.SignalEvolutionDone();
 
