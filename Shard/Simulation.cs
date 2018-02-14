@@ -414,7 +414,8 @@ namespace Shard
 		public static RecoveryCheck CheckMissingRCS(SDSStack.Entry sds)
 		{
 			RecoveryCheck rs = new RecoveryCheck();
-			rs.predecessorIsConsistent = sds.IntermediateSDS.inputConsistent;
+			rs.predecessorIsConsistent = stack.FindGeneration(sds.Generation - 1).IsFullyConsistent;
+				//sds.IntermediateSDS.inputConsistent;
 			rs.thisIsConsistent = sds.IsFullyConsistent;
 
 			foreach (var other in Simulation.Neighbors)
