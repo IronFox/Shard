@@ -143,18 +143,25 @@ namespace Shard
 
 		private static void Try(Func<bool> f, int numTries, int msBetweenRetries = 5000)
 		{
+			string reason;
 			for (int i = 0; i < numTries; i++)
 			{
 				try
 				{
 					if (f())
 						return;
+					else
+						reason = "Rejected";
 				}
-				catch
-				{ }
+				catch (Exception ex)
+				{
+					while (ex.InnerException != null)
+						ex = ex.InnerException;
+					reason = ex.Message;
+				}
 				if (i + 1 < numTries)
 				{
-					Log.Message("No luck. Sleeping "+ msBetweenRetries + " mseconds...");
+					Log.Message(reason+"; Sleeping "+ msBetweenRetries + " mseconds...");
 					Thread.Sleep(msBetweenRetries);
 				}
 			}
@@ -162,18 +169,25 @@ namespace Shard
 
 		private static async Task<bool> TryAsync(Func<Task<bool>> f, int numTries, int msBetweenRetries = 5000)
 		{
+			string reason;
 			for (int i = 0; i < numTries; i++)
 			{
 				try
 				{
 					if (await f())
 						return true;
+					else
+						reason = "Rejected";
 				}
-				catch
-				{ }
+				catch (Exception ex)
+				{
+					while (ex.InnerException != null)
+						ex = ex.InnerException;
+					reason = ex.Message;
+				}
 				if (i + 1 < numTries)
 				{
-					Log.Message("No luck. Sleeping " + msBetweenRetries + " mseconds...");
+					Log.Message(reason+"; Sleeping " + msBetweenRetries + " mseconds...");
 					await Task.Delay(msBetweenRetries);
 				}
 			}
@@ -201,13 +215,12 @@ namespace Shard
 
 		public static void PullConfig(int numTries = 3)
 		{
-			Try(() =>
+			TryAsync(async () =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
-				var job = controlStore.GetByIdAsync<ConfigContainer>("config");
-				Config = job.Result;
+				Config = await controlStore.GetByIdAsync<ConfigContainer>("config");
 				return Config != null;
-			}, numTries);
+			}, numTries).Wait();
 
 			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer());
 			timingPoller.Start(controlStore, "timing");
@@ -580,9 +593,10 @@ namespace Shard
 
 					OnPutRCS?.Invoke(stack.Entries[at], generation);
 
-					if (rcsStore == null)	//for testing: DB not initialized. Return modified stack for replacement
-						return stack;
 #if !DRY_RUN
+					if (rcsStore == null)	//for testing: DB not initialized. Return modified stack for replacement
+#endif
+						return stack;
 					for (int i = 0; i < 10; i++)
 					{
 						try
@@ -597,9 +611,6 @@ namespace Shard
 						}
 					};
 					throw new Exception("Failed to update local RCS 10 times");
-#else
-					return stack;
-#endif
 				});
 			}
 			
