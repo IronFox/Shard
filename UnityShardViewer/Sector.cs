@@ -356,6 +356,7 @@ namespace UnityShardViewer
 					if (obj.hideFlags == HideFlags.HideAndDontSave)
 						continue;
 					obj.hideFlags = HideFlags.HideAndDontSave;
+					obj.GetComponent<Renderer>().enabled = false;
 
 					if (!availableEntityObjects.ContainsKey(obj.name))
 						availableEntityObjects.Add(obj.name, obj);
@@ -394,6 +395,7 @@ namespace UnityShardViewer
 						if (obj == null)
 							Debug.LogError("Object " + key + " is null. Bad shit will happen");
 						obj.hideFlags = HideFlags.None;
+						obj.GetComponent<Renderer>().enabled = true;
 						prev = obj.transform.position;
 						reused++;
 					}
