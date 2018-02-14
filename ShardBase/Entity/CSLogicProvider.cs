@@ -136,6 +136,8 @@ namespace Shard
 			}
 			catch (ExecutionException ex)
 			{
+				if (constructor != null)
+					throw new ExecutionException(currentState.ID, constructor.AssemblyName + "." + constructor.LogicName + ": " + ex.Message, ex);
 				throw new ExecutionException(currentState.ID, provider.AssemblyName + "." + nestedLogic.GetType() + ": " + ex.Message, ex);
 			}
 		}
