@@ -13,7 +13,7 @@ namespace Shard
 			get
 			{
 				var t = Clock.Now;
-				return t.ToLongTimeString()+":"+t.Millisecond;
+				return t.ToLongTimeString()+"."+t.Millisecond;
 			}
 		}
 
