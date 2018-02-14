@@ -186,6 +186,11 @@ namespace Shard
 			{
 				return timingPoller.Latest;
 			}
+			set
+			{
+				value._id = timingPoller.ID;
+				PutAsync(null, controlStore, value, true).Wait();
+			}
 		}
 
 
@@ -281,6 +286,8 @@ namespace Shard
 					return lastQueriedValue;
 				}
 			}
+
+			public string ID { get { return id; } }
 
 			//public async Task<T> GetLatestAsync()
 			//{
@@ -672,8 +679,11 @@ namespace Shard
 			}
 			catch (MyCouchResponseException)
 			{
-				var e2 = store.GetByIdAsync(e._id);	//if we get here, then the copy script has rejected our data => read data must be newer
-				Simulation.FetchIncoming(lnk, e2);
+				if (lnk != null)
+				{
+					var e2 = store.GetByIdAsync(e._id); //if we get here, then the copy script has rejected our data => read data must be newer
+					Simulation.FetchIncoming(lnk, e2);
+				}
 			}
 		}
 
