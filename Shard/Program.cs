@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -180,6 +181,14 @@ namespace Shard
 				}
 
 
+				Log.Message("Setting up clock");
+				Clock.NTPHost = "uhr.uni-trier.de";
+
+				while (Clock.NumQueries < 1)
+				{
+					Thread.Sleep(100);
+				}
+				Log.Message("Starting up");
 
 				DB.PullConfig();
 				ShardID addr = ShardID.Decode(args[at++]);
