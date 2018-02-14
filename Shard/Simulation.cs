@@ -166,7 +166,11 @@ namespace Shard
 
 		public static void FetchNeighborUpdate(SDSStack.Entry target, Link neighbor, RCS.SerialData data)
 		{
-			var candidate = new RCS(data);
+			FetchNeighborUpdate(target,neighbor,new RCS(data));
+		}
+
+		public static void FetchNeighborUpdate(SDSStack.Entry target, Link neighbor, RCS candidate)
+		{
 			var existing = target.InboundRCS[neighbor.LinearIndex];
 			bool significant = existing != null && candidate.IC.OneCount < existing.IC.OneCount;
 			if (existing != null && candidate.IC.OneCount > existing.IC.OneCount)
@@ -468,6 +472,11 @@ namespace Shard
 
 		internal static void FetchIncoming(Link lnk, object obj)
 		{
+			if (obj is RCS.Serial)
+			{
+				var r = (RCS.Serial)obj;
+				obj = new Tuple<int, RCS>(r.Generation, new RCS(r.Data));
+			}
 			incoming.Add(new Tuple<Link, object>(lnk, obj));
 		}
 
@@ -501,6 +510,17 @@ namespace Shard
 							return true;
 						});
 					}
+					return;
+				}
+				if (obj is Tuple<int, RCS>)
+				{
+					var rcs = (Tuple<int, RCS>)obj;
+					if (rcs.Item1 <= stack.NewestConsistentSDSGeneration)
+					{
+						Log.Error("RCS update from sibling " + lnk + ": Rejected. Already moved past generation " + rcs.Item1);
+						return;
+					}
+					FetchNeighborUpdate(stack.AllocateGeneration(rcs.Item1), lnk, rcs.Item2);
 					return;
 				}
 				if (obj is RCS.Serial)

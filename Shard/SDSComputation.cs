@@ -84,7 +84,7 @@ namespace Shard
 				RCS rcs = new RCS(new EntityChangeSet(data.localChangeSet, n.WorldSpace,ctx), ic);
 				var oID = n.OutboundRCS;
 				if (generation >= n.OldestGeneration)
-					n.Set(oID.ToString(), rcs);
+					n.Set(oID.ToString(), new RCS.Serial( rcs,generation));
 				if (rcs.IsFullyConsistent)
 					n.OutStack.Put(generation, rcs);
 			}
