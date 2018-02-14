@@ -136,20 +136,20 @@ namespace Shard
 		public static Link FindLink(ShardID id)
 		{
 			if (id.XYZ == ID.XYZ)
-				return siblings.Find(id);
-			return neighbors.Find(id);
+				return siblings?.Find(id);
+			return neighbors?.Find(id);
 		}
 		public static Link FindLink(PeerAddress addr)
 		{
-			var s = siblings.Find(addr);
+			var s = siblings?.Find(addr);
 			if (s == null)
-				s = neighbors.Find(addr);
+				s = neighbors?.Find(addr);
 			return s;
 		}
 
 		public static bool NeighborExists(Int3 coordinates)
 		{
-			return neighbors.Find(coordinates) != null;
+			return neighbors?.Find(coordinates) != null;
 		}
 
 
