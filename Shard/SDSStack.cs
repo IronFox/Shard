@@ -17,6 +17,7 @@ namespace Shard
 			public bool IsFullyConsistent;
 			public readonly RCS[] InboundRCS = new RCS[Simulation.NeighborCount];
 			public bool SignificantInboundChange { get; set; }
+			public bool IsFinished => SDS != null && SDS.IsSet;
 
 			public Entry(int generation)
 			{
@@ -76,7 +77,7 @@ namespace Shard
 				lock (this)
 				{
 					int at = sdsList.Count - 1;
-					while (at > 0 && !sdsList[at].SDS.IsSet)
+					while (at > 0 && !sdsList[at].IsFinished)
 						at--;
 					return sdsList[at].SDS;
 				}
