@@ -200,7 +200,7 @@ namespace Shard
 		{
 			lock (this)
 			{
-				if (entry.Generation >= NewestRegisteredSDSGeneration)
+				if (entry.Generation >= NewestRegisteredSDSGeneration && entry.IsFinished)
 					ObservationLink.SignalUpdate(entry.SDS);
 
 				if (entry.Generation > NewestRegisteredSDSGeneration)
