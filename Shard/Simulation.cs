@@ -193,6 +193,15 @@ namespace Shard
 
 		private static ConcurrentBag<Tuple<Link, object>> incoming = new ConcurrentBag<Tuple<Link, object>>();
 
+		private static void UpdateTitle(string title)
+		{
+			try
+			{
+				Console.Title = title;
+			}
+			catch	//as it turns out, this operation can throw very odd exceptions. Just ignore for now
+			{ }
+		}
 
 		public static void Run(ShardID myID)
 		{
@@ -259,7 +268,7 @@ namespace Shard
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestFinishedSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
-				Console.Title = "Catching up g" + stack.NewestFinishedSDSGeneration + "/" + TimingInfo.Current.TopLevelGeneration;
+				UpdateTitle("Catching up g" + stack.NewestFinishedSDSGeneration + "/" + TimingInfo.Current.TopLevelGeneration);
 				//Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
 				Console.Write(".");
 				Console.Out.Flush();
@@ -283,11 +292,12 @@ namespace Shard
 				Log.Minor("TLG "+stack.NewestFinishedSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 				{
 					var newest = stack.NewestFinishedSDS;
-					Console.Title = ID+" g" + newest.Generation + " " + (float)(newest.IC.Size.Product - newest.IC.OneCount)*100/ newest.IC.Size.Product+"% consistent";
+					string title  = ID+" g" + newest.Generation + " " + (float)(newest.IC.Size.Product - newest.IC.OneCount)*100/ newest.IC.Size.Product+"% consistent";
 					var con = stack.NewestConsistentSDS;
 					if (con != newest)
-						Console.Title += ", newest consistent at g" + con.Generation;
-					Console.Title += ", " + timing.LatestStepIndex;
+						title += ", newest consistent at g" + con.Generation;
+					title += ", " + timing.LatestStepIndex;
+					UpdateTitle(title);
 				}
 
 				int newestSDSGeneration = stack.NewestFinishedSDSGeneration;
