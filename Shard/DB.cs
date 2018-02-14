@@ -582,6 +582,7 @@ namespace Shard
 
 					if (rcsStore == null)	//for testing: DB not initialized. Return modified stack for replacement
 						return stack;
+#if !DRY_RUN
 					for (int i = 0; i < 10; i++)
 					{
 						try
@@ -596,6 +597,9 @@ namespace Shard
 						}
 					};
 					throw new Exception("Failed to update local RCS 10 times");
+#else
+					return stack;
+#endif
 				});
 			}
 			

@@ -92,10 +92,8 @@ namespace Shard
 				}
 				else
 					Log.Error("Recomputed generation, but remote shard will not want generated RCS");
-#if !DRY_RUN
 				if (rcs.IsFullyConsistent)
 					n.OutStack.Put(generation, rcs);
-#endif
 			}
 			data.localChangeSet.FilterByTargetLocation(Simulation.MySpace,ctx);
 		}
