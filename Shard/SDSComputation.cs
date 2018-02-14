@@ -38,6 +38,8 @@ namespace Shard
 			SDSStack.Entry input = stack.FindGeneration(generation - 1);
 			if (input == null)
 				throw new IntegrityViolation("Unable to locate previous SDS at generation " + (generation-1));
+			if (!input.IsFinished)
+				throw new IntegrityViolation("Previous SDS at generation " + (generation - 1)+" exists but is not finished");
 
 			//if (input.Generation != generation-1)
 			//	throw new IntegrityViolation("Generation mismatch");

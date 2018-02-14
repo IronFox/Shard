@@ -257,16 +257,18 @@ namespace Shard
 			SimulationContext ctx = new SimulationContext();
 
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
-			while (stack.NewestRegisteredSDSGeneration < TimingInfo.Current.TopLevelGeneration)
+			while (stack.NewestFinishedSDSGeneration < TimingInfo.Current.TopLevelGeneration)
 			{
-				Console.Title = "Catching up g" + stack.NewestRegisteredSDSGeneration + "/" + TimingInfo.Current.TopLevelGeneration;
+				Console.Title = "Catching up g" + stack.NewestFinishedSDSGeneration + "/" + TimingInfo.Current.TopLevelGeneration;
 				//Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
 				Console.Write(".");
 				Console.Out.Flush();
-				int nextGen = stack.NewestRegisteredSDSGeneration + 1;
+				int nextGen = stack.NewestFinishedSDSGeneration + 1;
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
+				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
+				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
 			}
 			Log.Message("done. Starting main loop...");
@@ -278,37 +280,53 @@ namespace Shard
 			{
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration);
-				Log.Minor("TLG "+stack.NewestRegisteredSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
+				Log.Minor("TLG "+stack.NewestFinishedSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 				{
 					var newest = stack.NewestFinishedSDS;
 					Console.Title = ID+" g" + newest.Generation + " " + (float)(newest.IC.Size.Product - newest.IC.OneCount)*100/ newest.IC.Size.Product+"% consistent";
 					var con = stack.NewestConsistentSDS;
 					if (con != newest)
 						Console.Title += ", newest consistent at g" + con.Generation;
+					Console.Title += ", " + timing.LatestStepIndex;
 				}
 
+				int newestSDSGeneration = stack.NewestFinishedSDSGeneration;
+				if (comp == null)
+				{
+					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
+					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
+					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
+				}
 				if (comp != null)
 				{
-					if (Clock.Now >= comp.Deadline)
+					if (Clock.Now >= comp.Deadline || (timing.TopLevelGeneration != newestSDSGeneration && timing.TopLevelGeneration > comp.Generation))
 					{
 						stack.Insert(comp.Complete());
 						comp = null;
+						newestSDSGeneration = stack.NewestFinishedSDSGeneration;
+						Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
+						Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
+						Debug.Assert(stack.NewestConsistentSDSIndex != -1);
 					}
 					else
 					{
-						Clock.SleepUntil(comp.Deadline);
+						if (timing.TopLevelGeneration == newestSDSGeneration)
+							Clock.SleepUntil(comp.Deadline);
 						continue;
 					}
 				}
 
-				int newestSDSGeneration = stack.NewestRegisteredSDSGeneration;
 				if (timing.TopLevelGeneration > newestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
+					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
+					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
+					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
 					int nextGen = newestSDSGeneration + 1;
 					Log.Minor("Processing next TLG g" + nextGen);
-					stack.Append(new SDS(nextGen));
+					stack.Insert(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
+					Debug.Assert(comp == null);
 					comp = new SDSComputation(timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
 				}
 				else
@@ -335,11 +353,12 @@ namespace Shard
 							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
+							Debug.Assert(comp == null);
 							comp = new SDSComputation(timing.NextStepDeadline, ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}
-					if (comp == null)
+					if (comp == null && timing.TopLevelGeneration == newestSDSGeneration)
 					{
 						//nothing to recover
 						Log.Minor("Nothing to do");
@@ -394,7 +413,7 @@ namespace Shard
 				if (inbound != null && inbound.IsFullyConsistent)
 					continue;
 				//try get from database:
-				SerialRCSStack rcsStack = DB.TryGet(other.InboundRCS);
+				SerialRCSStack rcsStack = DB.TryGet(other.InboundRCSStackID);
 				var rcs = rcsStack?.FindGeneration(sds.Generation);
 				if (rcs.HasValue)
 				{
@@ -474,8 +493,11 @@ namespace Shard
 		{
 			if (obj is RCS.Serial)
 			{
+				//Stopwatch w = Stopwatch.StartNew();
 				var r = (RCS.Serial)obj;
 				obj = new Tuple<int, RCS>(r.Generation, new RCS(r.Data));
+				//var t = w.Elapsed;
+				//Log.Message(lnk.Name + ": Translated incoming RCS in " + t);
 			}
 			incoming.Add(new Tuple<Link, object>(lnk, obj));
 		}
