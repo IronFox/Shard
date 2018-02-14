@@ -97,8 +97,15 @@ namespace Shard
 			await logicStore.SetAsync(data._id, serial);
 		}
 
+		private static ConcurrentDictionary<string, CSLogicProvider> directProviderMap = new ConcurrentDictionary<string, CSLogicProvider>();
+
 		public static async Task<CSLogicProvider> GetLogicProviderAsync(string scriptName)
 		{
+			CSLogicProvider prov;
+			if (directProviderMap.TryGetValue(scriptName, out prov))
+				return prov;
+
+
 			if (LogicLoader != null)
 			{
 				var logic = await LogicLoader(scriptName);
@@ -107,7 +114,11 @@ namespace Shard
 			}
 
 			var script = await logicStore.GetByIdAsync<SerialCSLogicProvider>(scriptName);
-			return await script.DeserializeAsync();
+			prov = await script.DeserializeAsync();
+#if !DRY_RUN
+			directProviderMap.TryAdd(scriptName, prov);
+#endif
+			return prov;
 		}
 
 		public static void Connect(PeerAddress host, string username = null, string password = null)
