@@ -23,10 +23,10 @@ namespace UnityShardViewer
 		/// <summary>
 		/// 
 		/// </summary>
-		public string rootHost;
+		public PeerAddress rootHost;
 
 
-		Dictionary<string, Sector> sectors = new Dictionary<string, Sector>();
+		Dictionary<PeerAddress, Sector> sectors = new Dictionary<PeerAddress, Sector>();
 
 
 
@@ -36,14 +36,14 @@ namespace UnityShardViewer
 			
 		}
 
-		public void AddSector(string host, ShardID id)
+		public void AddSector(PeerAddress host, ShardID id)
 		{
 			AddSector(host);	//ignore id for now
 		}
 
-		public void AddSector(string host)
+		public void AddSector(PeerAddress host)
 		{
-			GameObject sec = new GameObject(host);
+			GameObject sec = new GameObject(host.ToString());
 			sec.transform.parent = transform;
 			Sector s = sec.AddComponent<Sector>();
 			s.CubePrototype = cubePrototype;
@@ -57,8 +57,8 @@ namespace UnityShardViewer
 			};
 			s.OnNewNeighbor = h =>
 			{
-				if (!sectors.ContainsKey(h.Host))
-					AddSector(h.Host,h.ShardID);
+				if (!sectors.ContainsKey(h.Address))
+					AddSector(h.Address,h.ShardID);
 			};
 
 		}

@@ -55,7 +55,7 @@ namespace UnityShardViewer
 		private bool stop = false;
 		private void ThreadMain()
 		{
-			if (lastHost == null)
+			if (lastHost.IsEmpty)
 				return;
 			Debug.Log("Sector: Thread active");
 
@@ -65,7 +65,7 @@ namespace UnityShardViewer
 				{
 					try
 					{
-						client = new TcpClient(lastHost, 16234);
+						client = new TcpClient(lastHost.Address, lastHost.Port);
 						var stream = new LZ4.LZ4Stream(client.GetStream(), LZ4.LZ4StreamMode.Decompress);
 						var f = new BinaryFormatter();
 						CSLogicProvider.AsyncFactory = ResolveProvider;
@@ -93,9 +93,9 @@ namespace UnityShardViewer
 									entry.SetResult(prov);
 								Debug.Log("Sector: Added new provider " + prov.AssemblyName);
 							}
-							else if (obj is PublicHostReference)
+							else if (obj is ShardPeerAddress)
 							{
-								var h = (PublicHostReference)obj;
+								var h = (ShardPeerAddress)obj;
 								newNeighbors.Add(h);
 							}
 							else if (obj is SDS)
@@ -158,7 +158,7 @@ namespace UnityShardViewer
 		}
 
 
-		private string lastHost = null;
+		private PeerAddress lastHost;
 
 		private TcpClient client;
 
@@ -183,7 +183,7 @@ namespace UnityShardViewer
 			//client = null;
 		}
 
-		public string Host
+		public PeerAddress Host
 		{
 			get
 			{
@@ -193,7 +193,7 @@ namespace UnityShardViewer
 			{
 				if (lastHost == value)
 					return;
-				if (lastHost != null)
+				if (!lastHost.IsEmpty)
 					AbortConnection();
 				lastHost = value;
 				if (started)
@@ -290,25 +290,24 @@ namespace UnityShardViewer
 
 		public Action<ShardID> onNewID;
 
-		public Action<PublicHostReference> OnNewNeighbor { get; internal set; }
+		public Action<ShardPeerAddress> OnNewNeighbor { get; internal set; }
 
 		public const float Scale = 100;
 
 		private Dictionary<string, GameObject> availableEntityObjects = new Dictionary<string, GameObject>();
-		private Dictionary<string, Queue<GameObject>> availableGeometryObjects = new Dictionary<string, Queue<GameObject>>();
 
-		private ConcurrentBag<PublicHostReference> newNeighbors = new ConcurrentBag<PublicHostReference>();
+		private ConcurrentBag<ShardPeerAddress> newNeighbors = new ConcurrentBag<ShardPeerAddress>();
 
 		private int updateNo = 0;
 		// Update is called once per frame
 		public void Update()
 		{
 			{
-				PublicHostReference t;
+				ShardPeerAddress t;
 				while (newNeighbors.TryTake(out t))
 				{
 					Debug.Log(name + ": received neighbor update: " + t);
-					OnNewNeighbor(t);
+					OnNewNeighbor(new ShardPeerAddress(t.ShardID, new PeerAddress(t.Address.Address, t.Address.Port - 1000)));
 				}
 			}
 			
@@ -343,80 +342,64 @@ namespace UnityShardViewer
 
 				SDS source = SDS;
 				//Debug.Log("Sector: got "+transform.childCount+" children");
+				LazyList<GameObject> toDestroy = new LazyList<GameObject>();
 				foreach (Transform child in transform)
 				{
-					if (child.name == "cube")
+					var obj = child.gameObject;
+					if (obj.name == "cube")
 					{
 						//Debug.Log("Sector: got cube");
 						continue;
 					}
-					child.gameObject.hideFlags = HideFlags.HideAndDontSave;
-					foreach (Transform sub in child)
-					{
-						sub.gameObject.hideFlags = HideFlags.HideAndDontSave;
-						availableGeometryObjects.GetOrCreate(sub.name).Enqueue(sub.gameObject);
-						//availableEntityObjects.Enqueue(sub.gameObject);
-					}
+					if (obj.hideFlags == HideFlags.HideAndDontSave)
+						continue;
+					obj.hideFlags = HideFlags.HideAndDontSave;
 
-					if (!availableEntityObjects.ContainsKey(child.name))
-						availableEntityObjects.Add(child.name, child.gameObject);
+					if (!availableEntityObjects.ContainsKey(obj.name))
+						availableEntityObjects.Add(obj.name, obj);
 					else
 					{
-						Destroy(child.gameObject);
+						toDestroy.Add(obj);
 					}
 				}
+				foreach (var obj in toDestroy)
+				{
+					if (availableEntityObjects.ContainsValue(obj))
+						Debug.LogError("Object "+obj.name+" still in use");
+					else
+						Destroy(obj);
+				}
+
+
 				//Debug.Log("Sector: recovered " + availableEntityObjects.Count + " objects");
 				int reused = 0;
 				foreach (var e in source.FinalEntities)
 				{
 					GameObject obj;
+					var next = Convert(e.ID.Position) * Scale;
+					Vector3 prev = next;
 					string key = e.ID.Guid.ToString();
 					if (!availableEntityObjects.ContainsKey(key))
 					{
 						obj = entityPrototype != null ? Instantiate(entityPrototype, transform) : new GameObject();
 						obj.transform.parent = transform;
+						obj.name = key;
 					}
 					else
 					{
 						obj = availableEntityObjects[key];
 						availableEntityObjects.Remove(key);
+						if (obj == null)
+							Debug.LogError("Object " + key + " is null. Bad shit will happen");
 						obj.hideFlags = HideFlags.None;
+						prev = obj.transform.position;
 						reused++;
 					}
-					obj.name = e.ID.Guid.ToString();
 					var c = obj.GetComponent<EntityComponent>();
 					if (c == null)
 						c = obj.AddComponent<EntityComponent>();
-					var next = Convert(e.ID.Position) * Scale;
-					c.SetState(obj.transform.position, next, timeDelta);
+					c.SetState(prev, next, timeDelta);
 					obj.transform.position = next;
-					foreach (var app in e.Appearances)
-					{
-						GeometricAppearance g = app as GeometricAppearance;
-						if (g != null)
-						{
-							GameObject inst = null;
-							if (availableGeometryObjects.ContainsKey(g.geometryName))
-							{
-								var queue = availableGeometryObjects[g.geometryName];
-								if (queue.Count > 0)
-									inst = queue.Dequeue();
-							}
-							if (inst == null)
-							{
-								inst = (GameObject)Instantiate(Resources.Load(g.geometryName), obj.transform);
-								inst.name = g.geometryName;
-							}
-							else
-							{
-								inst.transform.parent = obj.transform;
-								inst.transform.localPosition = Vector3.zero;
-								inst.hideFlags = HideFlags.None;
-							}
-							Matrix4x4 matrix = Convert(g.orientation);
-							inst.transform.rotation = Quaternion.LookRotation(matrix.GetColumn(2), matrix.GetColumn(1));
-						}
-					}
 				}
 				//Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);
 			}
