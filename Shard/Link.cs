@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.Serialization;
 
 namespace Shard
 {
@@ -428,9 +429,30 @@ namespace Shard
 					OnData(this, formatter.Deserialize(stream));
 				}
 			}
+			catch (IOException ex)
+			{
+				Log.Error(Name + ": "+ex.Message+". Closing link");
+				client.Close();
+			}
+			catch (ArgumentException ex)
+			{
+				Log.Error(Name + ": " + ex.Message + ". Closing link");
+				client.Close();
+			}
+			catch (SerializationException)
+			{
+				Log.Error(Name+": Serialization exception. Closing link");
+				client.Close();
+			}
+			catch (SocketException)
+			{
+				Log.Error(Name + ": Socket exception. Closing link");
+				client.Close();
+			}
 			catch (Exception ex)
 			{
 				Log.Error(ex);
+				Log.Error(Name + ": Closing link");
 				client.Close();
 			}
 			onComm.Reset();
