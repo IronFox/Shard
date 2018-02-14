@@ -469,9 +469,15 @@ namespace Shard
 				client.Close();
 			}
 			onComm.Reset();
-			TryRefreshAddress();
 			if (IsActive)
+			{
+				Thread.Sleep(1000);
+				TryRefreshAddress();
 				StartConnectionThread();
+			}
+			else
+				TryRefreshAddress();
+
 		}
 
 		public void ClearOutData()
