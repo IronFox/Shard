@@ -82,7 +82,7 @@ namespace Shard
 				IntBox remoteBox = n.ICExportRegion;
 				var ic = untrimmed.Sub(remoteBox);
 				RCS rcs = new RCS(new EntityChangeSet(data.localChangeSet, n.WorldSpace,ctx), ic);
-				var oID = n.OutboundRCS;
+				var oID = n.GetOutboundRCSID(Generation);
 				if (generation >= n.OldestGeneration)
 					n.Set(oID.ToString(), new RCS.Serial( rcs,generation));
 #if !DRY_RUN

@@ -106,18 +106,18 @@ namespace Shard
 
 		public bool IsFullyConsistent { get { return !IC.AnySet; } }
 
-		public struct ID
+		public struct StackID
 		{
 			public readonly Int3 FromShard, ToShard;
 			public const int ExportInts = 6;
 
-			public ID(Int3 fromShard, Int3 toShard)
+			public StackID(Int3 fromShard, Int3 toShard)
 			{
 				FromShard = fromShard;
 				ToShard = toShard;
 			}
 
-			public ID(int[] numericID, int offset)
+			public StackID(int[] numericID, int offset)
 			{
 				FromShard = new Int3(numericID, offset);
 				ToShard = new Int3(numericID, offset + 3);
@@ -129,9 +129,9 @@ namespace Shard
 			}
 
 			public override int GetHashCode() => (FromShard.GetHashCode() * 31 + ToShard.GetHashCode());
-			public static bool operator ==(ID a, ID b) => a.FromShard == b.FromShard && a.ToShard == b.ToShard;
-			public static bool operator !=(ID a, ID b) => !(a == b);
-			public override bool Equals(object obj) => (obj is ID) && ((ID)obj) == (this);
+			public static bool operator ==(StackID a, StackID b) => a.FromShard == b.FromShard && a.ToShard == b.ToShard;
+			public static bool operator !=(StackID a, StackID b) => !(a == b);
+			public override bool Equals(object obj) => (obj is StackID) && ((StackID)obj) == (this);
 
 			public void Export(int[] ar, int offset)
 			{
@@ -148,6 +148,59 @@ namespace Shard
 				}
 			}
 		}
+
+		public struct GenID
+		{
+			public readonly StackID StackID;
+			public readonly int Generation;
+			public const int ExportInts = 7;
+
+			public GenID(Int3 fromShard, Int3 toShard, int generation)
+			{
+				StackID = new StackID(fromShard, toShard);
+				Generation = generation;
+			}
+			public GenID(StackID id, int generation)
+			{
+				StackID = id;
+				Generation = generation;
+			}
+
+			public GenID(int[] numericID, int offset)
+			{
+				StackID = new StackID(numericID, offset);
+				Generation = numericID[offset + 6];
+			}
+
+			public override string ToString()
+			{
+				return StackID + " g" + Generation;
+			}
+
+			public override int GetHashCode()
+			{
+				return new Helper.HashCombiner(GetType()).Add(StackID).Add(Generation).GetHashCode();
+			}
+			public static bool operator ==(GenID a, GenID b) => a.StackID == b.StackID && a.Generation == b.Generation;
+			public static bool operator !=(GenID a, GenID b) => !(a == b);
+			public override bool Equals(object obj) => (obj is GenID) && ((GenID)obj) == (this);
+
+			public void Export(int[] ar, int offset)
+			{
+				StackID.Export(ar, offset);
+				ar[offset + 6] = Generation;
+			}
+			public int[] IntArray
+			{
+				get
+				{
+					int[] rs = new int[ExportInts];
+					Export(rs, 0);
+					return rs;
+				}
+			}
+		}
+
 
 		public SerialData Export()
 		{

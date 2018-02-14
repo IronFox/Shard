@@ -167,7 +167,7 @@ namespace Shard
 		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(DB.TryGet(id),isActive,linearIndex,isSibling)
 		{
 			ID = id;
-			OutStack = new DB.RCSStack(OutboundRCS);
+			OutStack = new DB.RCSStack(OutboundRCSStackID);
 		}
 
 		public Link(PeerAddress remoteHost, bool isActive, int linearIndex, bool isSibling)
@@ -195,21 +195,28 @@ namespace Shard
 			connectThread.Start();
 		}
 
-		public RCS.ID InboundRCS
+		public RCS.StackID InboundRCSStackID
 		{
 			get
 			{
-				return new RCS.ID(ID.XYZ, Simulation.ID.XYZ);
+				return new RCS.StackID(ID.XYZ, Simulation.ID.XYZ);
 			}
 		}
 
-		public RCS.ID OutboundRCS
+		public RCS.StackID OutboundRCSStackID
 		{
 			get
 			{
-				return new RCS.ID(Simulation.ID.XYZ, ID.XYZ);
+				return new RCS.StackID(Simulation.ID.XYZ, ID.XYZ);
 			}
 		}
+
+		public RCS.GenID GetOutboundRCSID(int gen)
+		{
+			return new RCS.GenID(OutboundRCSStackID, gen);
+		}
+
+
 
 		private bool dispose = false;
 

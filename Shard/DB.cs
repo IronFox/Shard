@@ -412,15 +412,15 @@ namespace Shard
 		}
 
 
-		private static MappedContinuousLookup<RCS.ID, SerialRCSStack> rcsRequests = new MappedContinuousLookup<RCS.ID, SerialRCSStack>();
+		private static MappedContinuousLookup<RCS.StackID, SerialRCSStack> rcsRequests = new MappedContinuousLookup<RCS.StackID, SerialRCSStack>();
 		private static MappedContinuousLookup<ShardID, AddressEntry> hostRequests = new MappedContinuousLookup<ShardID, AddressEntry>();
 
-		public static void BeginFetch(RCS.ID id)
+		public static void BeginFetch(RCS.StackID id)
 		{
 			rcsRequests.BeginFetch(rcsStore, id);
 		}
 
-		public static SerialRCSStack TryGet(RCS.ID id)
+		public static SerialRCSStack TryGet(RCS.StackID id)
 		{
 			return rcsRequests.TryGet(rcsStore, id);
 		}
@@ -439,7 +439,7 @@ namespace Shard
 		}
 
 
-		public static void BeginFetch(IEnumerable<RCS.ID> ids)
+		public static void BeginFetch(IEnumerable<RCS.StackID> ids)
 		{
 			foreach (var id in ids)
 				BeginFetch(id);
@@ -463,7 +463,7 @@ namespace Shard
 			SemaphoreSlim stateLock = new SemaphoreSlim(1); //protects lastKnownState
 
 
-			public AsyncRCSStack(RCS.ID id)
+			public AsyncRCSStack(RCS.StackID id)
 			{
 				state._id = id.ToString();
 				state.NumericID = id.IntArray;
@@ -507,12 +507,12 @@ namespace Shard
 		{
 			AsyncRCSStack lastKnownState;
 			Task rcsPutTask;
-			readonly RCS.ID myID;
+			readonly RCS.StackID myID;
 
 			public Action<RCS.SerialData, int> OnPutRCS { get; set; } = null;
 
 
-			public RCSStack(RCS.ID id)
+			public RCSStack(RCS.StackID id)
 			{
 				lastKnownState = new AsyncRCSStack(id);
 				myID = id;

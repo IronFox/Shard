@@ -251,7 +251,7 @@ namespace Shard
 
 			{
 				foreach (var link in neighbors)
-					DB.BeginFetch(link.InboundRCS);
+					DB.BeginFetch(link.InboundRCSStackID);
 			}
 
 			SimulationContext ctx = new SimulationContext();

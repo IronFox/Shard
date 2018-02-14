@@ -69,9 +69,9 @@ namespace Shard.Tests
 
 		}
 
-		private static RCS.ID RandomRCSID()
+		private static RCS.StackID RandomRCSID()
 		{
-			return new RCS.ID(random.NextInt3(0, 10), random.NextInt3(0, 10));
+			return new RCS.StackID(random.NextInt3(0, 10), random.NextInt3(0, 10));
 		}
 
 		public static SDS RandomSDS()
