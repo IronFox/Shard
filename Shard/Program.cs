@@ -198,7 +198,7 @@ namespace Shard
 				if ((addr < ShardID.Zero).Any)
 					throw new ArgumentOutOfRangeException("addr", addr, "Is (partially) negative");
 
-				Simulation.Init(addr);
+				Simulation.Run(addr);
 			}
 			catch (Exception ex)
 			{

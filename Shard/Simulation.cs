@@ -190,10 +190,10 @@ namespace Shard
 		private static ConcurrentBag<Tuple<Link, object>> incoming = new ConcurrentBag<Tuple<Link, object>>();
 
 
-		public static void Init(ShardID addr)
+		public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
-			Configure(addr, DB.Config,false);
+			Configure(myID, DB.Config,false);
 
 			AdvertiseOldestGeneration(0);
 
@@ -208,7 +208,7 @@ namespace Shard
 					IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
 					localIP = endPoint.Address.ToString();
 				}
-				var address = new ShardPeerAddress(addr, new PeerAddress(localIP, listener.Port));
+				var address = new ShardPeerAddress(myID, new PeerAddress(localIP, listener.Port));
 				Log.Message("Publishing address: "+address);
 				DB.PutNow(address, true);
 			}
@@ -220,7 +220,7 @@ namespace Shard
 			SDS sds;
 			while (true)
 			{
-				var data = DB.Begin(addr.XYZ);
+				var data = DB.Begin(myID.XYZ);
 				if (data != null)
 				{
 					sds = data.Deserialize();
