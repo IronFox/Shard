@@ -213,7 +213,7 @@ namespace Shard
 				DB.PutNow(address, true);
 			}
 
-			observationListener = new ObservationLink.Listener();
+			observationListener = new ObservationLink.Listener(listener.Port - 1000);
 
 			Log.Message("Polling SDS state...");
 

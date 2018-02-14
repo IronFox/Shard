@@ -21,7 +21,7 @@ namespace Shard
 	/// </summary>
 	public class ObservationLink
 	{
-		public static int Port { get; set; } = 16234;
+		//public static int Port { get; set; } = 15235;
 
 		public class Listener : IDisposable
 		{
@@ -30,10 +30,10 @@ namespace Shard
 
 			public Action<ObservationLink> OnNewLink { get; set; }
 
-			public Listener()
+			public Listener(int port)
 			{
-				Log.Message("Starting observation link listener on part "+Port);
-				server = new TcpListener(IPAddress.Any, Port);
+				Log.Message("Starting observation link listener on port "+port);
+				server = new TcpListener(IPAddress.Any, port);
 				server.Start();
 				listenerThread = new Thread(new ThreadStart(Listen));
 				listenerThread.Start();
