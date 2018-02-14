@@ -13,6 +13,7 @@ namespace Shard
 		public const int BitsPerEntry = BytesPerEntry*8;
 		public const uint HighestBit = (1u << (BitsPerEntry - 1));
 
+		[Serializable]
 		public struct DBSerial
 		{
 			public int width, height, depth;

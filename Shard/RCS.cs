@@ -17,6 +17,7 @@ namespace Shard
 
 		public readonly EntityChangeSet CS;
 
+		[Serializable]
 		public struct SerialData
 		{
 			public byte[] CS { get; set; }
@@ -50,10 +51,11 @@ namespace Shard
 			}
 		}
 
+		[Serializable]
 		public class Serial
 		{
-			public readonly SerialData Data;
-			public readonly int Generation;
+			public SerialData Data { get; set; }
+			public int Generation { get; set; }
 
 			public Serial(RCS rcs, int generation)
 			{
