@@ -193,11 +193,16 @@ namespace Shard
 
 		private static ConcurrentBag<Tuple<Link, object>> incoming = new ConcurrentBag<Tuple<Link, object>>();
 
+		private static Stopwatch titleWatch = Stopwatch.StartNew();
 		private static void UpdateTitle(string title)
 		{
 			try
 			{
-				Console.Title = title;
+				if (titleWatch.Elapsed > TimeSpan.FromMilliseconds(500))
+				{
+					Console.Title = title;
+					titleWatch.Restart();
+				}
 			}
 			catch	//as it turns out, this operation can throw very odd exceptions. Just ignore for now
 			{ }
