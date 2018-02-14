@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using VectorMath;
@@ -194,6 +195,14 @@ namespace Shard.EntityChange
 			Appearances = appearance;
 #endif
 			this.directState = directState;
+			if (directState == null)
+				directState = (EntityLogic)Helper.Deserialize(SerialLogic);
+		}
+
+		[OnDeserialized]
+		private void SetValuesOnDeserialized(StreamingContext context)
+		{
+			directState = (EntityLogic)Helper.Deserialize(SerialLogic);
 		}
 
 		public override int GetHashCode()
