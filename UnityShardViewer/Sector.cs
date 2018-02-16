@@ -45,12 +45,8 @@ namespace UnityShardViewer
 				client.Close();
 		}
 
-		private System.Diagnostics.Stopwatch sdsDelta = new System.Diagnostics.Stopwatch();
 
-		private SpinLock deltaLock = new SpinLock();
-		private double deltaSum = 0;
-		private int deltaNum = 0;
-
+		private float secondsPerTLG=1;
 
 		private bool stop = false;
 		private void ThreadMain()
@@ -84,6 +80,10 @@ namespace UnityShardViewer
 								privateID = (ShardID)obj;
 								Debug.Log("Sector: ID updated to " + privateID);
 								OnNewNeighbor(new ShardPeerAddress(privateID, lastHost));
+							}
+							else if (obj is ObserverTimingInfo)
+							{
+								secondsPerTLG = (float)((ObserverTimingInfo)obj).msPerTLG / 1000f;
 							}
 							else if (obj is CSLogicProvider)
 							{
@@ -121,17 +121,6 @@ namespace UnityShardViewer
 								//Debug.Log("Sector: SDS processed. Signalling change");
 								SDS = sds;
 								sdsChanged = true;
-								if (sdsDelta.IsRunning)
-								{
-									double delta = sdsDelta.Elapsed.TotalSeconds;
-									deltaLock.DoLocked(() =>
-									{
-										deltaSum += delta;
-										deltaNum++;
-										//Debug.Log("Delta estimation now at "+deltaSum/deltaNum);
-									});
-								}
-								sdsDelta.Restart();
 							}
 						}
 					}
@@ -301,6 +290,16 @@ namespace UnityShardViewer
 
 		private ConcurrentBag<ShardPeerAddress> newNeighbors = new ConcurrentBag<ShardPeerAddress>();
 
+
+		private System.Random random = new System.Random();
+
+		public Color myColor;
+
+		public Sector()
+		{
+			myColor = new Color(random.NextFloat(0.5f, 1f), random.NextFloat(0.5f, 1f), random.NextFloat(0.5f, 1f));
+		}
+
 		private int updateNo = 0;
 		// Update is called once per frame
 		public void Update()
@@ -334,11 +333,6 @@ namespace UnityShardViewer
 					}
 				}
 
-				float timeDelta = 0;
-				deltaLock.DoLocked(() =>
-				{
-					timeDelta = deltaNum > 0 ? (float)(deltaSum / deltaNum) : 1f;
-				});
 
 				//Debug.Log("Sector: processing change");
 				updateNo++;
@@ -386,6 +380,7 @@ namespace UnityShardViewer
 					if (!availableEntityObjects.ContainsKey(key))
 					{
 						obj = entityPrototype != null ? Instantiate(entityPrototype, transform) : new GameObject();
+						obj.GetComponent<Renderer>().material.color = myColor;
 						obj.transform.parent = transform;
 						obj.name = key;
 					}
@@ -403,7 +398,7 @@ namespace UnityShardViewer
 					var c = obj.GetComponent<EntityComponent>();
 					if (c == null)
 						c = obj.AddComponent<EntityComponent>();
-					c.SetState(next - Convert( e.Velocity ) * Scale, next, timeDelta);
+					c.SetState(next - Convert( e.Velocity ) * Scale, next, secondsPerTLG);
 					obj.transform.position = next;
 				}
 				//Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);

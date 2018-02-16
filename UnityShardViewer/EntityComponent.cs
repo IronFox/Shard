@@ -21,7 +21,7 @@ namespace UnityShardViewer
 		}
 
 
-		public void Update()
+		public void LateUpdate()
 		{
 			at += Time.deltaTime;
 			transform.position = Vector3.Lerp(from, to, Math.Min(at / timeDelta, 1));

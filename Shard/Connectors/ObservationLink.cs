@@ -97,10 +97,17 @@ namespace Shard
 
 			foreach (var n in Simulation.Neighbors)
 				SendCompressed(n.ShardPeerAddress);
+			SendCompressed(AssembleTiming());
 
 			if (sentProviders.Count != 0)
 				throw new Exception("Inconsistent start");
 			SendSDS(Simulation.Stack.NewestFinishedSDS);
+		}
+
+		private ObserverTimingInfo AssembleTiming()
+		{
+			return new ObserverTimingInfo()
+			{ msPerTLG = (int)new TimingInfo(DB.Timing).GenerationTimeWindow.TotalMilliseconds };
 		}
 
 		private void Message(string msg)
