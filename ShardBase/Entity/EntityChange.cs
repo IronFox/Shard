@@ -85,7 +85,7 @@ namespace Shard.EntityChange
 		//}
 
 
-		internal Vec3 ClampDestination(string task, Vec3 newPosition, EntityID currentEntityPosition, float maxDistance)
+		public virtual Vec3 ClampDestination(string task, Vec3 newPosition, EntityID currentEntityPosition, float maxDistance)
 		{
 			float dist = GetDistance(newPosition, currentEntityPosition.Position);
 			if (dist <= maxDistance)
