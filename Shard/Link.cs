@@ -9,6 +9,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.Serialization;
+using System.Net;
 
 namespace Shard
 {
@@ -158,7 +159,16 @@ namespace Shard
 		public readonly int LinearIndex;
 		public readonly bool IsSibling;
 		public readonly DB.RCSStack OutStack;
-		private PeerAddress lastAddress;
+		private PeerAddress address;
+
+
+		private void UpdateAddress(PeerAddress addr)
+		{
+			if (address == addr || addr.IsEmpty)
+				return;
+			address = addr;
+			ObservationLink.SignalAddressUpdate(ShardPeerAddress);
+		}
 
 		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
 
@@ -174,7 +184,7 @@ namespace Shard
 		{
 			IsSibling = isSibling;
 			LinearIndex = linearIndex;
-			lastAddress  = remoteHost;
+			UpdateAddress(remoteHost);
 			IsActive = isActive;
 			if (isActive)
 				StartConnectionThread();
@@ -228,11 +238,11 @@ namespace Shard
 			{
 				try
 				{
-					if (lastAddress.IsEmpty)
+					if (address.IsEmpty)
 						TryRefreshAddress();
-					if (!lastAddress.IsEmpty)
+					if (!address.IsEmpty)
 					{
-						client = new TcpClient(lastAddress.Address, lastAddress.Port);
+						client = new TcpClient(address.Address, address.Port);
 
 						var stream = client.GetStream();
 						stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
@@ -262,8 +272,7 @@ namespace Shard
 		private void TryRefreshAddress()
 		{
 			var addr = DB.TryGet(ID);
-			if (!addr.IsEmpty)
-				lastAddress = addr;
+			UpdateAddress(addr);
 		}
 
 		public void SetPassiveClient(TcpClient newClient)
@@ -301,6 +310,7 @@ namespace Shard
 			CloseThread(ref readThread);
 
 			this.client = newClient;
+			TryRefreshAddress();
 			StartCommunication();
 		}
 
@@ -337,7 +347,7 @@ namespace Shard
 			writerIsWaiting.WaitOne();
 			outbound = newOutbound;
 			writerShouldStart.Set();
-			Log.Message(Name+ ": Connected to "+lastAddress);
+			Log.Message(Name+ ": Connected to "+address);
 			onComm.Set();
 		}
 
@@ -535,7 +545,7 @@ namespace Shard
 		{
 			get
 			{
-				return new ShardPeerAddress(ID, lastAddress);
+				return new ShardPeerAddress(ID, address);
 			}
 		}
 

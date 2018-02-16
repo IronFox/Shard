@@ -167,6 +167,15 @@ namespace Shard
 			}
 		}
 
+		internal static void SignalAddressUpdate(ShardPeerAddress addr)
+		{
+			lock (registry)
+			{
+				foreach (var l in registry)
+					l.SendCompressed(addr);
+			}
+		}
+
 		public static ObservationLink Establish(TcpClient client)
 		{
 			try
