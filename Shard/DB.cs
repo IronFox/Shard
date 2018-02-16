@@ -24,6 +24,7 @@ namespace Shard
 		{
 			public ShardID extent = new ShardID(Int3.One,1);
 			public float r = 0.5f, m=0.25f;
+			public string ntp = "uhr.uni-trier.de";
 		}
 
 		public class AddressEntry : Entity

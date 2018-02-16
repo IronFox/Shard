@@ -181,8 +181,11 @@ namespace Shard
 				}
 
 
+
+				DB.PullConfig();
+
 				Log.Message("Setting up clock");
-				Clock.NTPHost = "uhr.uni-trier.de";
+				Clock.NTPHost = DB.Config.ntp;
 
 				while (Clock.NumQueries < 1)
 				{
@@ -190,7 +193,7 @@ namespace Shard
 				}
 				Log.Message("Starting up");
 
-				DB.PullConfig();
+
 				ShardID addr = ShardID.Decode(args[at++]);
 
 
