@@ -65,6 +65,7 @@ namespace UnityShardViewer
 				{
 					try
 					{
+						Debug.Log("Attempting to connect to " + lastHost);
 						client = new TcpClient(lastHost.Address, lastHost.Port);
 						var stream = new LZ4.LZ4Stream(client.GetStream(), LZ4.LZ4StreamMode.Decompress);
 						var f = new BinaryFormatter();
@@ -402,7 +403,7 @@ namespace UnityShardViewer
 					var c = obj.GetComponent<EntityComponent>();
 					if (c == null)
 						c = obj.AddComponent<EntityComponent>();
-					c.SetState(prev, next, timeDelta);
+					c.SetState(next - Convert( e.Velocity ) * Scale, next, timeDelta);
 					obj.transform.position = next;
 				}
 				//Debug.Log("Sector: got " + transform.childCount + " children, reusing "+reused);

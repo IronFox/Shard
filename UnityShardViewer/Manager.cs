@@ -38,8 +38,12 @@ namespace UnityShardViewer
 
 		public void AddSector(PeerAddress host, ShardID id)
 		{
-			if (shardMap.ContainsKey(id))
+			Sector existing;
+			if (shardMap.TryGetValue(id,out existing))
+			{
+				existing.Host = host;
 				return;
+			}
 			var sec = AddSector(host);
 			shardMap.Add(id, sec);
 		}
