@@ -73,11 +73,11 @@ namespace Shard
 				return ar;
 			}
 
-			public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
+			public int Execute(EntityPool pool, InconsistencyCoverage ic, EntityChange.ExecutionContext ctx)
 			{
 				var ar = ToSortedArray();
 				int numErrors = 0;
-				Parallel.ForEach(ar, c => { if (!c.Execute(pool,ctx)) Interlocked.Increment(ref numErrors); });
+				Parallel.ForEach(ar, c => { if (!c.Execute(pool,ic,ctx)) Interlocked.Increment(ref numErrors); });
 				return numErrors;
 			}
 
@@ -177,21 +177,21 @@ namespace Shard
 		/// Executes all local changes on the specified pool, and automatically dispatches queued pool events
 		/// </summary>
 		/// <param name="pool">Pool to execute changes on</param>
-		public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
+		public int Execute(EntityPool pool, InconsistencyCoverage ic, EntityChange.ExecutionContext ctx)
 		{
 			int numErrors = 0;
-			numErrors += motions.Execute(pool, ctx);
-			numErrors += removals.Execute(pool, ctx);
-			numErrors += instantiations.Execute(pool, ctx);
+			numErrors += motions.Execute(pool, ic, ctx);
+			numErrors += removals.Execute(pool, ic, ctx);
+			numErrors += instantiations.Execute(pool, ic, ctx);
 #if STATE_ADV
 			if (advertisements.Size > 0)
 				pool.RequireTree();
-			numErrors += advertisements.Execute(pool, ctx);
+			numErrors += advertisements.Execute(pool, ic, ctx);
 #endif
-			numErrors += messages.Execute(pool, ctx);
+			numErrors += messages.Execute(pool, ic, ctx);
 			if (broadcasts.Size > 0)
 				pool.RequireTree();
-			numErrors += broadcasts.Execute(pool, ctx);
+			numErrors += broadcasts.Execute(pool, ic, ctx);
 			pool.DispatchAll();
 			return numErrors;
 		}

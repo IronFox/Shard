@@ -258,7 +258,7 @@ namespace ShardTests1
 
 					var errors = pool.TestEvolve(set, ic, i, TimeSpan.FromSeconds(1));
 					Assert.AreEqual(1, errors.Count, Helper.Concat(",",errors));
-					Assert.AreEqual(0, set.Execute(pool,ctx));
+					Assert.AreEqual(0, set.Execute(pool,ic,ctx));
 					//Assert.AreEqual(ic.OneCount, 1);
 					if (doGrow)
 						ic = ic.Grow(true);
@@ -392,6 +392,8 @@ namespace ShardTests1
 			var ctx = new SimulationContext();
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()),ctx);
 
+			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
+
 			for (int i = 0; i < 100; i++)
 			{
 				var old = pool.ToArray();
@@ -409,7 +411,7 @@ namespace ShardTests1
 					Assert.IsTrue(Simulation.MySpace.Contains(m.TargetLocation));
 				}
 
-				Assert.AreEqual(0, set.Execute(pool,ctx));
+				Assert.AreEqual(0, set.Execute(pool,ic,ctx));
 				Assert.AreEqual(numEntities, pool.Count);
 				Entity e1;
 				foreach (var e in old)

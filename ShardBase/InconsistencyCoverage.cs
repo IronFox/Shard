@@ -93,5 +93,10 @@ namespace Shard
 		{
 			SetOne(box.Min, box.Size);
 		}
+
+		public int GetInconsistencyAtR(Vec3 pos)
+		{
+			return IsInconsistentR(pos) ? 1 : 0;
+		}
 	}
 }

@@ -123,7 +123,7 @@ namespace Shard
 				}
 			}
 			EntityPool p2 = data.entities.Clone();
-			cs.Execute(p2,ctx);
+			cs.Execute(p2,ic,ctx);
 
 			SDS rs = new SDS(generation, p2.ToArray(), ic, clientMessages);
 
