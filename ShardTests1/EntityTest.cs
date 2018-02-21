@@ -118,7 +118,7 @@ namespace ShardTests1
 					{
 						var remote = (EntityID) Helper.Deserialize(msg.Payload);
 						float dist = Vec3.GetChebyshevDistance(remote.Position, currentState.ID.Position);
-						Assert.IsTrue(dist <= ranges.R);
+						Assert.IsTrue(dist <= ranges.R, dist +"<="+ ranges.R);
 					}
 					isConsistent = false;
 				}

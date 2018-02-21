@@ -94,7 +94,7 @@ namespace Shard
 			{
 				if (!newMessages.ContainsKey(toEntity))
 					newMessages[toEntity] = new List<OrderedEntityMessage>();
-				newMessages[toEntity].Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient, false), toEntity == Guid.Empty, channel,data)));
+				newMessages[toEntity].Add(new OrderedEntityMessage(orderIndex, new EntityMessage(new Actor(fromClient), toEntity == Guid.Empty, channel,data)));
 			}
 		}
 

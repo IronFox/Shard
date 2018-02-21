@@ -73,11 +73,11 @@ namespace Shard
 				return ar;
 			}
 
-			public int Execute(EntityPool pool, InconsistencyCoverage ic, EntityChange.ExecutionContext ctx)
+			public int Execute(EntityPool pool, EntityChange.ExecutionContext ctx)
 			{
-				var ar = ToSortedArray();
+				//var ar = ToSortedArray();	//no point sorting when we're gonna execute the changes in parallel anyways
 				int numErrors = 0;
-				Parallel.ForEach(ar, c => { if (!c.Execute(pool,ic,ctx)) Interlocked.Increment(ref numErrors); });
+				Parallel.ForEach(bag, c => { if (!c.Execute(pool,ctx)) Interlocked.Increment(ref numErrors); });
 				return numErrors;
 			}
 
@@ -180,18 +180,21 @@ namespace Shard
 		public int Execute(EntityPool pool, InconsistencyCoverage ic, EntityChange.ExecutionContext ctx)
 		{
 			int numErrors = 0;
-			numErrors += motions.Execute(pool, ic, ctx);
-			numErrors += removals.Execute(pool, ic, ctx);
-			numErrors += instantiations.Execute(pool, ic, ctx);
+			numErrors += motions.Execute(pool, ctx);
+			numErrors += pool.ResolveConflictFreeOperations(ic, ctx);
+			numErrors += removals.Execute(pool, ctx);
+			//numErrors += pool.ResolveConflictFreeOperations(ic);	//removals don't do conflicting stuff (one removes first, and all others fail, but entity is removed regardless, so all win)
+			numErrors += instantiations.Execute(pool, ctx);
+			numErrors += pool.ResolveConflictFreeOperations(ic,ctx);
 #if STATE_ADV
 			if (advertisements.Size > 0)
 				pool.RequireTree();
 			numErrors += advertisements.Execute(pool, ic, ctx);
 #endif
-			numErrors += messages.Execute(pool, ic, ctx);
+			numErrors += messages.Execute(pool, ctx);
 			if (broadcasts.Size > 0)
 				pool.RequireTree();
-			numErrors += broadcasts.Execute(pool, ic, ctx);
+			numErrors += broadcasts.Execute(pool, ctx);
 			pool.DispatchAll();
 			return numErrors;
 		}

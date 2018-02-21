@@ -23,14 +23,22 @@ namespace Shard
 	[Serializable]
 	public struct Actor
 	{
+		public readonly Vec3 Position;
 		public readonly Guid Guid;
 		public readonly bool IsEntity;
 
 
-		public Actor(Guid guid, bool isEntity)
+		public Actor(Guid guid)
 		{
 			Guid = guid;
-			IsEntity = isEntity;
+			Position = Vec3.Zero;
+			IsEntity = false;
+		}
+		public Actor(EntityID id)
+		{
+			Guid = id.Guid;
+			Position = id.Position;
+			IsEntity = true;
 		}
 
 		public override bool Equals(object obj)

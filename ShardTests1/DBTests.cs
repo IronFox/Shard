@@ -108,9 +108,14 @@ namespace Shard.Tests
 			return rs;
 		}
 
+		public static EntityID RandomEntityID()
+		{
+			return new EntityID(Guid.NewGuid(), random.NextVec3(0, 1));
+		}
+
 		public static EntityMessage RandomEntityMessage()
 		{
-			return new EntityMessage(new Actor(Guid.NewGuid(), random.NextBool()), random.NextBool(), random.Next(3), EntityChangeSetTests.RandomByteArray(true));
+			return new EntityMessage(random.NextBool() ? new Actor(Guid.NewGuid()) : new Actor(RandomEntityID()), random.NextBool(), random.Next(3), EntityChangeSetTests.RandomByteArray(true));
 		}
 
 

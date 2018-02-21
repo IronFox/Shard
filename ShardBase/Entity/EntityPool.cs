@@ -36,12 +36,17 @@ namespace Shard
 					return inMessages.TryAdd(msg.OrderID, msg.Message);
 				}
 
-				public void AddTo(List<EntityMessage> messages)
+				public void AddTo(List<EntityMessage> messages, EntityRanges ranges, Vec3 entityLocation)
 				{
 					var ar = inMessages.ToArray();
 					Array.Sort(ar, (a, b) => a.Key.CompareTo(b.Key));
 					foreach (var p in ar)
+					{
+						//float dist = Vec3.GetChebyshevDistance(p.Value.Sender.Position, entityLocation);
+						//if (dist > ranges.R)
+						//	throw new IntegrityViolation("Trying to send message across " + dist + ", where max range is " + ranges.R);
 						messages.Add(p.Value);
+					}
 				}
 
 			}
@@ -52,14 +57,17 @@ namespace Shard
 			}
 			public Entity entity;
 			public ConcurrentDictionary<Guid, BySender> messages = new ConcurrentDictionary<Guid, BySender>();
+			internal ConcurrentBag<Tuple<EntityID, Entity>> deferredUpdates = new ConcurrentBag<Tuple<EntityID, Entity>>();
 #if STATE_ADV
 			public ConcurrentDictionary<Guid, EntityContact> contacts = new ConcurrentDictionary<Guid, EntityContact>();
 #endif
 		}
 
-		private Supercluster.KDTree.KDTree<float, Container> tree;
+		private KDTree<float, Container> tree;
 		private ConcurrentDictionary<EntityID, Container> fullMap = new ConcurrentDictionary<EntityID, Container>();
 		private ConcurrentDictionary<Guid, Container> guidMap = new ConcurrentDictionary<Guid, Container>();
+		private ConcurrentDictionary<Guid, ConcurrentBag<Entity>> deferredInserts = new ConcurrentDictionary<Guid, ConcurrentBag<Entity>>();
+		private ConcurrentBag<EntityID> deferredRemovals = new ConcurrentBag<EntityID>();
 
 		private EntityChange.ExecutionContext ctx;
 
@@ -204,9 +212,11 @@ namespace Shard
 		public int BroadcastMessage(Vec3 senderPosition, float maxRange, OrderedEntityMessage message)
 		{
 			int counter = 0;
-			
+
 			foreach (var p in tree.RadialSearch(senderPosition.ToArray(), Math.Min(maxRange, ctx.Ranges.R)))
 			{
+				//if (Vec3.GetChebyshevDistance(p.Item2.entity.ID.Position, senderPosition) > ctx.Ranges.R)
+				//	throw new IntegrityViolation("Sender range exceeded during broadcast. Tree is out of date");
 				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
 				{
 					p.Item2.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
@@ -223,8 +233,8 @@ namespace Shard
 		public List<EntityError> TestEvolve(EntityChangeSet set, InconsistencyCoverage ic, int roundNumber, TimeSpan budget)
 		{
 			if (roundNumber != ctx.GenerationNumber)
-				throw new IntegrityViolation("Expected generation number "+roundNumber+" in execution context, but found "+ctx.GenerationNumber);
-			return set.Evolve(EnumerateEntities().ToList(), null,ic,budget,ctx);
+				throw new IntegrityViolation("Expected generation number " + roundNumber + " in execution context, but found " + ctx.GenerationNumber);
+			return set.Evolve(EnumerateEntities().ToList(), null, ic, budget, ctx);
 		}
 
 		public IEnumerable<Entity> EnumerateEntities()
@@ -254,7 +264,9 @@ namespace Shard
 				var ar = ctr.messages.ToArray();
 				Array.Sort(ar, (a, b) => a.Key.CompareTo(b.Key));
 				foreach (var p in ar)
-					p.Value.AddTo(messages);
+				{
+					p.Value.AddTo(messages,ctx.Ranges,ctr.entity.ID.Position);
+				}
 
 #if STATE_ADV
 				EntityContact[] ctx = Helper.ToArray(ctr.contacts.Values);
@@ -276,7 +288,7 @@ namespace Shard
 		}
 
 
-		private bool FindAndRemove(Container ctr)
+		private bool CheckFindAndRemove(Container ctr)
 		{
 			Container other;
 			if (!fullMap.TryRemove(ctr.entity.ID, out other))
@@ -289,7 +301,9 @@ namespace Shard
 			guidMap.ForceRemove(ctr.entity.ID.Guid);
 			return true;
 		}
-		public bool FindAndRemove(EntityID id)
+
+
+		public bool CheckFindAndRemove(EntityID id)
 		{
 			Container ctr;
 			if (!fullMap.TryRemove(id, out ctr))
@@ -298,24 +312,209 @@ namespace Shard
 			return true;
 		}
 
-		public bool FindAndRemove(EntityID id, Func<Entity, bool> verifyMatch)
+		public enum Result
 		{
+			NoError,
+			IDNotFound,
+			IDNotFoundLocationMismatch,
+			VerificationFailed,
+		}
+
+		public Result CheckFindAndRemove(EntityID id, Func<Entity, bool> verifyMatch, out Vec3? outLocation)
+		{
+			outLocation = null;
 			Container ctr;
 			if (!fullMap.TryRemove(id, out ctr))
-				return false;
+			{
+				if (guidMap.TryGetValue(id.Guid, out ctr))
+				{
+					outLocation = ctr.entity.ID.Position;
+					return Result.IDNotFoundLocationMismatch;
+				}
+				return Result.IDNotFound;
+			}
+			outLocation = ctr.entity.ID.Position;
 			if (!verifyMatch(ctr.entity))
 			{
 				fullMap.ForceAdd(id, ctr);
-				return false;
+				return Result.VerificationFailed;
 			}
 			guidMap.ForceRemove(id.Guid);
-			return true;
+			return Result.NoError;
+		}
+
+		private struct MovementPriority : IComparable<MovementPriority>
+		{
+			public readonly float Score;
+			public readonly EntityID PresumedCurrent;
+			public readonly Entity Destination;
+			public readonly bool CurrentMatch;
+
+			public MovementPriority(Entity current, EntityID presumedCurrent, Entity destination, EntityChange.ExecutionContext ctx, bool currentIsInconsistent, bool destIsInconsistent)
+			{
+				PresumedCurrent = presumedCurrent;
+				Destination = destination;
+				CurrentMatch = current.ID.Position == presumedCurrent.Position;
+
+
+				Score = 1;
+				if (CurrentMatch)
+					Score+=10;
+				if (destIsInconsistent)
+					Score *= 0.5f;
+
+
+				if (!CurrentMatch /*&& destIsInconsistent*/ && !currentIsInconsistent)
+					Score = -1;
+			}
+
+			public int CompareTo(MovementPriority other)
+			{
+				return Score.CompareTo(other.Score);
+			}
+
+			public static bool operator >(MovementPriority a, MovementPriority b)
+			{
+				return a.Score > b.Score;
+			}
+			public static bool operator <(MovementPriority a, MovementPriority b)
+			{
+				return a.Score < b.Score;
+			}
+
+		}
+		private struct InsertPriority : IComparable<InsertPriority>
+		{
+			public readonly float Score;
+			public readonly Entity Destination;
+
+			public InsertPriority(Entity destination, EntityChange.ExecutionContext ctx, InconsistencyCoverage ic)
+			{
+				Destination = destination;
+
+				Score = 1;
+				Score /= (1f +  ic.GetInconsistencyAtR(ctx.LocalSpace.Relativate(destination.ID.Position)));
+			}
+
+			public int CompareTo(InsertPriority other)
+			{
+				return Score.CompareTo(other.Score);
+			}
+
+			public static bool operator >(InsertPriority a, InsertPriority b)
+			{
+				return a.Score > b.Score;
+			}
+			public static bool operator <(InsertPriority a, InsertPriority b)
+			{
+				return a.Score < b.Score;
+			}
+
+		}
+
+		public int ResolveConflictFreeOperations(InconsistencyCoverage ic, EntityChange.ExecutionContext ctx)
+		{
+			int errors = 0;
+
+			Parallel.ForEach(deferredInserts.Values, bag =>
+			{
+				Entity e;
+				InsertPriority best = new InsertPriority();
+				Interlocked.Add(ref errors, bag.Count - 1);
+				while (bag.TryTake(out e))
+				{
+					var candidate = new InsertPriority(e, ctx, ic);
+					if (candidate > best)
+						best = candidate;
+				}
+				if (best.Destination == null || !Insert(best.Destination))
+					Interlocked.Increment(ref errors);
+			});
+			deferredInserts.Clear();
+
+			Parallel.ForEach(fullMap.Values, ctr =>
+			{
+				if (ctr.deferredUpdates.IsEmpty)
+					return;
+				Tuple<EntityID, Entity> tuple;
+				bool inc = ic.IsInconsistentR(ctx.LocalSpace.Relativate(ctr.entity.ID.Position));
+				MovementPriority best = new MovementPriority();
+				Interlocked.Add(ref errors, ctr.deferredUpdates.Count - 1);
+				while (ctr.deferredUpdates.TryTake(out tuple))
+				{
+					bool destInc = ic.IsInconsistentR(ctx.LocalSpace.Relativate(tuple.Item2.ID.Position));
+					var candidate = new MovementPriority(ctr.entity, tuple.Item1, tuple.Item2, ctx, inc,destInc);
+					if (candidate > best)
+						best = candidate;
+				}
+				if (best.Destination != null)
+				{
+					ctr.entity = best.Destination;
+					tree = null;
+				}
+				else
+					Interlocked.Increment(ref errors);
+			});
+			EntityID id;
+			while (deferredRemovals.TryTake(out id))
+				if (CheckFindAndRemove(id))
+					tree = null;
+				else
+					errors++;
+
+
+			return errors;
+		}
+
+		public void ConflictFreeInsert(EntityID origin, Entity entity)
+		{
+			Container rs;
+			if (guidMap.TryGetValue(entity.ID.Guid, out rs))
+				rs.deferredUpdates.Add(new Tuple<EntityID, Entity>(origin, entity));
+			else
+				deferredInserts.Add(entity.ID.Guid, () => new ConcurrentBag<Entity>()).Add(entity);
+
+		}
+
+		public void ConflictFreeUpdateEntity(EntityID original, Entity updated)
+		{
+			Container rs;
+			if (guidMap.TryGetValue(original.Guid, out rs))
+				rs.deferredUpdates.Add(new Tuple<EntityID,Entity>(original,updated));
+		}
+
+		public void ConflictFreeFindAndRemove(EntityID id)
+		{
+			if (fullMap.ContainsKey(id))
+				deferredRemovals.Add(id);
+		}
+
+		public void FindAndRemove(EntityID id, Func<Entity, bool> verifyMatch)
+		{
+			Container ctr;
+			if (!fullMap.TryRemove(id, out ctr))
+			{
+				if (guidMap.ContainsKey(id.Guid))
+					throw new ExecutionException(id, "Location mismatch");
+				else
+					throw new ExecutionException(id, "ID not found for removal");
+			}
+			if (!verifyMatch(ctr.entity))
+			{
+				fullMap.ForceAdd(id, ctr);
+				throw new ExecutionException(id, "Verification failed");
+			}
+			guidMap.ForceRemove(id.Guid);
 		}
 
 		public bool Insert(Entity entity)
 		{
 			return InsertC(entity) != null;
 		}
+
+
+
+
 
 		private Container InsertC(Entity entity)
 		{

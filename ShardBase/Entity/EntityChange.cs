@@ -124,7 +124,7 @@ namespace Shard.EntityChange
 		public abstract bool Affects(Box cube, ExecutionContext ctx);
 
 		public abstract int CompareTo(object other);
-		public abstract bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx);
+		public abstract bool Execute(EntityPool pool, ExecutionContext ctx);
 		public override int GetHashCode()
 		{
 			return Origin.GetHashCode();
@@ -159,9 +159,21 @@ namespace Shard.EntityChange
 		}
 
 
-		public override bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
-			return pool.FindAndRemove(Target, e => ctx.CheckM("Removal", Target.Position, e));
+			Vec3? loc;
+			var rs = pool.CheckFindAndRemove(Target, e => ctx.CheckM("Removal", Target.Position, e), out loc);
+			switch (rs)
+			{
+				case EntityPool.Result.NoError:
+					return true;
+				case EntityPool.Result.IDNotFoundLocationMismatch:
+				case EntityPool.Result.IDNotFound:
+				case EntityPool.Result.VerificationFailed:
+					return false;	//do not distinbuish. these errors could all be either caused by bad node states OR bad entity behavior
+				default:
+					throw new IntegrityViolation(Target + ": Unsupported CheckFindAndRemove() return value (" + rs+")");
+			}
 		}
 
 		public override bool Affects(Box cube, ExecutionContext ctx)
@@ -235,17 +247,19 @@ namespace Shard.EntityChange
 					.Finish();
 		}
 
-		public override bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			if (!ctx.CheckM("Insert", Origin.Position, TargetLocation))
 				return false;
-			var rs = pool.Insert(new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Vec3.Zero, directState, SerialLogic
+			if (!ctx.LocalSpace.Contains(TargetLocation))
+				return false;
+			pool.ConflictFreeInsert(Origin, new Entity(new EntityID(Guid.NewGuid(), TargetLocation), Vec3.Zero, directState, SerialLogic
 #if STATE_ADV
 				,Appearances
 #endif
 				));
 			directState = null;
-			return rs;
+			return true;
 		}
 
 		public override bool Affects(Box cube, ExecutionContext ctx)
@@ -287,44 +301,22 @@ namespace Shard.EntityChange
 			}
 		}
 
-		public override bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			Int3 opCoords = TargetLocation.FloorInt3;
 			if (ctx.LocalSpace.Contains(Origin.Position))
 			{
 				Entity e;
-				if (!pool.Find(Origin, out e))
+				if (!pool.Find(Origin.Guid, out e))
 					return false;
 				if (!ctx.CheckM("Motion", TargetLocation, e))
 					return false;
 
 				if (ctx.LocalSpace.Contains(TargetLocation))
-				{
-					if (e.ID.Position != Origin.Position)
-					{
-						if (e.ID.Position == TargetLocation)
-							return true;//some weird case
-						/* this may imply:
-							* an entity returned to an SD but has never actually left (due to inconsistency duplication)
-							* an entity has entered the same SD from different origins (again, inconsistency duplication)
-
-							In any event this is a conflict between the entity's current location and the one intended by this operation.
-							Chosing either is correct as long as both target locations are of some inconsistency.
-							If one is consistent then that must be chosen
-						*/
-
-						var currentInconsistency = ic.GetInconsistencyAtR(ctx.LocalSpace.Relativate(e.ID.Position));
-						var targetInconsistency = ic.GetInconsistencyAtR(ctx.LocalSpace.Relativate(TargetLocation));
-						if (currentInconsistency < targetInconsistency)
-						{
-							ctx.LogMessage("Motion: OP origin mismatch "+ Origin.Position+", trying to move "+e);
-							return false;
-						}
-					}
-					return pool.UpdateEntity(e, Entity);
-				}
+					pool.ConflictFreeUpdateEntity(Origin, Entity);
 				else
-					return pool.FindAndRemove(e.ID);
+					pool.ConflictFreeFindAndRemove(e.ID);
+				return true;
 			}
 			else
 			{
@@ -335,40 +327,7 @@ namespace Shard.EntityChange
 				}
 				if (!ctx.CheckM("Motion", Origin.Position, TargetLocation))
 					return false;
-				if (!pool.Insert(Entity))
-				{
-					Entity e;
-					lock (pool)	//prevent concurrent updates to take place
-					{
-						if (!pool.Find(Origin.Guid, out e))
-						{
-							ctx.LogError("Motion: Bad access");
-							return false;
-						}
-						ctx.LogMessage("Motion: Collision trying to move " + e);
-
-						if (e.ID.Position == TargetLocation)
-							return true;//some weird case
-						/* this may imply:
-							* an entity returned to an SD but has never actually left (due to inconsistency duplication)
-							* an entity has entered the same SD from different origins (again, inconsistency duplication)
-
-							In any event this is a conflict between the entity's current location and the one intended by this operation.
-							Chosing either is correct as long as both target locations are of some inconsistency.
-							If one is consistent then that must be chosen
-						*/
-
-						var currentInconsistency = ic.GetInconsistencyAtR(ctx.LocalSpace.Relativate(e.ID.Position));
-						var targetInconsistency = ic.GetInconsistencyAtR(ctx.LocalSpace.Relativate(TargetLocation));
-						if (currentInconsistency <= targetInconsistency)
-						{
-							ctx.LogMessage("Motion: Existing motion is equal or better. Rejecting latecomer");
-							return false;
-						}
-						ctx.LogMessage("Motion: Existing motion is worse. Accepting latecomer");
-						return pool.UpdateEntity(e, Entity);
-					}
-				}
+				pool.ConflictFreeInsert(Origin,Entity);
 				return true;
 			}
 
@@ -396,7 +355,7 @@ namespace Shard.EntityChange
 		}
 		public OrderedEntityMessage MakeMessage(bool isBroadcast)
 		{
-			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin.Guid, true), isBroadcast, Channel, Payload));
+			return new OrderedEntityMessage(SentOrderID, new EntityMessage(new Actor(Origin), isBroadcast, Channel, Payload));
 		}
 		public override int CompareTo(object obj)
 		{
@@ -462,7 +421,7 @@ namespace Shard.EntityChange
 					.GetHashCode();
 		}
 
-		public override bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			pool.BroadcastMessage(Origin.Position, MaxRange, MakeMessage(true));
 			return true;
@@ -505,7 +464,7 @@ namespace Shard.EntityChange
 					.GetHashCode();
 		}
 
-		public override bool Execute(EntityPool pool, InconsistencyCoverage ic, ExecutionContext ctx)
+		public override bool Execute(EntityPool pool, ExecutionContext ctx)
 		{
 			return pool.RelayMessage(Origin.Position, TargetEntityID, MakeMessage(false));
 		}
