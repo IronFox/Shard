@@ -15,20 +15,6 @@ namespace Shard
 	public static class Extensions
 	{
 
-		public static T Add<K, T>(this ConcurrentDictionary<K, T> dict, K key, Func<T> factoryIfNotSet)
-		{
-			T result;
-			if (dict.TryGetValue(key, out result))
-				return result;
-			T f = result = factoryIfNotSet();
-			while (true)
-			{
-				if (dict.TryAdd(key, f))
-					return f;
-				if (dict.TryGetValue(key, out result))
-					return result;
-			}
-		}
 
 
 		public static T Get<T>(this Task<T> task)

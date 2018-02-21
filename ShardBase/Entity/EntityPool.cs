@@ -472,7 +472,7 @@ namespace Shard
 			if (guidMap.TryGetValue(entity.ID.Guid, out rs))
 				rs.deferredUpdates.Add(new Tuple<EntityID, Entity>(origin, entity));
 			else
-				deferredInserts.Add(entity.ID.Guid, () => new ConcurrentBag<Entity>()).Add(entity);
+				deferredInserts.GetOrAdd(entity.ID.Guid, id => new ConcurrentBag<Entity>()).Add(entity);
 
 		}
 
