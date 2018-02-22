@@ -61,6 +61,49 @@ namespace Shard.Tests
 			return rs;
 		}
 
+
+		/// <summary>
+		/// Tests whether conflicting motions result in the same final motion, regardless of order
+		/// </summary>
+		[TestMethod()]
+		public void MotionConflictOrderingTest()
+		{
+			var ctx = new SimulationContext(true);
+
+			for (int i = 0; i < 10; i++)
+			{
+				var entities = CreateEntities(1);
+				var e = entities[0];
+				Vec3 original = e.ID.Position;
+
+				EntityChange.Motion[] motions = new EntityChange.Motion[10];
+				for (int j = 0; j < motions.Length; j++)
+					motions[j] = new EntityChange.Motion(new EntityID(e.ID.Guid, random.NextVec3(0, 1)), ctx.LocalSpace.Clamp( original + random.NextVec3(-ctx.Ranges.R,ctx.Ranges.R) ), e.MyLogic, null);
+
+				Entity e0 = null;
+
+				for (int j = 0; j < motions.Length; j++)
+				{
+					var motions2 = motions.OrderBy(x => random.Next()).ToArray();
+					EntityPool pool = new EntityPool(entities, ctx);
+					EntityChangeSet set = new EntityChangeSet();
+					foreach (var m in motions2)
+						set.Add(m);
+
+					int errors = set.Execute(pool, InconsistencyCoverage.NewAllOne(), ctx);
+					Assert.AreEqual(motions.Length - 1, errors);	//motions-1 get rejected, one is accepted. must always be the same
+
+					var e1 = pool.First();
+					Assert.AreNotEqual(e1, e);	//must have moved
+					if (e0 == null)
+						e0 = e1;
+					else
+						Assert.AreEqual(e0, e1); //must have moved to the same location
+				}
+
+			}
+		}
+	
 		[TestMethod()]
 		public void UpdateEntityTest()
 		{

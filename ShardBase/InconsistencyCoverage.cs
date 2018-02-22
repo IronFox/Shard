@@ -57,6 +57,13 @@ namespace Shard
 		{
 			return new InconsistencyCoverage(new Int3(CommonResolution));
 		}
+		public static InconsistencyCoverage NewAllOne()
+		{
+			var rs = NewCommon();
+			rs.SetAllOne();
+			return rs;
+		}
+
 		public InconsistencyCoverage Clone()
 		{
 			var rs = new InconsistencyCoverage(Int3.Zero);
