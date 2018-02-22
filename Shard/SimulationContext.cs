@@ -6,10 +6,16 @@ namespace Shard
 {
 	public class SimulationContext : ExecutionContext
 	{
-		public SimulationContext():base(new EntityRanges(Simulation.R,Simulation.M,Simulation.SensorRange,Simulation.FullSimulationSpace),Simulation.MySpace)
-		{}
-		public SimulationContext(DB.ConfigContainer cfg) : base(new EntityRanges(cfg.r,cfg.m,cfg.r-cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ)), Simulation.MySpace)
-		{ }
+		public readonly bool AllowMotionToUnresponsiveNeighbor;
+
+		public SimulationContext(bool allowMotionToUnresponsiveNeighbor) :base(new EntityRanges(Simulation.R,Simulation.M,Simulation.SensorRange,Simulation.FullSimulationSpace),Simulation.MySpace)
+		{
+			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
+		}
+		public SimulationContext(DB.ConfigContainer cfg, bool allowMotionToUnresponsiveNeighbor) : base(new EntityRanges(cfg.r,cfg.m,cfg.r-cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ)), Simulation.MySpace)
+		{
+			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
+		}
 
 		public override void LogError(string message)
 		{
@@ -51,7 +57,7 @@ namespace Shard
 					}
 				if (!any)
 					throw new ExecutionException(currentEntityPosition, task + " targets space beyond known neighbors. Rejecting motion");
-				if (!anyResponive)
+				if (!anyResponive && !AllowMotionToUnresponsiveNeighbor)
 					throw new ExecutionException(currentEntityPosition, task + " targets space of inactive neighbor shard. Rejecting");
 			}
 

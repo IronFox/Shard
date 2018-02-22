@@ -18,7 +18,7 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void AddToTest()
 		{
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 
 			Random random = new Random();
 			List<Entity> testEntities = CreateEntities(100);
@@ -64,7 +64,7 @@ namespace Shard.Tests
 		[TestMethod()]
 		public void UpdateEntityTest()
 		{
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 			Random random = new Random();
 			EntityPool pool = new EntityPool(ctx);
 			var entities = CreateEntities(3);

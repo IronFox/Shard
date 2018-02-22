@@ -268,7 +268,7 @@ namespace Shard
 					DB.BeginFetch(link.InboundRCSStackID);
 			}
 
-			SimulationContext ctx = new SimulationContext();
+			SimulationContext ctx = new SimulationContext(false);
 
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestFinishedSDSGeneration < TimingInfo.Current.TopLevelGeneration)

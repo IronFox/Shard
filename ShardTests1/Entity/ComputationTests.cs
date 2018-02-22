@@ -144,7 +144,7 @@ namespace Shard.Tests
 			{
 				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
-				ctx = new SimulationContext(config);
+				ctx = new SimulationContext(config, allLinksArePassive);
 
 				FeedEntities(entities);
 			}
@@ -152,7 +152,7 @@ namespace Shard.Tests
 			{
 				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
-				ctx = new SimulationContext(config);
+				ctx = new SimulationContext(config, allLinksArePassive);
 			}
 
 			public void FeedEntities(IEnumerable<Entity> entities)

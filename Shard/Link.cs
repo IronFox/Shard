@@ -549,6 +549,7 @@ namespace Shard
 			}
 		}
 
+
 		private void WriteMain()
 		{
 			BinaryFormatter formatter = new BinaryFormatter();

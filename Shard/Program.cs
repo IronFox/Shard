@@ -49,7 +49,7 @@ namespace Shard
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
 				{
-					grid[at.X, at.Y, at.Z] = new SDSFactory(at,new SimulationContext(),cfg.extent.XYZ);
+					grid[at.X, at.Y, at.Z] = new SDSFactory(at,new SimulationContext(false),cfg.extent.XYZ);
 				}
 			);
 			var gridBox = IntBox.FromMinAndMax(Int3.Zero, cfg.extent.XYZ, Bool3.False);
@@ -282,7 +282,7 @@ namespace Shard
 			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 			var intermediate0 = new IntermediateSDS();
 			intermediate0.entities = new EntityPool(MakeGrid2D(gridRes),ctx);
 			//EntityTest.RandomDefaultPool(100);

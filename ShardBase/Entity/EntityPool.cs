@@ -28,24 +28,63 @@ namespace Shard
 		{
 			public class BySender
 			{
-				ConcurrentDictionary<int, EntityMessage> inMessages = new ConcurrentDictionary<int, EntityMessage>();
+				private struct MessageKey : IComparable<MessageKey>
+				{
+					public int orderID;
+					public EntityID senderID;
+
+					public MessageKey(OrderedEntityMessage msg) : this()
+					{
+						orderID = msg.OrderID;
+						senderID = new EntityID(msg.Message.Sender.Guid,msg.Message.Sender.Position);
+					}
+
+					public int CompareTo(MessageKey other)
+					{
+						return new Helper.Comparator()
+							.Append(orderID, other.orderID)
+							.Append(senderID, other.senderID)
+							.Finish();
+					}
+
+					public override bool Equals(object obj)
+					{
+						if (!(obj is MessageKey))
+						{
+							return false;
+						}
+
+						var key = (MessageKey)obj;
+						return orderID == key.orderID && senderID == key.senderID;
+					}
+
+					public override int GetHashCode()
+					{
+						var hashCode = 93245203;
+						hashCode = hashCode * -1521134295 + orderID.GetHashCode();
+						hashCode = hashCode * -1521134295 + senderID.GetHashCode();
+						return hashCode;
+					}
+				}
+
+				ConcurrentDictionary<MessageKey, EntityMessage> inMessages = new ConcurrentDictionary<MessageKey, EntityMessage>();
 
 
 				public bool Add(OrderedEntityMessage msg)
 				{
-					return inMessages.TryAdd(msg.OrderID, msg.Message);
+					return inMessages.TryAdd(new MessageKey(msg), msg.Message);
 				}
 
 				public void AddTo(List<EntityMessage> messages, EntityRanges ranges, Vec3 entityLocation)
 				{
 					var ar = inMessages.ToArray();
 					Array.Sort(ar, (a, b) => a.Key.CompareTo(b.Key));
+					int lastID = -1;
 					foreach (var p in ar)
 					{
-						//float dist = Vec3.GetChebyshevDistance(p.Value.Sender.Position, entityLocation);
-						//if (dist > ranges.R)
-						//	throw new IntegrityViolation("Trying to send message across " + dist + ", where max range is " + ranges.R);
-						messages.Add(p.Value);
+						if (p.Key.orderID != lastID)
+							messages.Add(p.Value);
+						lastID = p.Key.orderID;
 					}
 				}
 
@@ -370,16 +409,19 @@ namespace Shard
 
 			public int CompareTo(MovementPriority other)
 			{
-				return Score.CompareTo(other.Score);
+				int rs = Score.CompareTo(other.Score);
+				if (rs != 0)
+					return rs;
+				return Destination.CompareTo(other.Destination);
 			}
 
 			public static bool operator >(MovementPriority a, MovementPriority b)
 			{
-				return a.Score > b.Score;
+				return a.CompareTo(b) > 0;
 			}
 			public static bool operator <(MovementPriority a, MovementPriority b)
 			{
-				return a.Score < b.Score;
+				return a.CompareTo(b) < 0;
 			}
 
 		}
@@ -398,16 +440,19 @@ namespace Shard
 
 			public int CompareTo(InsertPriority other)
 			{
-				return Score.CompareTo(other.Score);
+				int rs = Score.CompareTo(other.Score);
+				if (rs != 0)
+					return rs;
+				return Destination.CompareTo(other.Destination);
 			}
 
 			public static bool operator >(InsertPriority a, InsertPriority b)
 			{
-				return a.Score > b.Score;
+				return a.CompareTo(b) > 0;
 			}
 			public static bool operator <(InsertPriority a, InsertPriority b)
 			{
-				return a.Score < b.Score;
+				return a.CompareTo(b) < 0;
 			}
 
 		}

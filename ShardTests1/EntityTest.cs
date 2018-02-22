@@ -198,7 +198,7 @@ namespace ShardTests1
 		[TestMethod]
 		public void SimpleEntityFaultTest()
 		{
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, 
 				new RandomLogic(new Type[] { typeof(ConsistentLogic), typeof(FaultLogic) }).Instantiate),ctx);
 
@@ -227,7 +227,7 @@ namespace ShardTests1
 		{
 			int mismatched = 0;
 
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 
 			for (int k = 0; k < 20; k++)
 			{
@@ -389,7 +389,7 @@ namespace ShardTests1
 		public void EntityMotionTest()
 		{
 			int numEntities = 100;
-			var ctx = new SimulationContext();
+			var ctx = new SimulationContext(true);
 			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()),ctx);
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();

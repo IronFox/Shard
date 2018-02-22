@@ -26,7 +26,10 @@ namespace Shard
 
 		public override int GetHashCode()
 		{
-			return Position.GetHashCode() * 31 + Guid.GetHashCode();
+			return new Helper.HashCombiner(GetType())
+				.Add(Position)
+				.Add(Guid)
+				.GetHashCode();
 		}
 
 		public override bool Equals(object obj)
