@@ -245,14 +245,20 @@ namespace Shard
 			}
 		}
 
+		//https://stackoverflow.com/questions/2974519/generic-constraints-where-t-struct-and-where-t-class - Alcaro
+		public class _RequireStruct<T> where T : struct { }
+		public class _RequireClass<T> where T : class { }
+
 		public class Comparator
 		{
+			
+
 			int state = 0;
 			public Comparator()
 			{
 			}
 
-			public Comparator Append<T>(T a, T b) where T : IComparable<T>
+			public Comparator Append<T>(T a, T b, _RequireClass<T> t = null) where T : class, IComparable<T>
 			{
 				if (state == 0)
 				{
@@ -268,7 +274,31 @@ namespace Shard
 				}
 				return this;
 			}
-			public Comparator Append<T>(T[] a, T[] b) where T : IComparable<T>
+			public Comparator Append<T>(T a, T b, _RequireStruct<T> t = null) where T : struct, IComparable<T>
+			{
+				if (state == 0)
+				{
+					state = a.CompareTo(b);
+				}
+				return this;
+			}
+			public Comparator Append<T>(T[] a, T[] b, _RequireClass<T> t = null) where T : class, IComparable<T>
+			{
+				if (state == 0)
+				{
+					int lenA = Length(a);
+					int lenB = Length(b);
+					if (lenA < lenB)
+						state = -1;
+					else if (lenA > lenB)
+						state = 1;
+					else
+						for (int i = 0; i < lenA && state == 0; i++)
+							Append(a[i], b[i]);
+				}
+				return this;
+			}
+			public Comparator Append<T>(T[] a, T[] b, _RequireStruct<T> t = null) where T : struct, IComparable<T>
 			{
 				if (state == 0)
 				{
@@ -285,7 +315,7 @@ namespace Shard
 				return this;
 			}
 
-			public Comparator Append<T>(IList<T> a, IList<T> b) where T : IComparable<T>
+			public Comparator Append<T>(IList<T> a, IList<T> b, _RequireClass<T> t = null) where T : class, IComparable<T>
 			{
 				if (state == 0)
 				{
@@ -302,6 +332,22 @@ namespace Shard
 				return this;
 			}
 
+			public Comparator Append<T>(IList<T> a, IList<T> b, _RequireStruct<T> t = null) where T : struct, IComparable<T>
+			{
+				if (state == 0)
+				{
+					int lenA = Length(a);
+					int lenB = Length(b);
+					if (lenA < lenB)
+						state = -1;
+					else if (lenA > lenB)
+						state = 1;
+					else
+						for (int i = 0; i < lenA && state == 0; i++)
+							Append(a[i], b[i]);
+				}
+				return this;
+			}
 
 			public Comparator Append(int comparisonResult)
 			{

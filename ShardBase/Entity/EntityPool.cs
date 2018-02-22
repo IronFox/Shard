@@ -409,10 +409,11 @@ namespace Shard
 
 			public int CompareTo(MovementPriority other)
 			{
-				int rs = Score.CompareTo(other.Score);
-				if (rs != 0)
-					return rs;
-				return Destination.CompareTo(other.Destination);
+				return new Helper.Comparator()
+					.Append(Score, other.Score)
+					.Append(Destination, other.Destination)
+					.Append(PresumedCurrent, other.PresumedCurrent)
+					.Finish();
 			}
 
 			public static bool operator >(MovementPriority a, MovementPriority b)
