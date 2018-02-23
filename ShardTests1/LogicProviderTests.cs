@@ -66,6 +66,35 @@ namespace Shard.Tests
 		";
 
 
+		const string derivationTest0 =
+			@"	using Shard;
+				using System;
+				[Serializable]
+				public abstract class Base : Shard.EntityLogic {
+
+					protected abstract void InnerEvolve();
+
+					protected override void Evolve(ref Actions actions, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool locationIsInconsistent)
+					{
+						InnerEvolve();
+					}
+				};
+		";
+
+		const string derivationTest1 =
+			@"	#reference base
+				using Shard;
+				using System;
+				[Serializable]
+				public class Test : Base {
+
+					protected override void InnerEvolve()
+					{
+
+					}
+				};
+		";
+
 
 		const string disallowedStructNotSerializable =
 		@"	using Shard;
@@ -229,6 +258,23 @@ namespace Shard.Tests
 
 			var serialLogic = Helper.SerializeToArray(logic);
 			CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => scriptName == "shared" ? sharedP : provider2);
+			var logic3 = (DynamicCSLogic)Helper.Deserialize(serialLogic);
+			logic3.FinishLoading(new EntityID(), TimeSpan.FromHours(1));
+		}
+		[TestMethod()]
+		public void ReferencedProviderTest2()
+		{
+			CSLogicProvider baseP = CSLogicProvider.CompileAsync("base", derivationTest0).Get();
+			CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => baseP);
+			CSLogicProvider usingSharedP = CSLogicProvider.CompileAsync("using", derivationTest1).Get();
+			DynamicCSLogic logic = new DynamicCSLogic(usingSharedP, null, null);
+			logic.FinishLoading(new EntityID(), TimeSpan.Zero);
+
+			var serialProvider = Helper.SerializeToArray(usingSharedP);
+			var provider2 = (CSLogicProvider)Helper.Deserialize(serialProvider);
+
+			var serialLogic = Helper.SerializeToArray(logic);
+			CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => scriptName == "base" ? baseP : provider2);
 			var logic3 = (DynamicCSLogic)Helper.Deserialize(serialLogic);
 			logic3.FinishLoading(new EntityID(), TimeSpan.FromHours(1));
 		}

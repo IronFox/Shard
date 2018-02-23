@@ -470,7 +470,7 @@ namespace Shard
 			// Now that we have a compiled script, lets run them
 			foreach (Type type in a.GetExportedTypes())
 			{
-				if (type.BaseType == typeof(EntityLogic))
+				if (type.IsSubclassOf(typeof(EntityLogic)) && !type.IsAbstract)
 				{
 
 					var c = type.GetConstructor(Type.EmptyTypes);
