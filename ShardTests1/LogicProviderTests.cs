@@ -267,7 +267,7 @@ namespace Shard.Tests
 			CSLogicProvider baseP = CSLogicProvider.CompileAsync("base", derivationTest0).Get();
 			CSLogicProvider.AsyncFactory = scriptName => Task.Run(() => baseP);
 			CSLogicProvider usingSharedP = CSLogicProvider.CompileAsync("using", derivationTest1).Get();
-			DynamicCSLogic logic = new DynamicCSLogic(usingSharedP, null, null);
+			DynamicCSLogic logic = new DynamicCSLogic(usingSharedP, "Test", null);
 			logic.FinishLoading(new EntityID(), TimeSpan.Zero);
 
 			var serialProvider = Helper.SerializeToArray(usingSharedP);

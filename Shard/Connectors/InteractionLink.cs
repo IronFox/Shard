@@ -190,8 +190,12 @@ namespace Shard
 									Error("Not registered as " + from + ". Ignoring message");
 								else
 								{
-									if (Simulation.Stack.Size > 0)
-										Simulation.ClientMessageQueue.HandleIncomingMessage(from, to, msgChannel,data, orderIndex++);
+									int gen = Simulation.Stack.NewestFinishedSDSGeneration;
+									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, orderIndex), msgChannel, data, gen, gen+1);
+
+									int expectConfirmations = Simulation.RelayMessageToSiblings(msg);
+									Simulation.ClientMessageQueue.HandleIncomingMessage(msg, expectConfirmations);
+									orderIndex++;
 									OnMessage?.Invoke(from,to,data);
 								}
 								break;

@@ -67,7 +67,7 @@ namespace Shard
 			data.entities = new EntityPool(input.SDS.FinalEntities, ctx);
 			data.localChangeSet = new EntityChangeSet();
 			data.ic = input.SDS.IC.Clone();
-			bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
+			//bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
 			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, clientMessages, data.ic, entityLogicTimeout,ctx);
 			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
 				throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");

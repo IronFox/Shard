@@ -226,7 +226,18 @@ namespace Shard
 			}
 		};
 
-		internal Entity Clone()
+		public Entity Relocate(Vec3 newPos)
+		{
+			var rs = new Entity(ID.Relocate(newPos), Velocity, transientDeserializedLogic, SerialLogicState,
+#if STATE_ADV
+				Appearances, null, 
+#endif
+				null);
+			return rs;
+
+		}
+
+		public Entity Clone()
 		{
 			var rs = new Entity(ID, Velocity,transientDeserializedLogic, SerialLogicState,
 #if STATE_ADV

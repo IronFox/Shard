@@ -91,6 +91,17 @@ namespace Shard
 			}
 		}
 
+		public IEnumerable<bool> Bits
+		{
+			get
+			{
+				for (int i = 0; i < Size.X; i++)
+					for (int j = 0; j < Size.Y; j++)
+						for (int k = 0; k < Size.Z; k++)
+							yield return this[i, j, k];
+			}
+		}
+
 		private void UpdateSize(Int3 newSize)
 		{
 			size = newSize;
@@ -174,6 +185,29 @@ namespace Shard
 			size = source.size;
 			grid = source.grid;
 			oneCount = source.oneCount;
+		}
+
+		protected void LoadMinimum(BitCube a, BitCube b)
+		{
+			if (a.Size != b.Size)
+				throw new ArgumentException("Parameter size mismatch: " + a.Size + " != " + b.Size);
+			oneCount = -1;
+			UpdateSize(a.Size);
+			for (int x = 0; x < grid.GetLength(0); x++)
+				for (int y = 0; y < grid.GetLength(1); y++)
+					for (int z = 0; z < grid.GetLength(2); z++)
+						grid[x, y, z] = a.grid[x, y, z] & b.grid[x, y, z];
+		}
+		protected void LoadMaximum(BitCube a, BitCube b)
+		{
+			if (a.Size != b.Size)
+				throw new ArgumentException("Parameter size mismatch: " + a.Size + " != " + b.Size);
+			oneCount = -1;
+			UpdateSize(a.Size);
+			for (int x = 0; x < grid.GetLength(0); x++)
+				for (int y = 0; y < grid.GetLength(1); y++)
+					for (int z = 0; z < grid.GetLength(2); z++)
+						grid[x, y, z] = a.grid[x, y, z] | b.grid[x, y, z];
 		}
 
 		public void LoadCopy(BitCube source)

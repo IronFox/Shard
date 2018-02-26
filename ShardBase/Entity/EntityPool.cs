@@ -138,6 +138,14 @@ namespace Shard
 			}
 		}
 
+		public Entity Find(Guid guid)
+		{
+			Entity rs;
+			if (Find(guid, out rs))
+				return rs;
+			return null;
+		}
+
 		public EntityPool(IEnumerable<Entity> entities, EntityChange.ExecutionContext ctx)
 		{
 			this.ctx = ctx;

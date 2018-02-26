@@ -7,7 +7,13 @@ namespace Shard
 	public class InconsistencyCoverage : BitCube
 	{
 		public static int CommonResolution { get; set; } = 8;
-
+		public bool IsFullyConsistent
+		{
+			get
+			{
+				return base.OneCount == 0;
+			}
+		}
 
 		private InconsistencyCoverage(BitCube raw) : base(raw)
 		{ }
@@ -81,6 +87,15 @@ namespace Shard
 			return Int3.Min((relative * CommonResolution).FloorInt3, CommonResolution - 1);
 		}
 
+		public static Vec3 ToRelative(Int3 pixelCoords)
+		{
+			if ((pixelCoords < Int3.Zero).Any)
+				throw new ArgumentOutOfRangeException(pixelCoords + " partially less than zero");
+			if ((pixelCoords >= CommonResolution).Any)
+				throw new ArgumentOutOfRangeException(pixelCoords + " partially greater or equal to max resolution");
+			return new Vec3(pixelCoords) / (CommonResolution - 1);
+		}
+
 		/// <summary>
 		/// Checks whether or not a location in [0,1] is consistent according to the local IC
 		/// </summary>
@@ -104,6 +119,42 @@ namespace Shard
 		public int GetInconsistencyAtR(Vec3 pos)
 		{
 			return IsInconsistentR(pos) ? 1 : 0;
+		}
+
+		public static InconsistencyCoverage GetMinimum(InconsistencyCoverage ic0, InconsistencyCoverage ic1)
+		{
+			InconsistencyCoverage rs = new InconsistencyCoverage(Int3.Zero);
+			rs.LoadMinimum(ic0, ic1);
+			return rs;
+		}
+
+		public bool FindInconsistentPlacementCandidateR(ref Vec3 relativeCoords, float maxDist)
+		{
+			var c = ToPixelR(relativeCoords);
+
+			int maxDist2 = (int)(maxDist * CommonResolution);
+			int d2 = maxDist2;
+			Int3 closest = Int3.Zero;
+			bool any = false;
+			
+			for (int z = 0; z < Size.Z; z++)
+				for (int y = 0; y < Size.Y; y++)
+					for (int x = 0; x < Size.X; x++)
+					{
+						if (!this[x, y, z])
+							continue;
+						var candidate = new Int3(x, y, z);
+						int dist = Int3.GetChebyshevDistance(c, candidate);
+						if (dist >= d2)
+							continue;
+						d2 = dist;
+						any = true;
+						closest = candidate;
+					}
+
+			if (any)
+				relativeCoords = ToRelative(closest);
+			return any;
 		}
 	}
 }

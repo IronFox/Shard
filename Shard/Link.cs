@@ -164,7 +164,7 @@ namespace Shard
 
 		private void UpdateAddress(PeerAddress addr)
 		{
-			if (address == addr || addr.IsEmpty)
+			if (address == addr)
 				return;
 			address = addr;
 			ObservationLink.SignalAddressUpdate(ShardPeerAddress);
@@ -549,6 +549,18 @@ namespace Shard
 			}
 		}
 
+		/// <summary>
+		/// Checks whether this link should be connected.
+		/// This is of particular relevance only when dealing with siblings.
+		/// </summary>
+		public bool ShouldBeConnected
+		{
+			get
+			{
+				TryRefreshAddress();
+				return !address.IsEmpty;
+			}
+		}
 
 		private void WriteMain()
 		{

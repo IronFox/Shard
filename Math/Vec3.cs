@@ -611,6 +611,16 @@ namespace VectorMath
 			hashCode = hashCode * -1521134295 + Z.GetHashCode();
 			return hashCode;
 		}
+		public static int GetChebyshevDistance(Int3 a, Int3 b)
+		{
+			return Math.Max(
+					Math.Max(
+						Math.Abs(a.X - b.X),
+						Math.Abs(a.Y - b.Y)
+						),
+					Math.Abs(a.Z - b.Z)
+				);
+		}
 
 		/// <summary>
 		/// Iterates in [0,this) along each axis, so that each combination is passed to <paramref name="action"/> once

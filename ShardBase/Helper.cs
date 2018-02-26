@@ -151,6 +151,10 @@ namespace Shard
 			return '['+ hex.Replace("-", "")+']';
 		}
 
+		//https://stackoverflow.com/questions/43289/comparing-two-byte-arrays-in-net
+		// Copyright (c) 2008-2013 Hafthor Stefansson
+		// Distributed under the MIT/X11 software license
+		// Ref: http://www.opensource.org/licenses/mit-license.php.
 		public static unsafe bool AreEqual(byte[] a1, byte[] a2)
 		{
 			if (a1 == a2) return true;

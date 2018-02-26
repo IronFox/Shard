@@ -234,6 +234,7 @@ namespace Shard
 			observationListener = new ObservationLink.Listener(listener.Port - 1000);
 
 			Log.Message("Polling SDS state...");
+			SimulationContext ctx = new SimulationContext(false);
 
 			SDS sds;
 			while (true)
@@ -244,7 +245,7 @@ namespace Shard
 					sds = data.Deserialize();
 					break;
 				}
-				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
+				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
 				Thread.Sleep(1000);
 				Console.Write('.');
 				Console.Out.Flush();
@@ -268,7 +269,6 @@ namespace Shard
 					DB.BeginFetch(link.InboundRCSStackID);
 			}
 
-			SimulationContext ctx = new SimulationContext(false);
 
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
 			while (stack.NewestFinishedSDSGeneration < TimingInfo.Current.TopLevelGeneration)
@@ -283,7 +283,7 @@ namespace Shard
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
-				CheckIncoming(TimingInfo.Current.TopLevelGeneration);
+				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
 			}
 			Log.Message("done. Starting main loop...");
 
@@ -293,7 +293,7 @@ namespace Shard
 			while (true)
 			{
 				var timing = TimingInfo.Current;
-				CheckIncoming(timing.TopLevelGeneration);
+				CheckIncoming(timing.TopLevelGeneration,ctx);
 				Log.Minor("TLG "+stack.NewestFinishedSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
 				{
 					var newest = stack.NewestFinishedSDS;
@@ -383,6 +383,28 @@ namespace Shard
 			}
 
 
+		}
+
+
+
+		/// <summary>
+		/// Relays an incoming user message to all known siblings
+		/// </summary>
+		/// <returns>Number of siblings that must relay this message to the local shard</returns>
+		public static int RelayMessageToSiblings(ClientMessage msg)
+		{
+			if (siblings.Count == 0)
+				return 0;
+
+			int rs = 0;
+			foreach (var s in siblings)
+			{
+				if (s.ShouldBeConnected)
+				{
+					s.Set(msg.ID.ToString(),msg);
+				}
+			}
+			return rs;
 		}
 
 		public struct RecoveryCheck
@@ -518,13 +540,20 @@ namespace Shard
 			incoming.Add(new Tuple<Link, object>(lnk, obj));
 		}
 
-		private static void CheckIncoming(int currentTLG)
+		private static void CheckIncoming(int currentTLG, SimulationContext ctx)
 		{
 			Tuple<Link, object> pair;
 			while (incoming.TryTake(out pair))
 			{
 				object obj = pair.Item2;
 				Link lnk = pair.Item1;
+
+				if (obj is ClientMessage)
+				{
+					var msg = (ClientMessage)obj;
+					ClientMessageQueue.Reaffirm(msg);
+					return;
+				}
 
 				if (obj is OldestGeneration)
 				{
@@ -545,6 +574,9 @@ namespace Shard
 							RCS.Serial rcs = o as RCS.Serial;
 							if (rcs != null)
 								return rcs.Generation >= gen;
+							ClientMessage msg = o as ClientMessage;
+							if (msg != null)
+								return msg.IntendedApplicationTLG >= gen;
 							return true;
 						});
 					}
@@ -589,13 +621,18 @@ namespace Shard
 						return;
 					}
 					SDS sds = raw.Deserialize();
+					if (existing.SDS.ICMessagesAndEntitiesAreEqual(sds))
+					{
+						Log.Minor("SDS update from sibling or DB: Equal. Ignoring");
+						return;
+					}
 					if (sds.IsFullyConsistent)
 					{
 						Log.Minor("SDS update from sibling or DB: Accepted generation " + raw.Generation);
 						stack.Insert(sds);
 						return;
 					}
-					SDS merged = existing.SDS.MergeWith(sds);
+					SDS merged = existing.SDS.MergeWith(sds,SDS.MergeStrategy.ExclusiveWithPositionCorrection,ctx);
 					Log.Minor("SDS update from sibling " + lnk + ": Merged generation " + raw.Generation);
 					if (merged.Inconsistency < existing.SDS.Inconsistency)
 						stack.Insert(merged);
