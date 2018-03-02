@@ -271,6 +271,8 @@ namespace Shard
 
 		private void TryRefreshAddress()
 		{
+			if (AddressLocked)
+				return;
 			var addr = DB.TryGet(ID);
 			UpdateAddress(addr);
 		}
@@ -454,17 +456,17 @@ namespace Shard
 			}
 			catch (IOException ex)
 			{
-				Log.Error(Name + ": "+ex.Message+". Closing link");
+				Log.Error(Name + ": "+ex.Message+" Closing link");
 				client.Close();
 			}
 			catch (ArgumentException ex)
 			{
-				Log.Error(Name + ": " + ex.Message + ". Closing link");
+				Log.Error(Name + ": " + ex.Message + " Closing link");
 				client.Close();
 			}
-			catch (SerializationException)
+			catch (SerializationException ex)
 			{
-				Log.Error(Name+": Serialization exception. Closing link");
+				Log.Error(Name + ": "+ex.Message+" Closing link");
 				client.Close();
 			}
 			catch (SocketException)
@@ -561,6 +563,11 @@ namespace Shard
 				return !address.IsEmpty;
 			}
 		}
+
+		/// <summary>
+		/// If set true, disallows DB fetches to update the remote address
+		/// </summary>
+		public bool AddressLocked { get; set; }
 
 		private void WriteMain()
 		{

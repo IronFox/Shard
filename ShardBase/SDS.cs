@@ -104,7 +104,11 @@ namespace Shard
 		/// The key equals the targeted entity Guid or Guid.Empty if the message should be broadcast to all entities.
 		/// </summary>
 		public readonly Dictionary<Guid, EntityMessage[]> ClientMessages;
-
+		/// <summary>
+		/// Indicates that at least one client message was not properly received,
+		/// and the entire IC should be tagged inconsistent when revisited
+		/// </summary>
+		public readonly bool MessagesInconsistent;
 
 
 
@@ -113,11 +117,12 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, Dictionary<Guid, EntityMessage[]> clientMessages)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, bool messagesInconsistent, Dictionary<Guid, EntityMessage[]> clientMessages)
 		{
 			Generation = generation;
 			FinalEntities = entities;
 			IC = ic;
+			MessagesInconsistent = messagesInconsistent;
 			ClientMessages = clientMessages;
 		}
 
@@ -136,6 +141,7 @@ namespace Shard
 				using (var ms = new MemoryStream())
 				{
 					f.Serialize(ms, IsFullyConsistent);
+					f.Serialize(ms, MessagesInconsistent);
 					f.Serialize(ms, Generation);
 					f.Serialize(ms, FinalEntities);
 					f.Serialize(ms, IC);
@@ -520,38 +526,44 @@ namespace Shard
 					MergeInconsistentEntitiesEx(pool, exclusiveSource, strategy == MergeStrategy.ExclusiveWithPositionCorrection,merged, ctx);
 			}
 
-
-			var dict = new Dictionary<Actor, ActorMessages>();
-
-			foreach (var tuple in ClientMessages)
+			if (MessagesInconsistent == other.MessagesInconsistent)
 			{
-				foreach (var msg in tuple.Value)
-					dict.GetOrCreate(msg.Sender).AddA(tuple.Key,msg);
+				var dict = new Dictionary<Actor, ActorMessages>();
+
+				foreach (var tuple in ClientMessages)
+				{
+					foreach (var msg in tuple.Value)
+						dict.GetOrCreate(msg.Sender).AddA(tuple.Key, msg);
+				}
+				foreach (var tuple in other.ClientMessages)
+				{
+					foreach (var msg in tuple.Value)
+						dict.GetOrCreate(msg.Sender).AddB(tuple.Key, msg);
+				}
+
+				var tempMessages = new Dictionary<Guid, List<EntityMessage>>();
+
+				foreach (var t in dict)
+				{
+					t.Value.MergeTo(tempMessages, IC, other.IC, ctx.LocalSpace);
+				}
+
+				var finalMessages = new Dictionary<Guid, EntityMessage[]>();
+
+				foreach (var t in tempMessages)
+				{
+					//t.Value.Sort();
+					finalMessages[t.Key] = t.Value.ToArray();
+				}
+
+
+				return new SDS(Generation, pool.ToArray(), merged, MessagesInconsistent, finalMessages);
 			}
-			foreach (var tuple in other.ClientMessages)
+			else
 			{
-				foreach (var msg in tuple.Value)
-					dict.GetOrCreate(msg.Sender).AddB(tuple.Key, msg);
+				var messages = MessagesInconsistent ? other.ClientMessages : ClientMessages;
+				return new SDS(Generation, pool.ToArray(), merged,false, messages);
 			}
-
-			var tempMessages = new Dictionary<Guid, List<EntityMessage>>();
-
-			foreach (var t in dict)
-			{
-				t.Value.MergeTo(tempMessages,IC,other.IC,ctx.LocalSpace);
-			}
-
-			var finalMessages = new Dictionary<Guid, EntityMessage[]>();
-
-			foreach (var t in tempMessages)
-			{
-				//t.Value.Sort();
-				finalMessages[t.Key] = t.Value.ToArray();
-			}
-
-
-			return new SDS(Generation, pool.ToArray(), merged, finalMessages);
-
 
 		}
 

@@ -457,6 +457,7 @@ namespace Shard.Tests
 			PeerAddress.DefaultPort = random.Next(1024, 32768);
 
 			Link active = new Link(new PeerAddress("localhost"), true, 0, false);
+			active.AddressLocked = true;
 			active.VerboseWriter = true;
 			active.OnData = OnActiveData;
 

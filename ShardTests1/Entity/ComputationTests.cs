@@ -165,7 +165,7 @@ namespace Shard.Tests
 
 				var root =
 					new SDSStack.Entry(
-					new SDS(0, intermediate.entities.ToArray(), intermediate.ic, null),
+					new SDS(0, intermediate.entities.ToArray(), intermediate.ic, false, null),
 					intermediate
 					);
 				Assert.IsTrue(root.IsFullyConsistent);

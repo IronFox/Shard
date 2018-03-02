@@ -76,7 +76,7 @@ namespace Shard.Tests
 
 		public static SDS RandomSDS()
 		{
-			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), RandomClientMessages());
+			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), random.NextBool(0.01f), RandomClientMessages());
 		}
 
 		public static RCS[] RandomOutboundRCSs()

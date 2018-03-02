@@ -36,7 +36,7 @@ namespace Shard
 
 			public SerialSDS Finish()
 			{
-				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(),null);
+				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(),false,null);
 				return new SerialSDS(sds,sector);
 			}
 		}
@@ -291,7 +291,7 @@ namespace Shard
 			intermediate0.localChangeSet = new EntityChangeSet();
 
 			SDSStack.Entry root = new SDSStack.Entry(
-												new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, null),
+												new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, false,null),
 												intermediate0);
 			//Assert.IsTrue(root.IsFullyConsistent);
 

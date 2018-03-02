@@ -170,8 +170,9 @@ namespace Shard
 		/// If equal, new messages are archived, and full archive is returned.
 		/// If greater, archived messages are purged and only new messages are returned/archived </param>
 		/// <returns>Dictionary of queued messages, grouped by target entity id, ordered by sender and order number. May be null</returns>
-		public Dictionary<Guid, EntityMessage[]> Collect(int generation)
+		public Dictionary<Guid, EntityMessage[]> Collect(int generation, out bool isInconsistent)
 		{
+			isInconsistent = false;
 			if (generation < archiveGeneration)
 				return null;
 			if (generation > archiveGeneration)
@@ -193,14 +194,27 @@ namespace Shard
 					{
 						LogError("TLG window missed: discarding message " + msg);
 						reaffirmations.ForceRemove(r.fullMessage.ID);
+						isInconsistent = true;
 						continue;
 					}
 					if (r.reaffirmationsReceived < r.reaffirmationsRequired)
+					{
+						isInconsistent = true;	//some but not all received => inconsistent, but maybe it's collected next time
 						continue;
+					}
 					if (r.reaffirmationsRequired > 0)
+					{
+						//good case
 						newMessages.GetOrCreate(msg.ID.To).Add(msg.Translate());
+					}
 					else
+					{
+						/*
+						 * semi good case:
+						 * we know it's consistent (at least here) because the neighbor will suffer the same issue
+						 */
 						LogError("Message conflict: discarding message " + msg);
+					}
 					reaffirmations.ForceRemove(r.fullMessage.ID);
 				}
 			}

@@ -12,6 +12,7 @@ namespace Shard
 		//private SDS output;
 		IntermediateSDS data;
 		int generation;
+		bool tagAllInconsistent;
 		SDSStack.Entry old;
 		List<EntityError> errors;
 		Dictionary<Guid, EntityMessage[]> clientMessages;
@@ -51,9 +52,13 @@ namespace Shard
 			data.inputConsistent = input.IsFullyConsistent;
 			data.inputHash = input.SDS.HashDigest;
 
-			clientMessages = freshClientMessages?.Collect(generation);
+			tagAllInconsistent = false;
+			clientMessages = freshClientMessages?.Collect(generation, out tagAllInconsistent);
 			if (clientMessages == null && old.SDS != null) //nothing new, check locally archived...
+			{
 				clientMessages = old.SDS.ClientMessages;
+				tagAllInconsistent = old.SDS.MessagesInconsistent;
+			}
 
 
 			if (old.IntermediateSDS != null && old.IntermediateSDS.inputHash == data.inputHash)
@@ -67,6 +72,8 @@ namespace Shard
 			data.entities = new EntityPool(input.SDS.FinalEntities, ctx);
 			data.localChangeSet = new EntityChangeSet();
 			data.ic = input.SDS.IC.Clone();
+			if (tagAllInconsistent)
+				data.ic.SetAllOne();
 			//bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
 			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, clientMessages, data.ic, entityLogicTimeout,ctx);
 			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
@@ -125,7 +132,7 @@ namespace Shard
 			EntityPool p2 = data.entities.Clone();
 			cs.Execute(p2,ic,ctx);
 
-			SDS rs = new SDS(generation, p2.ToArray(), ic, clientMessages);
+			SDS rs = new SDS(generation, p2.ToArray(), ic, tagAllInconsistent, clientMessages);
 
 #if !DRY_RUN
 			if (!ic.AnySet)
