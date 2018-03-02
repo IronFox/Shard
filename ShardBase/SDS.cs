@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -381,6 +382,102 @@ namespace Shard
 		}
 
 
+		private class DualEntityMessages
+		{
+			List<EntityMessage> 
+				a = new List<EntityMessage>(),
+				b = new List<EntityMessage>();
+
+
+			public void AddA(EntityMessage m)
+			{
+				a.Add(m);
+			}
+
+			public void AddB(EntityMessage m)
+			{
+				b.Add(m);
+			}
+
+			internal void MergeTo(List<EntityMessage> list, InconsistencyCoverage icA, InconsistencyCoverage icB, Box simulationSpace)
+			{
+				int atA = 0;
+				int atB = 0;
+				while (atA < a.Count && atB < b.Count)
+				{
+					var ca = a[atA];
+					var cb = b[atB];
+					if (ca.Equals(cb))
+					{
+						list.Add(ca);	//don't matter which
+						atA++;
+						atB++;
+						continue;
+					}
+					if (ca.Channel == cb.Channel && ca.IsBroadcast == cb.IsBroadcast /*&& ca.Sender == cb.Sender*/)
+					{
+						//should be the same message, but some data is different: pick one. dump the other
+						var comp = new Helper.Comparator();
+						if (ca.Sender.IsEntity && ca.Sender.Position != cb.Sender.Position)
+						{
+							int ia = icA.GetInconsistencyAtR(simulationSpace.Relativate(ca.Sender.Position));	//Guid should be identical, origin might be different
+							int ib = icB.GetInconsistencyAtR(simulationSpace.Relativate(cb.Sender.Position));
+							comp.Append(ia, ib);
+						}
+						comp.Append(ca.Payload, cb.Payload);
+						int order = comp.Finish();
+						if (order < 0)
+							list.Add(ca);
+						else
+							list.Add(cb);
+						atA++;
+						atB++;
+						continue;
+					}
+					{
+						int order = ca.CompareTo(cb);
+						if (order < 0)
+						{
+							list.Add(ca);
+							atA++;
+						}
+						else
+						{
+							list.Add(cb);
+							atB++;
+						}
+					}
+
+				}
+
+				list.AddRange(a.Skip(atA));
+				list.AddRange(b.Skip(atB));
+
+			}
+		}
+
+		private class ActorMessages
+		{
+			public Dictionary<Guid, DualEntityMessages> messages = new Dictionary<Guid, DualEntityMessages>();
+
+			public void AddA(Guid receivingEntity, EntityMessage message)
+			{
+				messages.GetOrCreate(receivingEntity).AddA(message);
+			}
+			public void AddB(Guid receivingEntity, EntityMessage message)
+			{
+				messages.GetOrCreate(receivingEntity).AddB(message);
+			}
+
+			public void MergeTo(Dictionary<Guid, List<EntityMessage>> outMessages, InconsistencyCoverage icA, InconsistencyCoverage icB, Box simulationSpace)
+			{
+				foreach (var t in messages)
+				{
+					t.Value.MergeTo(outMessages.GetOrCreate(t.Key),icA, icB,simulationSpace);
+				}
+			}
+		}
+
 		public SDS MergeWith(SDS other, MergeStrategy strategy, EntityChange.ExecutionContext ctx)
 		{
 			if (Generation != other.Generation)
@@ -424,10 +521,36 @@ namespace Shard
 			}
 
 
+			var dict = new Dictionary<Actor, ActorMessages>();
+
+			foreach (var tuple in ClientMessages)
+			{
+				foreach (var msg in tuple.Value)
+					dict.GetOrCreate(msg.Sender).AddA(tuple.Key,msg);
+			}
+			foreach (var tuple in other.ClientMessages)
+			{
+				foreach (var msg in tuple.Value)
+					dict.GetOrCreate(msg.Sender).AddB(tuple.Key, msg);
+			}
+
+			var tempMessages = new Dictionary<Guid, List<EntityMessage>>();
+
+			foreach (var t in dict)
+			{
+				t.Value.MergeTo(tempMessages,IC,other.IC,ctx.LocalSpace);
+			}
+
+			var finalMessages = new Dictionary<Guid, EntityMessage[]>();
+
+			foreach (var t in tempMessages)
+			{
+				//t.Value.Sort();
+				finalMessages[t.Key] = t.Value.ToArray();
+			}
 
 
-
-			return new SDS(Generation, pool.ToArray(), merged, ...);
+			return new SDS(Generation, pool.ToArray(), merged, finalMessages);
 
 
 		}

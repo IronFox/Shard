@@ -21,7 +21,7 @@ namespace Shard
 	}
 
 	[Serializable]
-	public struct Actor
+	public struct Actor : IComparable<Actor>
 	{
 		public readonly Vec3 Position;
 		public readonly Guid Guid;
@@ -51,6 +51,15 @@ namespace Shard
 			return new Helper.HashCombiner(GetType()).Add(Guid).Add(IsEntity).GetHashCode();
 		}
 
+		public int CompareTo(Actor other)
+		{
+			return new Helper.Comparator()
+				.Append(Guid, other.Guid)
+				.Append(IsEntity, other.IsEntity)
+				.Append(Position, other.Position)
+				.Finish();
+		}
+
 		public static bool operator ==(Actor a, Actor b)
 		{
 			return a.Guid == b.Guid && a.IsEntity == b.IsEntity;
@@ -73,7 +82,7 @@ namespace Shard
 
 
 	[Serializable]
-	public class EntityMessage
+	public class EntityMessage : IComparable<EntityMessage>
 	{
 		public readonly Actor Sender;
 		public readonly int Channel;
@@ -88,6 +97,15 @@ namespace Shard
 			IsBroadcast = broadcast;
 		}
 
+		public int CompareTo(EntityMessage other)
+		{
+			return new Helper.Comparator()
+				.Append(Sender, other.Sender)
+				.Append(Channel, other.Channel)
+				.Append(IsBroadcast, other.IsBroadcast)
+				.Finish();
+		}
+
 		public override bool Equals(object obj)
 		{
 			var other = obj as EntityMessage;
@@ -95,6 +113,7 @@ namespace Shard
 				return false;
 			return Sender == other.Sender 
 				&& Channel == other.Channel 
+				&& IsBroadcast == other.IsBroadcast
 				&& Helper.AreEqual(Payload, other.Payload); 
 		}
 

@@ -393,7 +393,7 @@ namespace Shard
 		/// <returns>Number of siblings that must relay this message to the local shard</returns>
 		public static int RelayMessageToSiblings(ClientMessage msg)
 		{
-			if (siblings.Count == 0)
+			if (siblings == null || siblings.Count == 0)
 				return 0;
 
 			int rs = 0;

@@ -106,7 +106,7 @@ namespace Shard
 				lock (this)
 				{
 					int at = sdsList.Count - 1;
-					while (at >= 0 && !sdsList[at].SDS.IsSet)
+					while (at >= 0 && sdsList[at].SDS != null && !sdsList[at].SDS.IsSet)
 						at--;
 					return at >= 0 ? sdsList[at].Generation : -1;
 				}
