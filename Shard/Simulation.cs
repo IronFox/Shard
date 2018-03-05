@@ -17,6 +17,7 @@ namespace Shard
 		public readonly TimeSpan
 							GenerationTimeWindow,
 							StepTimeWindow,
+							MessageProcessingTimeWindow,
 							StepComputationTimeWindow;
 		public readonly DateTime
 							Start;
@@ -27,6 +28,8 @@ namespace Shard
 			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msStep * StepsPerGeneration);
 			StepTimeWindow = TimeSpan.FromMilliseconds(t.msStep);
 			StepComputationTimeWindow = TimeSpan.FromMilliseconds(t.msComputation);
+			MessageProcessingTimeWindow = TimeSpan.FromMilliseconds(t.msMessageProcessing);
+
 			Start = Convert.ToDateTime(t.startTime);
 			StartGeneration = t.startGeneration;
 			MaxGeneration = t.maxGeneration;
@@ -385,6 +388,25 @@ namespace Shard
 
 		}
 
+		public static int EstimateNextSuitableMessageTargetGeneration()
+		{
+			int step = 1;
+			var t0 = DB.Timing;
+			if (t0 != null)
+			{
+				var t = new TimingInfo(t0);
+				var remainingWindow = t.StepTimeWindow - t.LatestGenerationElapsed;
+				var deliveryTimeEstimate = t.MessageProcessingTimeWindow;
+				var at = t.LatestGenerationElapsed + deliveryTimeEstimate;
+				while (at > t.StepTimeWindow)
+				{
+					at -= t.StepTimeWindow;
+					step++;
+				}
+			}
+			return stack.NewestRegisteredSDSGeneration + step;
+		}
+
 
 
 		/// <summary>
@@ -551,7 +573,7 @@ namespace Shard
 				if (obj is ClientMessage)
 				{
 					var msg = (ClientMessage)obj;
-					ClientMessageQueue.Reaffirm(msg);
+					ClientMessageQueue.Confirm(msg);
 					return;
 				}
 
@@ -576,7 +598,7 @@ namespace Shard
 								return rcs.Generation >= gen;
 							ClientMessage msg = o as ClientMessage;
 							if (msg != null)
-								return msg.IntendedApplicationTLG >= gen;
+								return msg.Body.RecordedTLG + 2 >= gen;
 							return true;
 						});
 					}

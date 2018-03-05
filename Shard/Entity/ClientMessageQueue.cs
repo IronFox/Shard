@@ -8,127 +8,6 @@ using System.Threading.Tasks;
 
 namespace Shard
 {
-	[Serializable]
-	public struct ClientMessageID
-	{
-		/// <summary>
-		/// GUID of the sender client
-		/// </summary>
-		public readonly Guid From;
-		/// <summary>
-		/// GUID of the receiving entity (or Guid.Empty if broadcast)
-		/// </summary>
-		public readonly Guid To;
-		/// <summary>
-		/// Index of this message. (From, OrderIndex) must be unique
-		/// </summary>
-		public readonly int OrderIndex;
-
-		public bool IsBroadcast
-		{
-			get
-			{
-				return To == Guid.Empty;
-			}
-		}
-
-		public ClientMessageID(Guid from, Guid to, int orderIndex)
-		{
-			From = from;
-			To = to;
-			OrderIndex = orderIndex;
-		}
-
-		public static bool operator ==(ClientMessageID a, ClientMessageID b)
-		{
-			return a.From == b.From && a.To == b.To && a.OrderIndex == b.OrderIndex;
-		}
-		public static bool operator !=(ClientMessageID a, ClientMessageID b)
-		{
-			return !(a == b);
-		}
-
-		public override bool Equals(object obj)
-		{
-			if (!(obj is ClientMessageID))
-				return false;
-			ClientMessageID other = (ClientMessageID)obj;
-			return this == other;
-		}
-
-		public override int GetHashCode()
-		{
-			return new Helper.HashCombiner(GetType())
-				.Add(From)
-				.Add(To)
-				.Add(OrderIndex)
-				.GetHashCode();
-		}
-
-		public override string ToString()
-		{
-			return From + "->" + To + " #" + OrderIndex;
-		}
-	}
-
-	[Serializable]
-	public class ClientMessage
-	{
-		public ClientMessage(ClientMessageID id, int channel, byte[] data, int tlg, int intendedApplicationTLG)
-		{
-			Data = data;
-			Channel = channel;
-			ID = id;
-			RecordedTLG = tlg;
-			IntendedApplicationTLG = intendedApplicationTLG;
-		}
-
-		public ClientMessageID ID { get; set; }
-		public int Channel { get; set; }
-		public byte[] Data { get; set; }
-		public int RecordedTLG { get; set; }
-		public int IntendedApplicationTLG { get; set; }
-
-		public override bool Equals(object obj)
-		{
-			var other = obj as ClientMessage;
-			if (other == null)
-				return false;
-			return other.ID == ID
-				&& Channel == other.Channel
-				&& IntendedApplicationTLG == other.IntendedApplicationTLG
-				&& Helper.AreEqual(Data, other.Data)
-				;//ignore RecordedTLG here, as timing differences might cause variances
-		}
-
-		public override int GetHashCode()
-		{
-			return new Helper.HashCombiner(GetType())
-				.Add(ID)
-				.Add(Channel)
-				.Add(Data)
-				.GetHashCode();
-		}
-
-		public override string ToString()
-		{
-			return ID + " Ch" + Channel + " [" + Helper.Length(Data) + "]";
-		}
-
-		public OrderedEntityMessage Translate()
-		{
-			return new OrderedEntityMessage(
-				ID.OrderIndex, 
-				new EntityMessage(
-					new Actor(ID.From), 
-					ID.IsBroadcast, 
-					Channel, 
-					Data
-				)
-			);
-		}
-	}
-
 
 
 
@@ -142,12 +21,27 @@ namespace Shard
 	/// </summary>
 	public class ClientMessageQueue
 	{
-		Dictionary<Guid, List<OrderedEntityMessage>> 
-					newMessages = new Dictionary<Guid, List<OrderedEntityMessage>>(),
-					archivedMessages = new Dictionary<Guid, List<OrderedEntityMessage>>();
-		int archiveGeneration = 0;
+		class Gen
+		{
+			public readonly int Generation;
 
-		public int ArchivedGeneration { get { return archiveGeneration; } }
+			public Gen(int gen)
+			{
+				Generation = gen;
+			}
+
+			/// <summary>
+			/// Ordered by receiver entity
+			/// </summary>
+			public Dictionary<Guid, List<ClientMessage>> newConfirmedMessages 
+				= new Dictionary<Guid, List<ClientMessage>>();
+			public ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer> pending =
+				new ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer>();
+
+		};
+		ConcurrentQueue<ClientMessage> newMessages = new ConcurrentQueue<ClientMessage>();
+
+		Deque<Gen> generations = new Deque<Gen>();
 
 		private static EntityMessage[] Sort(List<OrderedEntityMessage> list)
 		{
@@ -158,105 +52,98 @@ namespace Shard
 			return rs;
 		}
 
-		private ConcurrentDictionary<ClientMessageID, ReaffirmationCounter> reaffirmations
-			= new ConcurrentDictionary<ClientMessageID, ReaffirmationCounter>();
-
 		/// <summary>
 		/// Fetches (and clears out) any queued up messages.
-		/// Thread-safe against HandleIncomingMessage. NOT thread-safe against competing calls to Collect()
+		/// Thread-safe
 		/// </summary>
-		/// <param name="generation">Generation to query. 
-		/// If less than previous generations, nothing happens and null is returned. 
-		/// If equal, new messages are archived, and full archive is returned.
-		/// If greater, archived messages are purged and only new messages are returned/archived </param>
-		/// <returns>Dictionary of queued messages, grouped by target entity id, ordered by sender and order number. May be null</returns>
-		public Dictionary<Guid, EntityMessage[]> Collect(int generation, out bool isInconsistent)
+		public void Collect(ref Dictionary<Guid, ClientMessage[]> inOutMessages, out bool isInconsistent, int generation, int replicaCount)
 		{
 			isInconsistent = false;
-			if (generation < archiveGeneration)
-				return null;
-			if (generation > archiveGeneration)
+			if (generations.Count == 0 && newMessages.IsEmpty)
+				return;
+			Dictionary<Guid, List<ClientMessage>> temp = new Dictionary<Guid, List<ClientMessage>>();
+			if (inOutMessages == null)
+				inOutMessages = new Dictionary<Guid, ClientMessage[]>();
+			else
 			{
-				Log("Generation transition: ->"+generation);
-				archiveGeneration = generation;
-				archivedMessages.Clear();
+				foreach (var t in inOutMessages)
+					temp.GetOrCreate(t.Key).AddRange(t.Value);
+				inOutMessages.Clear();
+			}
+			{
+				ClientMessage msg;
+				while (newMessages.TryDequeue(out msg))
+					temp.GetOrCreate(msg.ID.To).Add(msg);
 			}
 
-			lock (newMessages)
-			{
-				var copy = reaffirmations.Values.ToArray();
-				foreach (var r in copy)
+			if (generations.Count > 0)
+				lock (generations)
 				{
-					var msg = r.fullMessage;
-					if (msg.IntendedApplicationTLG > generation)
-						continue;
-					if (msg.IntendedApplicationTLG < generation)
-					{
-						LogError("TLG window missed: discarding message " + msg);
-						reaffirmations.ForceRemove(r.fullMessage.ID);
+					while (generations.Count > 0 && generations.Front.Generation + 2 < generation)
+						generations.RemoveFront();
+					if (generations.Count == 0)
+						return;
+
+					if (generation < generations.Front.Generation)
+						return;
+					int at = generation - generations.Front.Generation;
+					if (at >= generations.Count)
+						return;
+					Gen gen = generations[at];
+
+					if (!gen.pending.IsEmpty)
 						isInconsistent = true;
-						continue;
-					}
-					if (r.reaffirmationsReceived < r.reaffirmationsRequired)
-					{
-						isInconsistent = true;	//some but not all received => inconsistent, but maybe it's collected next time
-						continue;
-					}
-					if (r.reaffirmationsRequired > 0)
-					{
-						//good case
-						newMessages.GetOrCreate(msg.ID.To).Add(msg.Translate());
-					}
-					else
-					{
-						/*
-						 * semi good case:
-						 * we know it's consistent (at least here) because the neighbor will suffer the same issue
-						 */
-						LogError("Message conflict: discarding message " + msg);
-					}
-					reaffirmations.ForceRemove(r.fullMessage.ID);
-				}
-			}
 
+					if (gen.newConfirmedMessages.Count == 0)
+						return;
 
-
-			if (newMessages.Count > 0)
-				lock (newMessages)
-				{
-					Log("Processing new messages");
-					foreach (var pair in newMessages)
-						archivedMessages.GetOrCreate(pair.Key).AddRange(pair.Value);
-					newMessages.Clear();
+					foreach (var t in gen.newConfirmedMessages)
+						temp.GetOrCreate(t.Key).AddRange(t.Value);
+					gen.newConfirmedMessages.Clear();
 				}
 
-			if (archivedMessages.Count == 0)
-				return null;
-
-			var rs = new Dictionary<Guid, EntityMessage[]>();
-			foreach (var pair in archivedMessages)
+			foreach (var t in temp)
 			{
-				rs[pair.Key] = Sort(pair.Value);
+				t.Value.Sort();
+				inOutMessages[t.Key] = t.Value.ToArray();
 			}
-			return rs;
 		}
 
 		private void Log(string msg)
 		{
-			Shard.Log.Minor("CMQ @" + archiveGeneration + " A="+archivedMessages.Count+" N="+newMessages.Count+": " + msg);
+			//Shard.Log.Minor("CMQ @" + archiveGeneration + " A="+archivedMessages.Count+" N="+newMessages.Count+": " + msg);
 		}
 
 		private void LogError(string msg)
 		{
-			Shard.Log.Error("CMQ @" + archiveGeneration + " A=" + archivedMessages.Count + " N=" + newMessages.Count + ": " + msg);
+			Shard.Log.Error("CMQ: " + msg);
 		}
 
-		private class ReaffirmationCounter
+
+
+
+		private Gen GetOrCreateGen(int generation)
 		{
-			public ClientMessage fullMessage;
-			public int	reaffirmationsRequired,
-						reaffirmationsReceived;
+			lock (generations)
+			{
+				Gen gen;
+				if (generations.Count == 0)
+				{
+					gen = new Gen(generation);
+					generations.Add(gen);
+				}
+				else
+				{
+					if (generation < generations.Front.Generation)
+						return null;
+					while (generations.Back.Generation < generation)
+						generations.Add(new Gen(generations.Back.Generation + 1));
+					gen = generations[generation - generations.Front.Generation];
+				}
+				return gen;
+			}
 		}
+
 
 
 		/// <summary>
@@ -265,31 +152,57 @@ namespace Shard
 		/// </summary>
 		public void HandleIncomingMessage(ClientMessage message, int requireReaffirmations)
 		{
-			if (requireReaffirmations > 0)
+			if (requireReaffirmations > 1 || requireReaffirmations < 0)
 			{
-				var cnt = reaffirmations.AddOrUpdate(message.ID,
-					id => new ReaffirmationCounter() { fullMessage = message, reaffirmationsRequired = requireReaffirmations },
-					(id, value) => { Interlocked.CompareExchange(ref value.reaffirmationsRequired, requireReaffirmations,0); return value; }
-				 );
-				if (!cnt.fullMessage.Equals(message))	//id matches, but data does not
-					cnt.reaffirmationsRequired = -1;	//invalidate
-				return;
-			}
+				lock (generations)
+				{
+					Gen gen = null;
+					foreach (var g in generations)
+						if (g.pending.ContainsKey(message.ID))
+						{
+							gen = g;
+							break;
+						}
+					if (gen == null)
+						gen = GetOrCreateGen(message.Body.TargetTLG);
+					if (gen == null)
+						return;
 
-			lock (newMessages)
+					var ctr = gen.pending.AddOrUpdate(message.ID, id => new ConsistentClientMessageContainer(message, requireReaffirmations), (id, ctr1)
+					=>
+					{
+						ctr1.Add(message.Body, requireReaffirmations);
+						return ctr1;
+					});
+
+
+					if (ctr.TargetTLG != gen.Generation)
+					{
+						gen.pending.ForceRemove(message.ID);
+						gen = GetOrCreateGen(ctr.TargetTLG);
+						if (gen == null)
+							return;
+						gen.pending.ForceAdd(message.ID, ctr);
+					}
+
+
+					if (ctr.IsConfirmed)
+					{
+						if (!ctr.IsConflicting)
+							gen.newConfirmedMessages.GetOrCreate(message.ID.To).Add(message);
+						gen.pending.ForceRemove(message.ID);
+					}
+				}
+			}
+			else
 			{
-				newMessages.GetOrCreate(message.ID.To).Add(message.Translate());
+				newMessages.Enqueue(message);
 			}
 		}
 
-		public void Reaffirm(ClientMessage message)
+		public void Confirm(ClientMessage message)
 		{
-			var cnt = reaffirmations.AddOrUpdate(message.ID,
-				id => new ReaffirmationCounter() { fullMessage = message, reaffirmationsReceived = 1 },
-				(id, value) => { Interlocked.Increment(ref value.reaffirmationsReceived); return value; }
-			 );
-			if (!cnt.fullMessage.Equals(message))   //id matches, but data does not
-				cnt.reaffirmationsRequired = -1;    //invalidate
+			HandleIncomingMessage(message, -1);
 		}
 	}
 }

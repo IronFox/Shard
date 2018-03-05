@@ -53,6 +53,7 @@ namespace Shard
 		{
 			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) step comprise a top level generation
 			public int msComputation = 500; //total milliseconds per step dedicated to computation. Must be less than msStep. Any extra time is used for communication
+			public int msMessageProcessing = 100;	//time allocated for message dispatch across all siblings
 			public string startTime = DateTime.Now.ToString();  //starting time of the computation of generation #0
 			public int recoverySteps = 2;  //number of steps per generation dedicated to recovery. The total number of steps per top level generation equals 1+recoverySteps
 			public int maxGeneration = -1;  //maximum top level generation. Negative when disabled
@@ -203,7 +204,7 @@ namespace Shard
 		{
 			get
 			{
-				return timingPoller.Latest;
+				return timingPoller?.Latest;
 			}
 			set
 			{

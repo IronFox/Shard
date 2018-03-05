@@ -10,7 +10,7 @@ namespace Shard
 	{
 
 		public EntityPool entities;
-		public SDS.Digest inputHash;
+		public Digest inputHash;
 		public EntityChangeSet localChangeSet;
 		public InconsistencyCoverage ic;
 		public bool inputConsistent;

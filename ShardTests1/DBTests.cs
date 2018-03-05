@@ -84,26 +84,26 @@ namespace Shard.Tests
 			return RandomOutboundRCSs(random.Next(26));
 		}
 
-		public static Dictionary<Guid, EntityMessage[]> RandomClientMessages()
+		public static Dictionary<Guid, ClientMessage[]> RandomClientMessages()
 		{
 			if (random.NextBool(0.8f))
 				return null;
 			return RandomClientMessages(random.Next(2), random.Next(16)+1);
 		}
 
-		public static Dictionary<Guid, EntityMessage[]> RandomClientMessages(int numGuids, int maxMessagesEach)
+		public static Dictionary<Guid, ClientMessage[]> RandomClientMessages(int numGuids, int maxMessagesEach)
 		{
 			if (numGuids == 0)
 				return null;
-			Dictionary<Guid, EntityMessage[]> rs = new Dictionary<Guid, EntityMessage[]>();
+			Dictionary<Guid, ClientMessage[]> rs = new Dictionary<Guid, ClientMessage[]>();
 			for (int i = 0; i < numGuids; i++)
 			{
 				Guid guid = Guid.NewGuid(); ;
 
-				var ar = new EntityMessage[random.Next(maxMessagesEach - 1) + 1];
+				var ar = new ClientMessage[random.Next(maxMessagesEach - 1) + 1];
 				rs[guid] = ar;
 				for (int j = 0; j < ar.Length; j++)
-					ar[j] = RandomEntityMessage();
+					ar[j] = RandomClientMessage();
 			}
 			return rs;
 		}
@@ -118,6 +118,13 @@ namespace Shard.Tests
 			return new EntityMessage(random.NextBool() ? new Actor(Guid.NewGuid()) : new Actor(RandomEntityID()), random.NextBool(), random.Next(3), EntityChangeSetTests.RandomByteArray(true));
 		}
 
+		public static ClientMessage RandomClientMessage()
+		{
+			return new ClientMessage(
+				new ClientMessageID(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), random.Next(3), random.Next(100)),
+				new ClientMessageBody(EntityChangeSetTests.RandomByteArray(true), random.Next(1000), random.Next(1000), random.Next(3), false)
+				);
+		}
 
 		private static RCS[] RandomOutboundRCSs(int count)
 		{

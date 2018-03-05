@@ -184,14 +184,17 @@ namespace Shard
 							case (uint)ChannelID.SendMessage:
 								Guid from = reader.NextGuid();
 								Guid to = reader.NextGuid();
+								Guid id = reader.NextGuid();
 								int msgChannel = reader.NextInt();
 								byte[] data = reader.NextBytes();
+
+								int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
 								if (!guids.Contains(from))
 									Error("Not registered as " + from + ". Ignoring message");
 								else
 								{
 									int gen = Simulation.Stack.NewestFinishedSDSGeneration;
-									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, orderIndex), msgChannel, data, gen, gen+1);
+									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), new ClientMessageBody(data,gen,targetGen, Simulation.ID.ReplicaLevel,false));
 
 									int expectConfirmations = Simulation.RelayMessageToSiblings(msg);
 									Simulation.ClientMessageQueue.HandleIncomingMessage(msg, expectConfirmations);

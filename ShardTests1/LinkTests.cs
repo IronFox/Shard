@@ -160,15 +160,17 @@ namespace Shard.Tests
 		{
 			public readonly Guid From;
 			public readonly Guid To;
+			public readonly Guid MessageID;
 			public readonly int Channel;
 			public readonly byte[] Data;
 
-			public Message(Guid from, Guid to, int channel, byte[] data)
+			public Message(Guid from, Guid to, int channel, byte[] data, int targetGen)
 			{
 				From = from;
 				To = to;
 				Channel = channel;
 				Data = data;
+				MessageID = Guid.NewGuid();
 			}
 
 		}
@@ -176,11 +178,23 @@ namespace Shard.Tests
 
 		private static void SendMessage(NetworkStream stream, Message msg)
 		{
+			/*
+			Guid from = reader.NextGuid();
+			Guid to = reader.NextGuid();
+			Guid id = reader.NextGuid();
+			int msgChannel = reader.NextInt();
+			int targetGen = reader.NextInt();
+			byte[] data = reader.NextBytes();
+			*/
+
+
+
 			stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.SendMessage), 0, 4);
 			int dataLen = Helper.Length(msg.Data);
-			stream.Write(BitConverter.GetBytes(dataLen + 40), 0, 4);
+			stream.Write(BitConverter.GetBytes(dataLen + 56), 0, 4);
 			stream.Write(msg.From.ToByteArray(), 0, 16);
 			stream.Write(msg.To.ToByteArray(), 0, 16);
+			stream.Write(msg.MessageID.ToByteArray(), 0, 16);
 			stream.Write(BitConverter.GetBytes(msg.Channel), 0, 4);
 			stream.Write(BitConverter.GetBytes((uint)dataLen), 0, 4);
 			if (dataLen > 0)
@@ -231,7 +245,7 @@ namespace Shard.Tests
 			byte[] payload = ReadBytes(stream, byteLength);
 			Assert.AreEqual(length, byteLength + 4 + 4 + 16 + 16 + 4);
 			Assert.AreEqual(expectChannel, channel);
-			return new Message(sender, receiver, channel,payload);
+			return new Message(sender, receiver, channel,payload,0);
 		}
 
 		private static void Register(NetworkStream stream, Guid me)
@@ -350,7 +364,7 @@ namespace Shard.Tests
 					Register(stream, me);
 					Assert.IsTrue(onRegister.WaitOne());
 
-					SendMessage(stream, new Message(me, Guid.Empty, 0,null)); //broadcast, find entity
+					SendMessage(stream, new Message(me, Guid.Empty, 0,null,50)); //broadcast, find entity
 
 
 					int gen;
@@ -365,7 +379,7 @@ namespace Shard.Tests
 					{
 						float f = random.NextFloat(0, 100);
 						Console.WriteLine(i + ": " + f);
-						SendMessage(stream, new Message(me, entityID, 0,BitConverter.GetBytes(f)));
+						SendMessage(stream, new Message(me, entityID, 0,BitConverter.GetBytes(f),50));
 						
 						Message response = ReadMessage(stream, out gen,1);
 						Assert.AreEqual(response.To, me);
@@ -436,7 +450,7 @@ namespace Shard.Tests
 							for (int j = 0; j < 10; j++)
 							{
 								byte[] data = random.NextBytes(0, 100);
-								SendMessage(stream, new Message(me, target, 0,data));
+								SendMessage(stream, new Message(me, target, 0,data,5));
 								Assert.IsTrue(onMessage.WaitOne());
 								Assert.AreEqual(lastTargetEntity, target);
 								Assert.IsTrue(Helper.AreEqual(data, lastData));

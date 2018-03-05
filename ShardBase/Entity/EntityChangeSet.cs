@@ -305,7 +305,7 @@ namespace Shard
 		}
 
 		public List<EntityError> Evolve(IReadOnlyList<Entity> entities,
-			Dictionary<Guid, EntityMessage[]> clientMessages,
+			Dictionary<Guid, ClientMessage[]> clientMessages,
 			InconsistencyCoverage ic, 
 			TimeSpan budget,
 			EntityChange.ExecutionContext ctx)
@@ -315,7 +315,7 @@ namespace Shard
 			List<Task> tasks = new List<Task>();
 			List<Entity.TimeTrace> tables = new List<Entity.TimeTrace>();
 
-			EntityMessage[] clientBroadcasts = null;
+			ClientMessage[] clientBroadcasts = null;
 			if (clientMessages != null)
 				clientMessages.TryGetValue(Guid.Empty, out clientBroadcasts);
 			Stopwatch watch0 = new Stopwatch();
@@ -326,7 +326,7 @@ namespace Shard
 			Parallel.For(0, entities.Count, i =>
 			{
 				Entity e = entities[i];
-				EntityMessage[] messages = null;
+				ClientMessage[] messages = null;
 				if (clientMessages != null)
 				{
 					clientMessages.TryGetValue(e.ID.Guid, out messages);

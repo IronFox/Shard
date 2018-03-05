@@ -663,13 +663,13 @@ namespace Shard
 			info.AddValue("ar", ar);
 		}
 
-		public SDS.Digest HashDigest	//for testing purposes
+		public Digest HashDigest	//for testing purposes
 		{
 			get
 			{
 				using (var ms = Helper.Serialize(this))
 				{
-					return new SDS.Digest(SHA256.Create().ComputeHash(ms));
+					return new Digest(SHA256.Create().ComputeHash(ms),true);
 				}
 
 			}

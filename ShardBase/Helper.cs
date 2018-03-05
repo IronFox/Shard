@@ -353,7 +353,7 @@ namespace Shard
 				return this;
 			}
 
-			public Comparator Append(int comparisonResult)
+			public Comparator AppendComparisonResult(int comparisonResult)
 			{
 				if (state == 0)
 					state = comparisonResult;

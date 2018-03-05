@@ -21,6 +21,7 @@ namespace Shard.EntityChange
 		public readonly Box LocalSpace;
 
 		public int GenerationNumber { get; protected set; }
+		public int ReplicaCount { get; set; }
 
 		public float GetDistance(Vec3 a, Vec3 b)
 		{
@@ -408,7 +409,7 @@ namespace Shard.EntityChange
 			if (other == null)  //nothing i know
 				return base.CompareTo(obj);
 			var c = new Helper.Comparator()
-					.Append(base.CompareTo(other))
+					.AppendComparisonResult(base.CompareTo(other))
 					.Append(MaxRange, other.MaxRange);
 			return c.Finish();
 		}
@@ -452,7 +453,7 @@ namespace Shard.EntityChange
 			if (other == null)	//nothing i know
 				return base.CompareTo(obj);
 			var c = new Helper.Comparator()
-					.Append(base.CompareTo(other))
+					.AppendComparisonResult(base.CompareTo(other))
 					.Append(TargetEntityID, other.TargetEntityID);
 			return c.Finish();
 		}

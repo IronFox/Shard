@@ -15,7 +15,7 @@ namespace Shard
 		bool tagAllInconsistent;
 		SDSStack.Entry old;
 		List<EntityError> errors;
-		Dictionary<Guid, EntityMessage[]> clientMessages;
+		Dictionary<Guid, ClientMessage[]> clientMessages;
 
 		public List<EntityError> Errors { get { return errors; } }
 
@@ -53,11 +53,13 @@ namespace Shard
 			data.inputHash = input.SDS.HashDigest;
 
 			tagAllInconsistent = false;
-			clientMessages = freshClientMessages?.Collect(generation, out tagAllInconsistent);
+			clientMessages = old.SDS?.ClientMessages;
+
+			freshClientMessages?.Collect(ref clientMessages, out tagAllInconsistent, generation, ctx.ReplicaCount);
 			if (clientMessages == null && old.SDS != null) //nothing new, check locally archived...
 			{
 				clientMessages = old.SDS.ClientMessages;
-				tagAllInconsistent = old.SDS.MessagesInconsistent;
+				//tagAllInconsistent = old.SDS.MessagesInconsistent;
 			}
 
 

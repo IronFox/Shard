@@ -56,7 +56,7 @@ namespace Shard
 
 		public SDS Deserialize()
 		{
-			return new SDS(Generation, Entity.Import(SerialEntities), new InconsistencyCoverage(IC), MessagesInconsistent,SerialMessages != null ? (Dictionary<Guid, EntityMessage[]>)Helper.Deserialize(SerialMessages) : null);
+			return new SDS(Generation, Entity.Import(SerialEntities), new InconsistencyCoverage(IC), MessagesInconsistent,SerialMessages != null ? (Dictionary<Guid, ClientMessage[]>)Helper.Deserialize(SerialMessages) : null);
 		}
 	}
 

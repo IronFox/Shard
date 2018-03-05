@@ -61,41 +61,6 @@ namespace Shard
 			}
 		}
 
-		public struct Digest
-		{
-			byte[] data;
-
-			public Digest(byte[] sha256hash) : this()
-			{
-				data = sha256hash;
-			}
-
-			public override bool Equals(object obj)
-			{
-				if (!(obj is Digest))
-				{
-					return false;
-				}
-
-				var digest = (Digest)obj;
-				return Helper.AreEqual(data,digest.data);
-			}
-
-			public override int GetHashCode()
-			{
-				return data != null ? data.GetHashCode() : -663559515;
-			}
-
-			public static bool operator ==(Digest a, Digest b)
-			{
-				return Helper.AreEqual(a.data, b.data);
-			}
-			public static bool operator !=(Digest a, Digest b)
-			{
-				return !(a == b);
-			}
-
-		}
 		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
 		public readonly InconsistencyCoverage IC;
@@ -103,7 +68,7 @@ namespace Shard
 		/// Messages received from a client to be dispatched to one or all entities.
 		/// The key equals the targeted entity Guid or Guid.Empty if the message should be broadcast to all entities.
 		/// </summary>
-		public readonly Dictionary<Guid, EntityMessage[]> ClientMessages;
+		public readonly Dictionary<Guid, ClientMessage[]> ClientMessages;
 		/// <summary>
 		/// Indicates that at least one client message was not properly received,
 		/// and the entire IC should be tagged inconsistent when revisited
@@ -117,7 +82,7 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, bool messagesInconsistent, Dictionary<Guid, EntityMessage[]> clientMessages)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, bool messagesInconsistent, Dictionary<Guid, ClientMessage[]> clientMessages)
 		{
 			Generation = generation;
 			FinalEntities = entities;
@@ -148,7 +113,7 @@ namespace Shard
 					if (ClientMessages != null)
 						f.Serialize(ms, ClientMessages);
 					ms.Seek(0, SeekOrigin.Begin);
-					return new Digest(SHA256.Create().ComputeHash(ms));
+					return new Digest(SHA256.Create().ComputeHash(ms),true);
 				}
 			}
 		}
@@ -390,75 +355,43 @@ namespace Shard
 
 		private class DualEntityMessages
 		{
-			List<EntityMessage> 
-				a = new List<EntityMessage>(),
-				b = new List<EntityMessage>();
+			//sorted by message ID:
+			Dictionary<Guid, ClientMessage>
+				a = new Dictionary<Guid, ClientMessage>(),
+				b = new Dictionary<Guid, ClientMessage>();
 
 
-			public void AddA(EntityMessage m)
+			public void AddA(ClientMessage m)
 			{
-				a.Add(m);
+				a.Add(m.ID.MessageID, m);
 			}
 
-			public void AddB(EntityMessage m)
+			public void AddB(ClientMessage m)
 			{
-				b.Add(m);
+				b.Add(m.ID.MessageID, m);
 			}
 
-			internal void MergeTo(List<EntityMessage> list, InconsistencyCoverage icA, InconsistencyCoverage icB, Box simulationSpace)
+			internal void MergeTo(List<ClientMessage> list)
 			{
-				int atA = 0;
-				int atB = 0;
-				while (atA < a.Count && atB < b.Count)
+
+				foreach (var t in a)
 				{
-					var ca = a[atA];
-					var cb = b[atB];
-					if (ca.Equals(cb))
+					ClientMessage msg;
+					if (b.TryGetValue(t.Key, out msg))
 					{
-						list.Add(ca);	//don't matter which
-						atA++;
-						atB++;
-						continue;
-					}
-					if (ca.Channel == cb.Channel && ca.IsBroadcast == cb.IsBroadcast /*&& ca.Sender == cb.Sender*/)
-					{
-						//should be the same message, but some data is different: pick one. dump the other
-						var comp = new Helper.Comparator();
-						if (ca.Sender.IsEntity && ca.Sender.Position != cb.Sender.Position)
-						{
-							int ia = icA.GetInconsistencyAtR(simulationSpace.Relativate(ca.Sender.Position));	//Guid should be identical, origin might be different
-							int ib = icB.GetInconsistencyAtR(simulationSpace.Relativate(cb.Sender.Position));
-							comp.Append(ia, ib);
-						}
-						comp.Append(ca.Payload, cb.Payload);
-						int order = comp.Finish();
-						if (order < 0)
-							list.Add(ca);
+						int cmp = t.Value.CompareTo(msg);
+						if (cmp <= 0)
+							list.Add(t.Value);
 						else
-							list.Add(cb);
-						atA++;
-						atB++;
-						continue;
+							list.Add(msg);
 					}
-					{
-						int order = ca.CompareTo(cb);
-						if (order < 0)
-						{
-							list.Add(ca);
-							atA++;
-						}
-						else
-						{
-							list.Add(cb);
-							atB++;
-						}
-					}
-
+					else
+						list.Add(t.Value);
 				}
 
-				list.AddRange(a.Skip(atA));
-				list.AddRange(b.Skip(atB));
-
+				foreach (var t in b)
+					if (!a.ContainsKey(t.Key))
+						list.Add(t.Value);
 			}
 		}
 
@@ -466,20 +399,20 @@ namespace Shard
 		{
 			public Dictionary<Guid, DualEntityMessages> messages = new Dictionary<Guid, DualEntityMessages>();
 
-			public void AddA(Guid receivingEntity, EntityMessage message)
+			public void AddA(Guid receivingEntity, ClientMessage message)
 			{
 				messages.GetOrCreate(receivingEntity).AddA(message);
 			}
-			public void AddB(Guid receivingEntity, EntityMessage message)
+			public void AddB(Guid receivingEntity, ClientMessage message)
 			{
 				messages.GetOrCreate(receivingEntity).AddB(message);
 			}
 
-			public void MergeTo(Dictionary<Guid, List<EntityMessage>> outMessages, InconsistencyCoverage icA, InconsistencyCoverage icB, Box simulationSpace)
+			public void MergeTo(Dictionary<Guid, List<ClientMessage>> outMessages)
 			{
 				foreach (var t in messages)
 				{
-					t.Value.MergeTo(outMessages.GetOrCreate(t.Key),icA, icB,simulationSpace);
+					t.Value.MergeTo(outMessages.GetOrCreate(t.Key));
 				}
 			}
 		}
@@ -528,31 +461,31 @@ namespace Shard
 
 			if (MessagesInconsistent == other.MessagesInconsistent)
 			{
-				var dict = new Dictionary<Actor, ActorMessages>();
+				var dict = new Dictionary<Guid, ActorMessages>();
 
 				foreach (var tuple in ClientMessages)
 				{
 					foreach (var msg in tuple.Value)
-						dict.GetOrCreate(msg.Sender).AddA(tuple.Key, msg);
+						dict.GetOrCreate(msg.ID.From).AddA(tuple.Key, msg);
 				}
 				foreach (var tuple in other.ClientMessages)
 				{
 					foreach (var msg in tuple.Value)
-						dict.GetOrCreate(msg.Sender).AddB(tuple.Key, msg);
+						dict.GetOrCreate(msg.ID.From).AddB(tuple.Key, msg);
 				}
 
-				var tempMessages = new Dictionary<Guid, List<EntityMessage>>();
+				var tempMessages = new Dictionary<Guid, List<ClientMessage>>();
 
 				foreach (var t in dict)
 				{
-					t.Value.MergeTo(tempMessages, IC, other.IC, ctx.LocalSpace);
+					t.Value.MergeTo(tempMessages);
 				}
 
-				var finalMessages = new Dictionary<Guid, EntityMessage[]>();
+				var finalMessages = new Dictionary<Guid, ClientMessage[]>();
 
 				foreach (var t in tempMessages)
 				{
-					//t.Value.Sort();
+					t.Value.Sort();
 					finalMessages[t.Key] = t.Value.ToArray();
 				}
 

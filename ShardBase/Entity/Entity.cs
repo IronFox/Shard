@@ -267,7 +267,7 @@ namespace Shard
 
 		}
 
-		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, ICollection<EntityMessage> clientMessages, EntityChange.ExecutionContext ctx, bool locationIsInconsistent)
+		public EntityLogic Evolve(TimeTrace evolutionState, EntityChangeSet outChangeSet, ICollection<ClientMessage> clientMessages, EntityChange.ExecutionContext ctx, bool locationIsInconsistent)
 		{
 			EntityLogic state = null;
 			evolutionState.Begin();
@@ -310,12 +310,29 @@ namespace Shard
 			return state;
 		}
 
+		private static ICollection<EntityMessage> Translate(ICollection<ClientMessage> input)
+		{
+			if (input == null)
+				return null;
+			if (input.Count == 0)
+				return null;
+			EntityMessage[] rs = new EntityMessage[input.Count];
+			var it = input.GetEnumerator();
+			for (int i = 0; i < input.Count; i++)
+			{
+				it.MoveNext();
+				var cm = it.Current;
+				rs[i] = cm.ToEntityMessage();
+			}
 
-		private Entity AddClientMessages(ICollection<EntityMessage> messages)
+			return rs;
+		}
+
+		private Entity AddClientMessages(ICollection<ClientMessage> messages)
 		{
 			if (messages == null || messages.Count == 0)
 				return this;
-			EntityMessage[] newMessages = Helper.Concat(InboundMessages, messages);
+			EntityMessage[] newMessages = Helper.Concat(InboundMessages, Translate(messages));
 			return new Entity(ID, Velocity,transientDeserializedLogic,SerialLogicState,
 #if STATE_ADV
 				Appearances, Contacts, 
