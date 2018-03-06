@@ -98,7 +98,7 @@ namespace Shard
 
 			public void Trim(int minGeneration, Action<T> dropped)
 			{
-				while (generations.Count > 0 && generations.Front.Generation + 2 < minGeneration)
+				while (generations.Count > 0 && generations.Front.Generation < minGeneration)
 				{
 					dropped(generations.Front.data);
 					generations.RemoveFront();

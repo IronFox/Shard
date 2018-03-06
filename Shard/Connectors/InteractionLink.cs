@@ -84,18 +84,24 @@ namespace Shard
 					link.Send(new OutPackage((uint)ChannelID.MessageDelivered, ms.ToArray()));
 				}
 		}
+
+		private void SignalDeliveryFailure(Guid messageID, string reason)
+		{
+			using (MemoryStream ms = new MemoryStream())
+			{
+				ms.Write(messageID.ToByteArray(), 0, 16);
+				ms.Write(BitConverter.GetBytes((uint)reason.Length), 0, 4);
+				foreach (char c in reason)
+					ms.WriteByte((byte)c);
+				Send(new OutPackage((uint)ChannelID.MessageDeliveryFailed, ms.ToArray()));
+			}
+		}
+
 		public static void SignalDeliveryFailure(ClientMessageID id, string reason)
 		{
 			InteractionLink link;
 			if (guidMap.TryGetValue(id.From,out link))
-				using (MemoryStream ms = new MemoryStream())
-				{
-					ms.Write(id.MessageID.ToByteArray(), 0, 16);
-					ms.Write(BitConverter.GetBytes((uint)reason.Length), 0, 4);
-					foreach (char c in reason)
-						ms.WriteByte((byte)c);
-					link.Send(new OutPackage((uint)ChannelID.MessageDeliveryFailed, ms.ToArray()));
-				}
+				link.SignalDeliveryFailure(id.MessageID, reason);
 		}
 
 		private void Error(string msg)
@@ -226,9 +232,14 @@ namespace Shard
 									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), new ClientMessageBody(data,gen,targetGen, Simulation.ID.ReplicaLevel,false));
 
 									int expectConfirmations = Simulation.RelayMessageToSiblings(msg);
-									Simulation.ClientMessageQueue.HandleIncomingMessage(msg, expectConfirmations);
-									orderIndex++;
-									OnMessage?.Invoke(from,to,data);
+									if (expectConfirmations < 0)
+										SignalDeliveryFailure(msg.ID.MessageID, "Sibling(s) currently not responsive. Try again later");
+									else
+									{
+										Simulation.ClientMessageQueue.HandleIncomingMessage(msg, expectConfirmations);
+										orderIndex++;
+										OnMessage?.Invoke(from, to, data);
+									}
 								}
 								break;
 

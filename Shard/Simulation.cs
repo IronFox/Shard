@@ -287,6 +287,9 @@ namespace Shard
 				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
+
+				ClientMessageQueue.Trim(stack.NewestFinishedSDSGeneration - 2, stack.NewestConsistentSDSGeneration + 1);
+
 			}
 			Log.Message("done. Starting main loop...");
 
@@ -320,6 +323,7 @@ namespace Shard
 					if (Clock.Now >= comp.Deadline || (timing.TopLevelGeneration != newestSDSGeneration && timing.TopLevelGeneration > comp.Generation))
 					{
 						stack.Insert(comp.Complete());
+						ClientMessageQueue.Trim(stack.NewestFinishedSDSGeneration - 2, stack.NewestConsistentSDSGeneration + 1);
 						comp = null;
 						newestSDSGeneration = stack.NewestFinishedSDSGeneration;
 						Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
@@ -423,6 +427,8 @@ namespace Shard
 			{
 				if (s.ShouldBeConnected)
 				{
+					if (!s.IsResponsive)
+						return -1;
 					s.Set(msg.ID.ToString(),msg);
 				}
 			}

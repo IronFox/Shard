@@ -194,6 +194,9 @@ namespace Shard.Tests
 					Assert.IsTrue(tlgComp.Intermediate.inputConsistent);
 				}
 				Assert.AreEqual(tlgComp.Generation, i + 1);
+				if (clientMessageQueue != null)
+					clientMessageQueue.Trim(tlgGen - 2, stack.NewestConsistentSDSGeneration+1);
+
 				return tlgComp;
 			}
 
