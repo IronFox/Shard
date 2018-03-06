@@ -22,9 +22,11 @@ namespace Shard
 		public enum ChannelID
 		{
 			RegisterLink = 1,       //[int[4]: remote shardID][int[4]: local shardID]
-			RegisterReceiver = 2,	//[Guid: me], may be called multiple times, to receive messages to different identities
-			UnregisterReceiver = 3,	//[Guid: me], deauthenticate
-			SendMessage = 4,		//c2s: [Guid: me][Guid: toEntity][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
+			RegisterReceiver,	//[Guid: me], may be called multiple times, to receive messages to different identities
+			UnregisterReceiver, //[Guid: me], deauthenticate
+			SendMessage,        //c2s: [Guid: me][Guid: toEntity][Guid: msgID][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
+			MessageDelivered,   //s2c: [Guid: msgID]
+			MessageDeliveryFailed, //s2c: [Guid: msgID][uint: strLength][byte[strLength]: ascii string reason]
 		}
 
 
@@ -71,10 +73,37 @@ namespace Shard
 		{
 			Log.Message(endPoint + ": "+msg);
 		}
+
+		public static void SignalDelivery(ClientMessageID id)
+		{
+			InteractionLink link;
+			if (guidMap.TryGetValue(id.From, out link))
+				using (MemoryStream ms = new MemoryStream())
+				{
+					ms.Write(id.MessageID.ToByteArray(), 0, 16);
+					link.Send(new OutPackage((uint)ChannelID.MessageDelivered, ms.ToArray()));
+				}
+		}
+		public static void SignalDeliveryFailure(ClientMessageID id, string reason)
+		{
+			InteractionLink link;
+			if (guidMap.TryGetValue(id.From,out link))
+				using (MemoryStream ms = new MemoryStream())
+				{
+					ms.Write(id.MessageID.ToByteArray(), 0, 16);
+					ms.Write(BitConverter.GetBytes((uint)reason.Length), 0, 4);
+					foreach (char c in reason)
+						ms.WriteByte((byte)c);
+					link.Send(new OutPackage((uint)ChannelID.MessageDeliveryFailed, ms.ToArray()));
+				}
+		}
+
 		private void Error(string msg)
 		{
 			Log.Error(endPoint + ": " + msg);
 		}
+
+
 		private void Error(Exception ex)
 		{
 			Log.Error(endPoint + ": " + ex);

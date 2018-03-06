@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,7 +22,7 @@ namespace Shard
 	/// </summary>
 	public class ClientMessageQueue
 	{
-		class Gen
+		class Gen<T> where T : new()
 		{
 			public readonly int Generation;
 
@@ -30,18 +31,113 @@ namespace Shard
 				Generation = gen;
 			}
 
-			/// <summary>
-			/// Ordered by receiver entity
-			/// </summary>
-			public Dictionary<Guid, List<ClientMessage>> newConfirmedMessages 
-				= new Dictionary<Guid, List<ClientMessage>>();
-			public ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer> pending =
-				new ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer>();
+			public T data = new T();
+			///// <summary>
+			///// Ordered by receiver entity
+			///// </summary>
+			//public Dictionary<Guid, List<ClientMessage>> newConfirmedMessages 
+			//	= new Dictionary<Guid, List<ClientMessage>>();
+			//public ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer> pending =
+			//	new ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer>();
 
 		};
 		ConcurrentQueue<ClientMessage> newMessages = new ConcurrentQueue<ClientMessage>();
 
-		Deque<Gen> generations = new Deque<Gen>();
+
+		class GenQueue<T> : IEnumerable<Gen<T>>, ICollection<Gen<T>>   where T : new()
+		{
+			private Deque<Gen<T>> generations = new Deque<Gen<T>>();
+
+			public int Count => generations.Count;
+
+			public bool IsReadOnly => false;
+
+			public Gen<T> this[int index] { get => generations[index]; }
+
+			public IEnumerator<Gen<T>> GetEnumerator()
+			{
+				return generations.GetEnumerator();
+			}
+
+			public Gen<T> GetOrCreate(int generation)
+			{
+				lock (this)
+				{
+					Gen<T> gen;
+					if (generations.Count == 0)
+					{
+						gen = new Gen<T>(generation);
+						generations.Add(gen);
+					}
+					else
+					{
+						if (generation < generations.Front.Generation)
+							return null;
+						while (generations.Back.Generation < generation)
+							generations.Add(new Gen<T>(generations.Back.Generation + 1));
+						gen = generations[generation - generations.Front.Generation];
+					}
+					return gen;
+				}
+			}
+
+			public Gen<T> Get(int generation)
+			{
+				if (generation < generations.Front.Generation)
+					return null;
+				int at = generation - generations.Front.Generation;
+				if (at >= generations.Count)
+					return null;
+				return generations[at];
+			}
+
+			IEnumerator IEnumerable.GetEnumerator()
+			{
+				return generations.GetEnumerator();
+			}
+
+			public void Trim(int minGeneration, Action<T> dropped)
+			{
+				while (generations.Count > 0 && generations.Front.Generation + 2 < minGeneration)
+				{
+					dropped(generations.Front.data);
+					generations.RemoveFront();
+				}
+			}
+
+			public void Add(Gen<T> item)
+			{
+				generations.Add(item);
+			}
+
+			public void Clear()
+			{
+				generations.Clear();
+			}
+
+			public bool Contains(Gen<T> item)
+			{
+				return generations.Contains(item);
+			}
+
+			public void CopyTo(Gen<T>[] array, int arrayIndex)
+			{
+				generations.CopyTo(array, arrayIndex);
+			}
+
+			public bool Remove(Gen<T> item)
+			{
+				return generations.Remove(item);
+			}
+		}
+
+
+
+		GenQueue<Dictionary<Guid, List<ClientMessage>>> newConfirmedMessages
+			= new GenQueue<Dictionary<Guid, List<ClientMessage>>>();
+		GenQueue<ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer>> pending
+			= new GenQueue<ConcurrentDictionary<ClientMessageID, ConsistentClientMessageContainer>>();
+		
 
 		private static EntityMessage[] Sort(List<OrderedEntityMessage> list)
 		{
@@ -52,6 +148,21 @@ namespace Shard
 			return rs;
 		}
 
+		public void Trim(int oldestUnconfirmedTLG, int oldestConfirmedTLG)
+		{
+			newConfirmedMessages.Trim(oldestConfirmedTLG, list =>
+			{
+				//if we ever get here it means we somehow received a newer consistent SDS,
+				// which must have delivered the message,
+				// so there is no need to do anything here
+			});
+			pending.Trim(oldestUnconfirmedTLG, msgs =>
+			{
+				foreach (var t in msgs)
+					InteractionLink.SignalDeliveryFailure(t.Key, "Delivery window passed");
+			});
+		}
+
 		/// <summary>
 		/// Fetches (and clears out) any queued up messages.
 		/// Thread-safe
@@ -59,7 +170,7 @@ namespace Shard
 		public void Collect(ref Dictionary<Guid, ClientMessage[]> inOutMessages, out bool isInconsistent, int generation, int replicaCount)
 		{
 			isInconsistent = false;
-			if (generations.Count == 0 && newMessages.IsEmpty)
+			if (newConfirmedMessages.Count == 0 && pending.Count == 0 && newMessages.IsEmpty)
 				return;
 			Dictionary<Guid, List<ClientMessage>> temp = new Dictionary<Guid, List<ClientMessage>>();
 			if (inOutMessages == null)
@@ -73,33 +184,27 @@ namespace Shard
 			{
 				ClientMessage msg;
 				while (newMessages.TryDequeue(out msg))
+				{
+					InteractionLink.SignalDelivery(msg.ID);
 					temp.GetOrCreate(msg.ID.To).Add(msg);
+				}
 			}
 
-			if (generations.Count > 0)
-				lock (generations)
+			if (pending.Count > 0)
+				lock (pending)
 				{
-					while (generations.Count > 0 && generations.Front.Generation + 2 < generation)
-						generations.RemoveFront();
-					if (generations.Count == 0)
-						return;
-
-					if (generation < generations.Front.Generation)
-						return;
-					int at = generation - generations.Front.Generation;
-					if (at >= generations.Count)
-						return;
-					Gen gen = generations[at];
-
-					if (!gen.pending.IsEmpty)
+					var gen = pending.Get(generation);
+					if (!gen.data.IsEmpty)
 						isInconsistent = true;
+				}
 
-					if (gen.newConfirmedMessages.Count == 0)
-						return;
-
-					foreach (var t in gen.newConfirmedMessages)
+			if (newConfirmedMessages.Count > 0)
+				lock (newConfirmedMessages)
+				{
+					var gen = newConfirmedMessages.Get(generation);
+					foreach (var t in gen.data)
 						temp.GetOrCreate(t.Key).AddRange(t.Value);
-					gen.newConfirmedMessages.Clear();
+					gen.data.Clear();
 				}
 
 			foreach (var t in temp)
@@ -121,29 +226,7 @@ namespace Shard
 
 
 
-
-		private Gen GetOrCreateGen(int generation)
-		{
-			lock (generations)
-			{
-				Gen gen;
-				if (generations.Count == 0)
-				{
-					gen = new Gen(generation);
-					generations.Add(gen);
-				}
-				else
-				{
-					if (generation < generations.Front.Generation)
-						return null;
-					while (generations.Back.Generation < generation)
-						generations.Add(new Gen(generations.Back.Generation + 1));
-					gen = generations[generation - generations.Front.Generation];
-				}
-				return gen;
-			}
-		}
-
+		
 
 
 		/// <summary>
@@ -154,21 +237,21 @@ namespace Shard
 		{
 			if (requireReaffirmations > 1 || requireReaffirmations < 0)
 			{
-				lock (generations)
+				lock (pending)
 				{
-					Gen gen = null;
-					foreach (var g in generations)
-						if (g.pending.ContainsKey(message.ID))
+					Gen< ConcurrentDictionary < ClientMessageID, ConsistentClientMessageContainer >> gen = null;
+					foreach (var g in pending)
+						if (g.data.ContainsKey(message.ID))
 						{
 							gen = g;
 							break;
 						}
 					if (gen == null)
-						gen = GetOrCreateGen(message.Body.TargetTLG);
+						gen = pending.GetOrCreate(message.Body.TargetTLG);
 					if (gen == null)
 						return;
 
-					var ctr = gen.pending.AddOrUpdate(message.ID, id => new ConsistentClientMessageContainer(message, requireReaffirmations), (id, ctr1)
+					var ctr = gen.data.AddOrUpdate(message.ID, id => new ConsistentClientMessageContainer(message, requireReaffirmations), (id, ctr1)
 					=>
 					{
 						ctr1.Add(message.Body, requireReaffirmations);
@@ -178,19 +261,20 @@ namespace Shard
 
 					if (ctr.TargetTLG != gen.Generation)
 					{
-						gen.pending.ForceRemove(message.ID);
-						gen = GetOrCreateGen(ctr.TargetTLG);
+						gen.data.ForceRemove(message.ID);
+						gen = pending.GetOrCreate(ctr.TargetTLG);
 						if (gen == null)
 							return;
-						gen.pending.ForceAdd(message.ID, ctr);
+						gen.data.ForceAdd(message.ID, ctr);
 					}
 
 
 					if (ctr.IsConfirmed)
 					{
 						if (!ctr.IsConflicting)
-							gen.newConfirmedMessages.GetOrCreate(message.ID.To).Add(message);
-						gen.pending.ForceRemove(message.ID);
+							lock(newConfirmedMessages)
+								newConfirmedMessages.GetOrCreate(ctr.TargetTLG).data.GetOrCreate(message.ID.To).Add(message);
+						gen.data.ForceRemove(message.ID);
 					}
 				}
 			}

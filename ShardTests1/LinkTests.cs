@@ -223,6 +223,15 @@ namespace Shard.Tests
 		{
 			return new Guid(ReadBytes(stream, 16));
 		}
+		private static void ReadMessageDelivered(NetworkStream stream, Guid messageID)
+		{
+			InteractionLink.ChannelID id = ReadChannelID(stream);
+			Assert.AreEqual(id, InteractionLink.ChannelID.MessageDelivered);
+			int length = ReadInt(stream);
+			Assert.AreEqual(length, 16);
+			Guid msgID = ReadGuid(stream);
+			Assert.AreEqual(msgID, messageID);
+		}
 
 		private static Message ReadMessage(NetworkStream stream, out int generation, int expectChannel)
 		{
@@ -364,10 +373,12 @@ namespace Shard.Tests
 					Register(stream, me);
 					Assert.IsTrue(onRegister.WaitOne());
 
-					SendMessage(stream, new Message(me, Guid.Empty, 0,null,50)); //broadcast, find entity
+					Message findEntity = new Message(me, Guid.Empty, 0, null, 50);
+					SendMessage(stream, findEntity); //broadcast, find entity
 
 
 					int gen;
+					ReadMessageDelivered(stream,findEntity.MessageID);
 					Message broadCastResponse = ReadMessage(stream, out gen,0);
 					Assert.AreEqual(broadCastResponse.Data.Length, 16);
 					Assert.AreEqual(broadCastResponse.To, me);
@@ -379,8 +390,10 @@ namespace Shard.Tests
 					{
 						float f = random.NextFloat(0, 100);
 						Console.WriteLine(i + ": " + f);
-						SendMessage(stream, new Message(me, entityID, 0,BitConverter.GetBytes(f),50));
-						
+						Message job = new Message(me, entityID, 0, BitConverter.GetBytes(f), 50);
+						SendMessage(stream, job);
+						ReadMessageDelivered(stream,job.MessageID);
+
 						Message response = ReadMessage(stream, out gen,1);
 						Assert.AreEqual(response.To, me);
 						Assert.AreEqual(response.From, entityID);
