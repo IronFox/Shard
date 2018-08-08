@@ -458,7 +458,6 @@ namespace Shard
 								AnyAvailableFromNeighbors
 								|| rcsRestoredFromDB > 0
 								|| (missingRCS == 0 && predecessorIsConsistent)
-								|| rcsRestoredFromDB > 0
 							);
 				}
 			}
