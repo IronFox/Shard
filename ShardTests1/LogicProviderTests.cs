@@ -402,30 +402,65 @@ namespace Shard.Tests
 		}
 
 
+		private class MarshalledCompiler : MarshalByRefObject
+		{
+			private List<CSLogicProvider> providers = new List<CSLogicProvider>();
+			public void Compile(string name, string code)
+			{
+				CSLogicProvider provider = CSLogicProvider.CompileAsync(name, code).Result;
+				providers.Add(provider);
+			}
+
+			public byte[][] Serialize()
+			{
+				byte[][] rs = new byte[providers.Count][];
+				for (int i = 0; i < providers.Count; i++)
+					rs[i] = Helper.SerializeToArray(providers[i]);
+				return rs;
+			}
+
+			public int Count => providers.Count;
+		}
+
 
 
 		[TestMethod()]
 		public void ScriptedLogicPerformanceTest()
 		{
-			Stopwatch watch = new Stopwatch();
-			watch.Start();
-			CSLogicProvider factory = null;
-			for (int i = 0; i < 10; i++)
-			{
-				factory = CSLogicProvider.CompileAsync("Test", code).Result;
-			}
-			watch.Stop();
-			Console.WriteLine("Compilation of 10 scripts took " + watch.Elapsed);
+			AppDomain domain = AppDomain.CreateDomain("Test");
+			var compiler = (MarshalledCompiler)domain.CreateInstanceFromAndUnwrap(typeof(MarshalledCompiler).Assembly.Location, typeof(MarshalledCompiler).FullName);
 
-			var binary = Helper.SerializeToArray(factory);
-			watch.Reset();
+			Stopwatch watch = new Stopwatch();
 			watch.Start();
 			for (int i = 0; i < 100; i++)
 			{
-				factory = (CSLogicProvider) Helper.Deserialize(binary);
+				string cd = code.Replace("TestLogic","Logic_"+i);
+				compiler.Compile("test" + i, cd);
 			}
 			watch.Stop();
-			Console.WriteLine("Loading of 100 assemblies took " + watch.Elapsed);
+			Console.WriteLine("Compilation of "+compiler.Count+" scripts took " + watch.Elapsed+" => "+watch.Elapsed.TotalMilliseconds/compiler.Count+"ms");
+
+			watch.Reset();
+			watch.Start();
+			byte[][] serial = compiler.Serialize();
+			watch.Stop();
+			Console.WriteLine("Serialization of "+ compiler.Count + " scripts took " + watch.Elapsed + " => " + watch.Elapsed.TotalMilliseconds / compiler.Count + "ms");
+			watch.Reset();
+			watch.Start();
+			AppDomain.Unload(domain);
+			compiler = null;
+			watch.Stop();
+			Console.WriteLine("Unloading of " + serial.Length + " scripts took " + watch.Elapsed + " => " + watch.Elapsed.TotalMilliseconds / serial.Length + "ms");
+
+			List<CSLogicProvider> deserialized = new List<CSLogicProvider>();
+			watch.Reset();
+			watch.Start();
+			for (int i = 0; i < serial.Length; i++)
+			{
+				deserialized.Add((CSLogicProvider) Helper.Deserialize(serial[i]));
+			}
+			watch.Stop();
+			Console.WriteLine("Reloading of "+serial.Length+" assemblies took " + watch.Elapsed + " => " + watch.Elapsed.TotalMilliseconds / serial.Length + "ms");
 
 		}
 
