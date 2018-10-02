@@ -8,11 +8,11 @@ namespace Shard
 	{
 		public readonly bool AllowMotionToUnresponsiveNeighbor;
 
-		public SimulationContext(bool allowMotionToUnresponsiveNeighbor) :base(new EntityRanges(Simulation.R,Simulation.M,Simulation.SensorRange,Simulation.FullSimulationSpace),Simulation.MySpace)
+		public SimulationContext(bool allowMotionToUnresponsiveNeighbor) :base(Simulation.Ranges,Simulation.MySpace)
 		{
 			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
 		}
-		public SimulationContext(DB.ConfigContainer cfg, bool allowMotionToUnresponsiveNeighbor) : base(new EntityRanges(cfg.r,cfg.m,cfg.r-cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ)), Simulation.MySpace)
+		public SimulationContext(DB.ConfigContainer cfg, Box mySpace, bool allowMotionToUnresponsiveNeighbor) : base(Simulation.ToRanges(cfg), mySpace)
 		{
 			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
 		}

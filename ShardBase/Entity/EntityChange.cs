@@ -36,18 +36,18 @@ namespace Shard.EntityChange
 		public bool CheckM(string task, Vec3 taskLocation, Vec3 currentEntityPosition)
 		{
 			float dist = GetDistance(taskLocation, currentEntityPosition);
-			if (dist <= Ranges.M)
+			if (dist <= Ranges.Motion)
 				return true;
-			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.M + "): " + dist);
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.Motion + "): " + dist);
 			return false;
 		}
 
 		public bool CheckM(string task, Vec3 taskLocation, EntityID currentEntityPosition)
 		{
 			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
-			if (dist <= Ranges.M)
+			if (dist <= Ranges.Motion)
 				return true;
-			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.M + "): " + dist);
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum range (" + Ranges.Motion + "): " + dist);
 			return false;
 		}
 		public bool CheckM(string task, Vec3 p, Entity reference)
@@ -74,6 +74,27 @@ namespace Shard.EntityChange
 		public bool CheckR(string task, Vec3 p, Entity reference)
 		{
 			return CheckR(task, p, reference.ID.Position);
+		}
+
+		public bool CheckT(string task, Vec3 taskLocation, Vec3 currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition);
+			if (dist <= Ranges.Transmission)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum transmission range (" + Ranges.Transmission + "): " + dist);
+			return false;
+		}
+		public bool CheckT(string task, Vec3 taskLocation, EntityID currentEntityPosition)
+		{
+			float dist = GetDistance(taskLocation, currentEntityPosition.Position);
+			if (dist <= Ranges.Transmission)
+				return true;
+			LogError(currentEntityPosition + ": " + task + " exceeded maximum transmission range (" + Ranges.Transmission + "): " + dist);
+			return false;
+		}
+		public bool CheckT(string task, Vec3 p, Entity reference)
+		{
+			return CheckT(task, p, reference.ID.Position);
 		}
 
 		//public bool CheckDistance(string task, Vec3 targetPosition, EntityID referencePosition, float maxDistance)
@@ -430,7 +451,7 @@ namespace Shard.EntityChange
 
 		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
-			return cube.Intersects(Box.CenterExtent(Origin.Position,Math.Min(MaxRange, ctx.Ranges.R), Bool3.True));
+			return cube.Intersects(Box.CenterExtent(Origin.Position,Math.Min(MaxRange, ctx.Ranges.Transmission), Bool3.True));
 		}
 	}
 
@@ -472,7 +493,7 @@ namespace Shard.EntityChange
 
 		public override bool Affects(Box cube, ExecutionContext ctx)
 		{
-			return cube.Intersects(Box.CenterExtent(Origin.Position, ctx.Ranges.R, Bool3.True));
+			return cube.Intersects(Box.CenterExtent(Origin.Position, ctx.Ranges.Transmission, Bool3.True));
 		}
 	}
 

@@ -15,11 +15,11 @@ namespace Shard.Tests
 		static Random random = new Random();
 
 
-		public static SerialRCSStack RandomStack(out RCS[] outRCSs)
+		public static SerialRCSStack RandomStack(SimulationContext ctx, out RCS[] outRCSs)
 		{
 			int numDestinations = random.Next(3) + 1;
 			int numEntries = random.Next(16);
-			return RandomStack(numDestinations, numEntries, out outRCSs);
+			return RandomStack(ctx,numDestinations, numEntries, out outRCSs);
 		}
 
 		public static SerialRCSStack.DestinationTable RandomDestinations(int numDestinations)
@@ -37,39 +37,39 @@ namespace Shard.Tests
 			return new SerialRCSStack.DestinationTable() { All = field };
 		}
 
-		public static RCS.SerialData[] RandomEntries(int numEntries, out RCS[] outRCSs)
+		public static RCS.SerialData[] RandomEntries(SimulationContext ctx, int numEntries, out RCS[] outRCSs)
 		{
 			var rs = numEntries > 0 ? new RCS.SerialData[numEntries] : null;
 			outRCSs = new RCS[numEntries];
 			for (int j = 0; j < numEntries; j++)
 			{
-				outRCSs[j] = RandomRCS();
+				outRCSs[j] = RandomRCS(ctx);
 				rs[j] = outRCSs[j].Export();
 			}
 			return rs;
 		}
-		public static RCS.SerialData[] RandomEntries(int numEntries)
+		public static RCS.SerialData[] RandomEntries(SimulationContext ctx,int numEntries)
 		{
 			var rs = numEntries > 0 ? new RCS.SerialData[numEntries] : null;
 			for (int j = 0; j < numEntries; j++)
 			{
-				var r = RandomRCS();
+				var r = RandomRCS(ctx);
 				rs[j] = r.Export();
 			}
 			return rs;
 		}
 
-		public static SerialRCSStack RandomStack(int numDestinations, int numEntries, out RCS[] outRCSs)
+		public static SerialRCSStack RandomStack(SimulationContext ctx, int numDestinations, int numEntries, out RCS[] outRCSs)
 		{
 			SerialRCSStack rs = new SerialRCSStack();
 			rs.Destinations = RandomDestinations(numDestinations);
-			rs.Entries = RandomEntries(numEntries, out outRCSs);
+			rs.Entries = RandomEntries(ctx,numEntries, out outRCSs);
 			return rs;
 		}
 
-		public static RCS RandomRCS()
+		public static RCS RandomRCS(SimulationContext ctx)
 		{
-			EntityChangeSet cs = EntityChangeSetTests.RandomSet();
+			EntityChangeSet cs = EntityChangeSetTests.RandomSet(ctx);
 			return new RCS(cs, BitCubeTests.RandomIC());
 		}
 
@@ -78,6 +78,8 @@ namespace Shard.Tests
 		public void IncludeNewerVersionTest()
 		{
 			{
+				SimulationContext ctx = EntityChangeSetTests.RandomContext();
+
 				SerialRCSStack a = new SerialRCSStack();
 				a.Destinations = new SerialRCSStack.DestinationTable(2);
 
@@ -87,15 +89,15 @@ namespace Shard.Tests
 				//upper edge
 				for (int i = 0; i < 100; i++)
 				{
-					a.Entries = RandomEntries(random.Next(16));
-					b.Entries = RandomEntries(random.Next(16));
+					a.Entries = RandomEntries(ctx,random.Next(16));
+					b.Entries = RandomEntries(ctx, random.Next(16));
 
 					var merged = SerialRCSStack.Merge(a, b);
 					Assert.AreEqual(merged.CountEntries(), Math.Max(a.CountEntries(), b.CountEntries()));
 				}
 
 				//lower edge
-				a.Entries = RandomEntries(random.Next(16));
+				a.Entries = RandomEntries(ctx,random.Next(16));
 				b.Entries = a.Entries;
 				for (int i = 0; i < 100; i++)
 				{

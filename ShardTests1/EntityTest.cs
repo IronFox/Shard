@@ -133,10 +133,10 @@ namespace ShardTests1
 				int cnt = 0;
 				do
 				{
-					Vec3 draw = random.NextVec3(-ranges.M, ranges.M);
+					Vec3 draw = random.NextVec3(-ranges.Motion, ranges.Motion);
 					newState.NewPosition = ranges.World.Clamp(currentState.ID.Position + draw);
 					if (++cnt > 1000)
-						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + ranges.M + "->" + draw + " in " + ranges.World + "; " + random.Next() + ", " + random.Next() + ", " + random.Next());
+						throw new Exception("Exceeded 1000 tries, going from " + currentState.ID.Position + ", by " + ranges.Motion + "->" + draw + " in " + ranges.World + "; " + random.Next() + ", " + random.Next() + ", " + random.Next());
 				}
 				while (newState.NewPosition == currentState.ID.Position);
 			}
@@ -151,12 +151,12 @@ namespace ShardTests1
 				while (newState.NewPosition == currentState.ID.Position)
 				{
 					//newState.NewPosition = ranges.World.Clamp(currentState.ID.Position + random.NextVec3(-ranges.M, ranges.M));
-					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-ranges.M, ranges.M);
-					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.M) 
+					newState.NewPosition = currentState.ID.Position + randomSource.NextVec3(-ranges.Motion, ranges.Motion);
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.Motion) 
 						throw new Exception("Pre-clamp motion range exceeded");
 
 					newState.NewPosition = ranges.World.Clamp(newState.NewPosition);
-					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.M)
+					if (Vec3.GetChebyshevDistance(newState.NewPosition, currentState.ID.Position) > ranges.Motion)
 						throw new Exception("Post-clamp motion range exceeded");
 				}
 			}
@@ -199,7 +199,7 @@ namespace ShardTests1
 		public void SimpleEntityFaultTest()
 		{
 			var ctx = new SimulationContext(true);
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, 
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(ctx.LocalSpace, 100, 
 				new RandomLogic(new Type[] { typeof(ConsistentLogic), typeof(FaultLogic) }).Instantiate),ctx);
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
@@ -234,7 +234,7 @@ namespace ShardTests1
 				InconsistencyCoverage ic = InconsistencyCoverage.NewCommon(),
 										nextIC = ic;
 
-				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())),ctx);
+				EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(ctx.LocalSpace, 100, i =>  i > 0 ? new ConsistentLogic() : (EntityLogic)(new FaultLogic())),ctx);
 
 				int faultyCount = 0;
 				Entity faulty = new Entity();
@@ -326,12 +326,12 @@ namespace ShardTests1
 		}
 
 
+#if STATE_ADV
+		
 		public static EntityPool RandomDefaultPool(int numEntities, Shard.EntityChange.ExecutionContext ctx)
 		{
-			return new EntityPool(EntityPoolTests.CreateEntities(100,  i => new ConsistentLogic()),ctx);
+			return new EntityPool(EntityPoolTests.CreateEntities( 100,  i => new ConsistentLogic()),ctx);
 		}
-
-#if STATE_ADV
 		[TestMethod]
 		public void StateAdvertisementTest()
 		{
@@ -390,7 +390,7 @@ namespace ShardTests1
 		{
 			int numEntities = 100;
 			var ctx = new SimulationContext(true);
-			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(numEntities, i => new RandomMotion()),ctx);
+			EntityPool pool = new EntityPool(EntityPoolTests.CreateEntities(ctx.LocalSpace, numEntities, i => new RandomMotion()),ctx);
 
 			InconsistencyCoverage ic = InconsistencyCoverage.NewCommon();
 

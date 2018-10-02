@@ -76,9 +76,9 @@ namespace Shard
 			{
 				Vec3 dest = ctx.ClampDestination("Motion", NewPosition, id,
 #if STATE_ADV
-					SuppressAdvertisements ? ctx.Ranges.R : ctx.Ranges.M
+					SuppressAdvertisements ? ctx.Ranges.R : ctx.Ranges.Motion
 #else
-					ctx.Ranges.R
+					ctx.Ranges.Motion
 #endif
 					);
 				var newID = id.Relocate(dest);
@@ -92,17 +92,18 @@ namespace Shard
 					outChangeSet.Add(new EntityChange.StateAdvertisement(new EntityContact(newID, newAppearances, dest - id.Position)));
 #endif
 				foreach (var inst in instantiations)
-					outChangeSet.Add(new EntityChange.Instantiation(newID, ctx.ClampDestination("Instantiation", inst.targetLocation, newID, ctx.Ranges.M),
+					outChangeSet.Add(new EntityChange.Instantiation(newID, ctx.ClampDestination("Instantiation", inst.targetLocation, newID, ctx.Ranges.Motion),
 #if STATE_ADV
 						inst.appearances, 
 #endif
 						inst.logic,Helper.SerializeToArray(inst.logic)));
 				foreach (var rem in removals)
 				{
-					if (ctx.CheckM("Removal", rem.Position, newID))
+					if (ctx.CheckT("Removal", rem.Position, newID))
 						outChangeSet.Add(new EntityChange.Removal(newID, rem));
 				}
 				int messageID = 0;
+				var messageOriginID = ctx.Ranges.DisplacedTransmission ? newID : id;
 				foreach (var m in messages)
 				{
 					if (m.IsDirectedToClient)
@@ -110,10 +111,10 @@ namespace Shard
 						ctx.RelayClientMessage(id.Guid, m.receiver.Guid, m.channel, m.data);
 					}
 					else
-						outChangeSet.Add(new EntityChange.Message(id, messageID++, m.receiver.Guid, m.channel, m.data));
+						outChangeSet.Add(new EntityChange.Message(messageOriginID, messageID++, m.receiver.Guid, m.channel, m.data));
 				}
 				foreach (var b in broadcasts)
-					outChangeSet.Add(new EntityChange.Broadcast(id, messageID++, b.maxRange,  b.channel, b.data));
+					outChangeSet.Add(new EntityChange.Broadcast(messageOriginID, messageID++, b.maxRange,  b.channel, b.data));
 				if (nowInconsistent)
 					throw new ExecutionException(id,"Inconsistency by logic request");
 			}

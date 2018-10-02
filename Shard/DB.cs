@@ -462,15 +462,7 @@ namespace Shard
 
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
 		public static Action<ShardPeerAddress> OnPutLocalAddress { get; set; } = null;
-		public static EntityRanges EntityRanges
-		{
-			get
-			{
-				var cfg = Config;
-				return new EntityRanges(cfg.r, cfg.m, cfg.r - cfg.m, Simulation.ExtToWorld(cfg.extent.XYZ));
 
-			}
-		}
 
 		public class AsyncRCSStack
 		{

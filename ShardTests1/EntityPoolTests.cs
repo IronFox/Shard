@@ -21,7 +21,7 @@ namespace Shard.Tests
 			var ctx = new SimulationContext(true);
 
 			Random random = new Random();
-			List<Entity> testEntities = CreateEntities(100);
+			List<Entity> testEntities = CreateEntities(ctx.LocalSpace, 100);
 
 			EntityPool original = new EntityPool(ctx);
 			foreach (var e in testEntities)
@@ -44,18 +44,18 @@ namespace Shard.Tests
 
 		}
 
-		public static List<Entity> CreateEntities(int count, Func<int,EntityLogic> logicFactory = null)
+		public static List<Entity> CreateEntities(Box scope, int count, Func<int,EntityLogic> logicFactory = null)
 		{
 			var rs = new List<Entity>();
 			for (int i = 0; i < count; i++)
-				rs.Add(new Entity(EntityChangeSetTests.RandomID(), Vec3.Zero, logicFactory != null ? logicFactory(i) : null));
+				rs.Add(new Entity(EntityChangeSetTests.RandomID(scope), Vec3.Zero, logicFactory != null ? logicFactory(i) : null));
 			return rs;
 		}
 
 		public static EntityPool RandomPool(int numEntities, EntityChange.ExecutionContext ctx)
 		{
 			var rs = new EntityPool(ctx);
-			var entities = CreateEntities(numEntities);
+			var entities = CreateEntities(ctx.LocalSpace, numEntities);
 			foreach (var e in entities)
 				Assert.IsTrue(rs.Insert(e));
 			return rs;
@@ -72,7 +72,7 @@ namespace Shard.Tests
 
 			for (int i = 0; i < 10; i++)
 			{
-				var entities = CreateEntities(1);
+				var entities = CreateEntities(ctx.LocalSpace, 1);
 				var e = entities[0];
 				Vec3 original = e.ID.Position;
 
@@ -110,7 +110,7 @@ namespace Shard.Tests
 			var ctx = new SimulationContext(true);
 			Random random = new Random();
 			EntityPool pool = new EntityPool(ctx);
-			var entities = CreateEntities(3);
+			var entities = CreateEntities(ctx.LocalSpace, 3);
 			foreach (var e in entities)
 				Assert.IsTrue(pool.Insert(e));
 

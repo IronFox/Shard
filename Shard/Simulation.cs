@@ -109,8 +109,7 @@ namespace Shard
 	{
 		public static ShardID ID { get; private set; }
 		private static ShardID ext = new ShardID(Int3.One, 1);
-		public static float R { get; private set; } = 1f / 8;
-		public static float M { get; private set; } = 1f / 16;
+		public static EntityRanges Ranges = new EntityRanges(1f / 8, -1, Box.OffsetSize(Vec3.Zero, Vec3.One,Bool3.True));
 
 		private static Neighborhood neighbors,
 									siblings;
@@ -497,19 +496,27 @@ namespace Shard
 
 
 
+		public static EntityRanges ToRanges(DB.ConfigContainer config)
+		{
+			return new EntityRanges(config.r, config.m, ExtToWorld(config.extent.XYZ));
+		}
+
+		public static Box ShardIDToBox(ShardID addr, ShardID ext)
+		{
+			return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
+		}
+
 		public static void Configure(ShardID addr, DB.ConfigContainer config, bool forceAllLinksPassive)
 		{
 			CSLogicProvider.AsyncFactory = DB.GetLogicProviderAsync;
 
 			ID = addr;
 			ext = config.extent;
-			R = config.r;
-			M = config.m;
-
-			MySpace =  Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
+			Ranges = ToRanges(config);
+			MySpace = ShardIDToBox(addr, ext);
 
 
-			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / R);
+			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / Ranges.R);
 
 			if (ext.ReplicaLevel > 1)
 				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel, forceAllLinksPassive);
@@ -540,7 +547,6 @@ namespace Shard
 
 		public static Box MySpace { get; private set; } = Box.OffsetSize(Vec3.Zero, new Vec3(1), Bool3.True);
 
-		public static float SensorRange { get { return R - M; } }
 
 		public static Box FullSimulationSpace
 		{

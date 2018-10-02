@@ -15,7 +15,8 @@ namespace Shard
 		public int Y { get { return XYZ.Y; } set { XYZ.Y = value; } }
 		public int Z { get { return XYZ.Z; } set { XYZ.Z = value; } }
 
-		public static readonly ShardID Zero = new ShardID(0,0,0,0);
+		public static readonly ShardID Zero = new ShardID(0, 0, 0, 0);
+		public static readonly ShardID One = new ShardID(1, 1, 1, 1);
 
 		public ShardID(int x, int y, int z, int r)
 		{

@@ -246,7 +246,7 @@ namespace Shard
 			Container rs;
 			if (!guidMap.TryGetValue(receiver, out rs))
 				return false;
-			if (!ctx.CheckR("Message", senderPosition, rs.entity))
+			if (!ctx.CheckT("Message", senderPosition, rs.entity))
 				return false;
 			return rs.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 		}
@@ -264,7 +264,7 @@ namespace Shard
 			{
 				//if (Vec3.GetChebyshevDistance(p.Item2.entity.ID.Position, senderPosition) > ctx.Ranges.R)
 				//	throw new IntegrityViolation("Sender range exceeded during broadcast. Tree is out of date");
-				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.R)
+				if (p.Item2.entity.ID.Guid != message.Message.Sender.Guid)// && Simulation.GetDistance(senderPosition, p.Key.Position) <= Simulation.Ranges.R)
 				{
 					p.Item2.messages.GetOrAdd(message.Message.Sender.Guid, guid => new Container.BySender()).Add(message);
 					counter++;

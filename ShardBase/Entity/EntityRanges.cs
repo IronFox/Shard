@@ -8,22 +8,20 @@ namespace Shard
 {
 	public struct EntityRanges
 	{
-#if STATE_ADV
 		/// <summary>
 		/// Maximum movement range
 		/// </summary>
-		public readonly float M;
+		public readonly float Motion;
 		/// <summary>
-		/// Maximum sensor range
+		/// Maximum transmission range
 		/// </summary>
-		public readonly float S;
-#else
-		public float M => R;
-#endif
-		/// <summary>
+		public readonly float Transmission;
+
 		/// Maximum influence range
 		/// </summary>
 		public readonly float R;
+
+		public readonly bool DisplacedTransmission;
 
 		/// <summary>
 		/// Entire space available to simulation.
@@ -31,12 +29,24 @@ namespace Shard
 		/// </summary>
 		public readonly Box World;
 
-		public EntityRanges(float r, float m, float s, Box world)
+		/// <summary>
+		/// Constructs a new entity range configuration
+		/// </summary>
+		/// <param name="r">Maximum entity influence. Most be positive, non-zero</param>
+		/// <param name="m">Maximum entity motion radius. 
+		/// If found outside (0,r), displaced transmission is concluded, and Motion and Transmission are set to R.
+		/// Otherwise max transmission range is set to r-m</param>
+		/// <param name="world">World scope</param>
+		public EntityRanges(float r, float m, Box world)
 		{
-#if STATE_ADV
-			M = m;
-			S = s;
-#endif
+			DisplacedTransmission = m > 0 && m < r;
+			if (DisplacedTransmission)
+			{
+				Motion = m;
+				Transmission = r - m;
+			}
+			else
+				Motion = Transmission = r;
 			R = r;
 			World = world;
 		}

@@ -15,7 +15,7 @@ namespace Shard.Tests
 
 		private static async Task DBRCSStackTestAsync()
 		{
-
+			var ctx = EntityChangeSetTests.RandomContext();
 			var s = new DB.RCSStack(RandomRCSID());
 			int numEntries = 10;
 			RCS[] rcss = new RCS[numEntries];
@@ -23,7 +23,7 @@ namespace Shard.Tests
 
 			Parallel.For(0, numEntries, i =>
 			{
-				RCS rcs = RandomOutboundRCS(true);
+				RCS rcs = RandomOutboundRCS(ctx,true);
 				tasks[i] = s.PutAsync(i * 2, rcs.Export());  //only every second (0,2,4,...). Should fill intermeditate ones
 				rcss[i] = rcs;
 			});
@@ -74,14 +74,14 @@ namespace Shard.Tests
 			return new RCS.StackID(random.NextInt3(0, 10), random.NextInt3(0, 10));
 		}
 
-		public static SDS RandomSDS()
+		public static SDS RandomSDS(SimulationContext ctx)
 		{
-			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(16).ToArray(), BitCubeTests.RandomIC(), random.NextBool(0.01f), RandomClientMessages());
+			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(ctx.LocalSpace,16).ToArray(), BitCubeTests.RandomIC(), random.NextBool(0.01f), RandomClientMessages());
 		}
 
-		public static RCS[] RandomOutboundRCSs()
+		public static RCS[] RandomOutboundRCSs(SimulationContext ctx)
 		{
-			return RandomOutboundRCSs(random.Next(26));
+			return RandomOutboundRCSs(ctx,random.Next(26));
 		}
 
 		public static Dictionary<Guid, ClientMessage[]> RandomClientMessages()
@@ -126,17 +126,17 @@ namespace Shard.Tests
 				);
 		}
 
-		private static RCS[] RandomOutboundRCSs(int count)
+		private static RCS[] RandomOutboundRCSs(SimulationContext ctx, int count)
 		{
 			RCS[] rs = new RCS[count];
 			for (int i = 0; i < count; i++)
-				rs[i] = RandomOutboundRCS();
+				rs[i] = RandomOutboundRCS(ctx);
 			return rs;
 		}
 
-		private static RCS RandomOutboundRCS(bool forceConsistent = false)
+		private static RCS RandomOutboundRCS(SimulationContext ctx, bool forceConsistent = false)
 		{
-			return new RCS(EntityChangeSetTests.RandomSet(), forceConsistent ? InconsistencyCoverage.NewCommon() : BitCubeTests.RandomIC());
+			return new RCS(EntityChangeSetTests.RandomSet(ctx), forceConsistent ? InconsistencyCoverage.NewCommon() : BitCubeTests.RandomIC());
 		}
 
 		public static IntermediateSDS RandomIntermediate(EntityChange.ExecutionContext ctx)
@@ -145,7 +145,7 @@ namespace Shard.Tests
 			rs.entities = EntityPoolTests.RandomPool(random.Next(16),ctx);
 			rs.ic = BitCubeTests.RandomIC();
 			rs.inputConsistent = random.NextBool();
-			rs.localChangeSet = EntityChangeSetTests.RandomSet();
+			rs.localChangeSet = EntityChangeSetTests.RandomSet(ctx.Ranges);
 			return rs;
 		}
 
@@ -154,12 +154,12 @@ namespace Shard.Tests
 		public void SerializeTest()
 		{
 			DB.Serializer serializer = new DB.Serializer();
-
+			var ctx = EntityChangeSetTests.RandomContext();
 
 			for (int i = 0; i < 100; i++)
 			{
 				RCS[] rcs;
-				SerialRCSStack stack = SerialRCSStackTests.RandomStack(out rcs);
+				SerialRCSStack stack = SerialRCSStackTests.RandomStack(ctx,out rcs);
 				string json = serializer.Serialize(stack);
 				SerialRCSStack stackBack = serializer.Deserialize<SerialRCSStack>(json);
 				Assert.AreEqual(stack, stackBack);
@@ -171,7 +171,7 @@ namespace Shard.Tests
 
 			for (int i = 0; i < 100; i++)
 			{
-				SDS sds = RandomSDS();
+				SDS sds = RandomSDS(ctx);
 				var s = new SerialSDS( sds, Simulation.ID.XYZ );
 				string json = serializer.Serialize(s);
 				var reverse = serializer.Deserialize<SerialSDS>(json);

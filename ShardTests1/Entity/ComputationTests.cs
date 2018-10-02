@@ -33,8 +33,8 @@ namespace Shard.Tests
 			
 			public MovingLogic(Vec3 direction)
 			{
-				Motion = direction / direction.Length * Simulation.M;
-				Assert.IsTrue(Vec3.GetChebyshevDistance(Motion, Vec3.Zero) <= Simulation.M);
+				Motion = direction / direction.Length * Simulation.Ranges.Motion;
+				Assert.IsTrue(Vec3.GetChebyshevDistance(Motion, Vec3.Zero) <= Simulation.Ranges.Motion);
 			}
 
 			protected override void Evolve(ref Actions newState, Entity currentState, int generation, EntityRandom randomSource, EntityRanges ranges, bool isInconsistent)
@@ -144,7 +144,7 @@ namespace Shard.Tests
 			{
 				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
-				ctx = new SimulationContext(config, allLinksArePassive);
+				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID,config.extent), allLinksArePassive);
 
 				FeedEntities(entities);
 			}
@@ -152,7 +152,7 @@ namespace Shard.Tests
 			{
 				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
-				ctx = new SimulationContext(config, allLinksArePassive);
+				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID, config.extent), allLinksArePassive);
 			}
 
 			public void FeedEntities(IEnumerable<Entity> entities)
@@ -245,7 +245,7 @@ namespace Shard.Tests
 						null),
 
 					new Entity(
-						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center + new Vec3(Simulation.R)),
+						new EntityID(Guid.NewGuid(), Simulation.MySpace.Center + new Vec3(Simulation.Ranges.R)),
 						Vec3.Zero,
 						new PingLogic(new PingPacket(0),true),
 						//new EntityTest.FaultLogic.State(),
@@ -369,7 +369,7 @@ namespace Shard.Tests
 					//Link lnk = Simulation.Neighbors.Find(id.ID.ToShard);
 					//Assert.IsNotNull(lnk);
 
-					if (n.WorldSpace.Grow(Simulation.SensorRange).Contains(outlierCoords))
+					if (n.WorldSpace.Grow(Simulation.Ranges.Transmission).Contains(outlierCoords))
 						Assert.IsFalse(decoded.CS.IsEmpty);
 					else
 						Assert.IsTrue(decoded.CS.IsEmpty);
