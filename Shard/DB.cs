@@ -509,7 +509,10 @@ namespace Shard
 			}
 
 		}
-
+		/// <summary>
+		/// Synchronized RCS stack.
+		/// The stack may be inserted into the database or retrieved from there
+		/// </summary>
 		public class RCSStack
 		{
 			AsyncRCSStack lastKnownState;
@@ -525,6 +528,14 @@ namespace Shard
 				myID = id;
 			}
 
+			/// <summary>
+			/// Updates the generation info the given replica index.
+			/// Potentially trims the stored RCSs.
+			/// </summary>
+			/// <param name="replicationIndex">Replication to update</param>
+			/// <param name="oldestGeneration">New oldest generation of the given replica index</param>
+			/// <param name="simulationTopGeneration">Current simulation progress</param>
+			/// <returns>Awaitable task</returns>
 			public async Task SignalOldestGenerationUpdateAsync(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
 			{
 				await lastKnownState.ChangeAsync((stack) =>

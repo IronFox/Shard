@@ -11,6 +11,17 @@ using VectorMath;
 
 namespace Shard
 {
+	/* To Do:
+	 * Implement consensus protocol for multi-sibling client interaction.
+	 * Change CS implementation to completely represent next generation (not copy existing entities), drop Remove-changes.
+	 * Implement db-based shard location service.
+	 * Implement db manager that can setup and link CouchDB instances.
+	 * Implement manager that can determine and query status of shard network.
+	 * Update recovery choice to improved algorithm.
+	 * Replace RCS stack with individual RCSs identified by source/target shard and generation.
+	 * Implement DB RCS cleanup procedure when all siblings are present according to their oldest generation.
+	 */
+
 	class Program
 	{
 

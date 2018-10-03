@@ -174,12 +174,26 @@ namespace Shard
 
 
 		public readonly bool IsActive;
+
+		/// <summary>
+		/// Creates a new link to a sibling shard
+		/// </summary>
+		/// <param name="id">Remote shard ID</param>
+		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
+		/// <param name="linearIndex">Linear index in the neighborhood</param>
+		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
 		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(DB.TryGet(id),isActive,linearIndex,isSibling)
 		{
 			ID = id;
 			OutStack = new DB.RCSStack(OutboundRCSStackID);
 		}
-
+		/// <summary>
+		/// Creates a new link to a sibling shard
+		/// </summary>
+		/// <param name="remoteHost">Address of the remote shard</param>
+		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
+		/// <param name="linearIndex">Linear index in the neighborhood</param>
+		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
 		public Link(PeerAddress remoteHost, bool isActive, int linearIndex, bool isSibling)
 		{
 			IsSibling = isSibling;
@@ -205,6 +219,9 @@ namespace Shard
 			connectThread.Start();
 		}
 
+		/// <summary>
+		/// Queries the database ID used to identify the inbound RCS stack associated with this link
+		/// </summary>
 		public RCS.StackID InboundRCSStackID
 		{
 			get
@@ -212,7 +229,9 @@ namespace Shard
 				return new RCS.StackID(ID.XYZ, Simulation.ID.XYZ);
 			}
 		}
-
+		/// <summary>
+		/// Queries the database ID used to identify the outbound RCS stack associated with this link
+		/// </summary>
 		public RCS.StackID OutboundRCSStackID
 		{
 			get
@@ -220,7 +239,11 @@ namespace Shard
 				return new RCS.StackID(Simulation.ID.XYZ, ID.XYZ);
 			}
 		}
-
+		/// <summary>
+		/// Queries the generation ID of an outbound RCS
+		/// </summary>
+		/// <param name="gen">Generation to construct the ID for</param>
+		/// <returns>Generational RCS ID</returns>
 		public RCS.GenID GetOutboundRCSID(int gen)
 		{
 			return new RCS.GenID(OutboundRCSStackID, gen);
@@ -277,6 +300,11 @@ namespace Shard
 			UpdateAddress(addr);
 		}
 
+		/// <summary>
+		/// Notifies this link of an established incoming neighbor/sibling connection.
+		/// The local link must not be active
+		/// </summary>
+		/// <param name="newClient">Established TCP connection to the neighbor/sibling matching the expected remote shard ID</param>
 		public void SetPassiveClient(TcpClient newClient)
 		{
 			if (dispose)
@@ -353,6 +381,9 @@ namespace Shard
 			onComm.Set();
 		}
 
+		/// <summary>
+		/// Queries a string representation of the remote shard ID and status (e.g. "Active link to ...").
+		/// </summary>
 		public string Name
 		{
 			get
@@ -369,6 +400,10 @@ namespace Shard
 		public bool IsResponsive { get { return ConnectionIsActive; } }
 
 		private int oldestGeneration = 0;
+		/// <summary>
+		/// Queries the known oldest generation of the remote shard.
+		/// 0 if unknown
+		/// </summary>
 		public int OldestGeneration
 		{
 			get
@@ -377,6 +412,14 @@ namespace Shard
 			}
 		}
 
+		/// <summary>
+		/// Updates the latest known oldest generation of the remote shard.
+		/// The new value must be greater or equal than the last known oldest generation.
+		/// This method is called as a response to a package from the neighbor.
+		/// If the value changed, the outbound RCS stack is trimmed accordingly.
+		/// </summary>
+		/// <param name="newOldestGeneration">Updated oldest generation of the linked shard</param>
+		/// <param name="currentTLG">Current simulation Top Level Generation (TLG)</param>
 		public void SetOldestGeneration(int newOldestGeneration, int currentTLG)
 		{
 			if (oldestGeneration == newOldestGeneration)
