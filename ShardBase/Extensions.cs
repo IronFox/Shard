@@ -218,12 +218,16 @@ namespace Shard
 			return rs;
 		}
 
+		public static void ForceRemove<K, V>(this ConcurrentDictionary<K, V> dict, K key, out V value)
+		{
+			if (!dict.TryRemove(key, out value))
+				throw new IntegrityViolation("Unable to remove '" + key + "' from dictionary");
+		}
 
 		public static void ForceRemove<K,V>(this ConcurrentDictionary<K,V> dict, K key)
 		{
 			V temp;
-			if (!dict.TryRemove(key, out temp))
-				throw new IntegrityViolation("Unable to remove '"+key+"' from dictionary");
+			ForceRemove(dict, key, out temp);
 		}
 		public static void ForceAdd<K, V>(this ConcurrentDictionary<K, V> dict, K key, V value)
 		{

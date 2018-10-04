@@ -4,6 +4,7 @@ using Shard;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Text;
+using VectorMath;
 
 namespace Shard.Tests
 {
@@ -13,66 +14,7 @@ namespace Shard.Tests
 		static Random random = new Random();
 
 
-		private static async Task DBRCSStackTestAsync()
-		{
-			var ctx = EntityChangeSetTests.RandomContext();
-			var s = new DB.RCSStack(RandomRCSID());
-			int numEntries = 10;
-			RCS[] rcss = new RCS[numEntries];
-			Task[] tasks = new Task[numEntries];
 
-			Parallel.For(0, numEntries, i =>
-			{
-				RCS rcs = RandomOutboundRCS(ctx,true);
-				tasks[i] = s.PutAsync(i * 2, rcs.Export());  //only every second (0,2,4,...). Should fill intermeditate ones
-				rcss[i] = rcs;
-			});
-
-			Task.WaitAll(tasks);
-
-
-			await s.ViewAsync(stack =>
-			{
-				StringBuilder seqBuilder = new StringBuilder();
-				for (int i = 0; i < stack.CountEntries(); i++)
-					seqBuilder.Append((stack.Entries[i].IsDefined() ? "x" : "-"));
-				string seq = seqBuilder.ToString();
-
-				Assert.AreEqual(stack.CountEntries(), (numEntries -1) * 2 + 1);
-				for (int i = 0; i+1 < numEntries; i++)
-					Assert.IsTrue(stack.Entries[i * 2 + 1].IsUndefined(),i.ToString());
-				for (int i = 0; i < numEntries; i++)
-				{
-					Assert.IsTrue(stack.Entries[i * 2].IsDefined(), i.ToString()+" "+seq);
-					Assert.AreEqual(rcss[i], new RCS(stack.Entries[i * 2]), i.ToString());
-				}
-			}
-			);
-
-			for (int i = 0; i < numEntries; i++)
-			{
-				await s.SignalOldestGenerationUpdateAsync(0, i * 2, 0);
-				await s.ViewAsync(stack =>
-				{
-					Assert.AreEqual(stack.CountEntries(), (numEntries - 1 - i) * 2 + 1);
-					for (int k = i; k < numEntries; k++)
-						Assert.AreEqual(rcss[k], new RCS(stack.Entries[(k - i) * 2]));
-				}
-				);
-			}
-		}
-
-		[TestMethod]
-		public void DBRCSStackTest()
-		{
-			DBRCSStackTestAsync().Wait();
-
-		}
-
-		private static RCS.StackID RandomRCSID()
-		{
-			return new RCS.StackID(random.NextInt3(0, 10), random.NextInt3(0, 10));
-		}
 
 		public static SDS RandomSDS(SimulationContext ctx)
 		{
@@ -158,15 +100,13 @@ namespace Shard.Tests
 
 			for (int i = 0; i < 100; i++)
 			{
-				RCS[] rcs;
-				SerialRCSStack stack = SerialRCSStackTests.RandomStack(ctx,out rcs);
-				string json = serializer.Serialize(stack);
-				SerialRCSStack stackBack = serializer.Deserialize<SerialRCSStack>(json);
-				Assert.AreEqual(stack, stackBack);
-				for (int k = 0; k < stackBack.CountEntries(); k++)
-				{
-					Assert.AreEqual(rcs[k], new RCS(stackBack.Entries[k]));
-				}
+				RCS rcs = RandomOutboundRCS(ctx);
+				SerialRCS srcs = new SerialRCS(new RCS.GenID(Int3.Zero, Int3.One, 0), rcs);
+				string json = serializer.Serialize(srcs);
+				SerialRCS backRCS = serializer.Deserialize<SerialRCS>(json);
+				RCS back = backRCS.Deserialize();
+				Assert.AreEqual(srcs, backRCS);
+				Assert.AreEqual(rcs, back);
 			}
 
 			for (int i = 0; i < 100; i++)

@@ -95,8 +95,8 @@ namespace Shard
 		{
 			if (logicStore == null)
 				return;// Task.FromResult<object>(null);
-			string serial = logicStore.Client.Serializer.Serialize(data);
-			await logicStore.SetAsync(data._id, serial);
+			//string serial = logicStore.Serializer.Serialize(data);
+			await logicStore.Entities.PutAsync(data._id, data);
 		}
 
 		private static ConcurrentDictionary<string, Task<CSLogicProvider>> directProviderMap = new ConcurrentDictionary<string, Task<CSLogicProvider>>();
@@ -111,10 +111,58 @@ namespace Shard
 					return logic;
 			}
 
-			var script = await logicStore.GetByIdAsync<SerialCSLogicProvider>(scriptName);
-			var prov = await script.DeserializeAsync();
+			var script = await logicStore.Entities.GetAsync<SerialCSLogicProvider>(scriptName);
+			if (!script.IsSuccess)
+				throw new Exception("CouchDB failure whilte querying logic provider '" + scriptName + "': " + script.Error);
+			var prov = await script.Content.DeserializeAsync();
 			return prov;
 		}
+
+		private static int inboundRCSsRemoved = -1;
+
+		public static async Task PutAsync(SerialRCS serialRCS)
+		{
+			if (rcsStore == null)
+				return; //tests
+			try
+			{
+				Log.Minor("Storing serial RCS in DB: " + serialRCS.ID);
+				await PutAsync(null, rcsStore, serialRCS, false);
+				Log.Minor("Stored serial RCS in DB: " + serialRCS.ID);
+			}
+			catch (Exception ex)
+			{
+				Log.Error(ex);
+				Log.Error("Failed to store serial SDS in DB: " + serialRCS.ID);
+			}
+
+		}
+
+
+		private static SemaphoreSlim rcsRemovalLock = new SemaphoreSlim(1); 
+
+		public static async Task RemoveInboundRCSsAsync(IEnumerable<RCS.StackID> enumerable, int generationOrOlder)
+		{
+			await rcsRemovalLock.DoLockedAsync(async ()=>
+			{
+				if (inboundRCSsRemoved >= generationOrOlder)
+					return;
+				if (generationOrOlder > inboundRCSsRemoved + 10)
+					inboundRCSsRemoved = generationOrOlder - 10;
+				Log.Minor("Trimming inbound RCSs g" + (inboundRCSsRemoved+1)+" .. g"+generationOrOlder);
+
+				List<DocumentHeader> bulkRemove = new List<DocumentHeader>();
+				for (int g = inboundRCSsRemoved + 1; g <= generationOrOlder; g++)
+				{
+					foreach (var s in enumerable)
+						bulkRemove.Add(new DocumentHeader(new RCS.GenID(s, g).ToString(), null));
+				}
+				/*var result =*/
+				await rcsStore.Documents.BulkAsync(new BulkRequest().Delete(bulkRemove.ToArray()));
+				inboundRCSsRemoved = generationOrOlder;
+			});
+		}
+
 		public static Task<CSLogicProvider> GetLogicProviderAsync(string scriptName)
 		{
 			Task<CSLogicProvider> prov;
@@ -220,26 +268,74 @@ namespace Shard
 			TryAsync(async () =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
-				Config = await controlStore.GetByIdAsync<ConfigContainer>("config");
+				var rc = await controlStore.Entities.GetAsync<ConfigContainer>("config");
+				if (!rc.IsSuccess)
+					return false;
+				Config = rc.Content;
 				return Config != null;
 			}, numTries).Wait();
 
-			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer());
+			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer(),(collection) => null);
 			timingPoller.Start(controlStore, "timing");
 		}
 
+		/// <summary>
+		/// Attempts a forced replace or insert.
+		/// If conflicts are detected, they are dropped, and the local version is again updated.
+		/// Returns null if the method should be invoked again, otherwise the final version retrieved from the DB
+		/// </summary>
+		/// <typeparam name="T">Entity type</typeparam>
+		/// <param name="store">DB to place the entity in</param>
+		/// <param name="item">Entity to place. The _rev member may be updated in the process</param>
+		/// <returns></returns>
+		private static async Task<T> TryForceReplace<T>(DataBase store, T item) where T : Entity
+		{
+			var header = await controlStore.Entities.PutAsync(item._id, item);
+			if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
+			{
+				if (!string.IsNullOrEmpty(header.Rev))
+					item._rev = header.Rev;
+				return null;
+			}
+			var echoRequest = new GetEntityRequest(header.Id);
+			echoRequest.Conflicts = true;
+			var echo = await controlStore.Entities.GetAsync<T>(header.Id);
+			if (!echo.IsSuccess)
+				return null;
+			if (echo.Conflicts != null && echo.Conflicts.Length > 0)
+			{
+				//we do have conflicts and don't quite know whether the new version is our version
+				var deleteHeaders = new DocumentHeader[echo.Conflicts.Length];
+				for (int i = 0; i < echo.Conflicts.Length; i++)
+					deleteHeaders[i] = new DocumentHeader(header.Id, echo.Conflicts[i]);
+				BulkRequest breq = new BulkRequest().Delete(deleteHeaders);	//delete all conflicts
+				await controlStore.Documents.BulkAsync(breq);   //ignore result, but wait for it
+				item._rev = echo.Rev;   //replace again. we must win
+				return await TryForceReplace(store, item);
+			}
+			return echo.Content;    //all good
+		}
+
+		/// <summary>
+		/// Puts the specified container into the DB.
+		/// </summary>
+		/// <param name="container"></param>
+		/// <param name="numTries"></param>
+		/// <returns></returns>
 		public static async Task PutConfigAsync(ConfigContainer container, int numTries = 3)
 		{
 			Config = container;
 			Config._id = "config";
-			Config._rev = null;
-			string doc = controlStore.Client.Serializer.Serialize(Config);
+			//Config._rev = null;
+			string doc = controlStore.Serializer.Serialize(Config);
 			bool success = await TryAsync(async () =>
 			{
 				Log.Minor("Storing simulation configuration on " + Host + " ...");
-				var header = await controlStore.SetAsync("config", doc);
-				Config = await controlStore.GetByIdAsync<ConfigContainer>(header.Id);
-				return Config != null;
+				var newCfg = await TryForceReplace(controlStore, Config);
+				if (newCfg == null)
+					return false;	//retry
+				Config = newCfg;
+				return true;
 			}, numTries);
 			if (success)
 				Log.Minor("Done");
@@ -267,7 +363,7 @@ namespace Shard
 			public RevisionChange[] changes = null;
 		}
 
-		public class DataBase : MyCouchStore
+		public class DataBase : MyCouchClient
 		{
 			public readonly string DBName;
 
@@ -278,35 +374,27 @@ namespace Shard
 		}
 
 
-		class ContinuousPoller<T> where T : Entity
+		class ContinuousPoller<T>: IDisposable where T : Entity
 		{
 			private DataBase store;
-			private string id;
-			T lastQueriedValue;
+
 			//TaskCompletionSource<T> anyValueAsync;
 
 			public Action<T> OnChange { get; set; }
+			public readonly Func<ICollection<T>, T> Merger;
 			SpinLock sl = new SpinLock();
 			CancellationTokenSource cancellation;
 
-			public ContinuousPoller(T initial)
+			public ContinuousPoller(T initial, Func<ICollection<T>, T> merger)
 			{
-				lastQueriedValue = initial;
-				//anyValueAsync = new TaskCompletionSource<T>();
-				//if (initial != null)
-				//	anyValueAsync.SetResult(initial);
+				Latest = initial;
+				Merger = merger;
 			}
 
 
-			public T Latest
-			{
-				get
-				{
-					return lastQueriedValue;
-				}
-			}
+			public T Latest { get; private set; }
 
-			public string ID { get { return id; } }
+			public string ID { get; private set; }
 
 			//public async Task<T> GetLatestAsync()
 			//{
@@ -319,7 +407,7 @@ namespace Shard
 			{
 				//this.onChange = onChange;
 				this.store = store;
-				this.id = id;
+				this.ID = id;
 
 				PollAsync().Wait();
 
@@ -329,13 +417,14 @@ namespace Shard
 					Heartbeat = 3000 //Optional: LET COUCHDB SEND A I AM ALIVE BLANK ROW EACH ms
 				};
 
-
-				var serial = store.Client.Entities.Serializer;
+				var serial = store.Entities.Serializer;
 				cancellation = new CancellationTokenSource();
-				store.Client.Changes.GetAsync(
+				store.Changes.GetAsync(
 					getChangesRequest,
 					data =>
 					{
+						if (disposedValue)
+							return;
 						var d = serial.Deserialize<Change>(data);
 						if (d != null && d.id == id)
 						{
@@ -344,7 +433,7 @@ namespace Shard
 							foreach (var ch in d.changes)
 							{
 								revs.Append(' ').Append(ch.rev);
-								if (lastQueriedValue == null || ch.rev != lastQueriedValue._rev)
+								if (Latest == null || ch.rev != Latest._rev)
 									actualChange = true;
 							}
 							if (actualChange)
@@ -364,18 +453,20 @@ namespace Shard
 				{
 					try
 					{
-						var header = await store.GetHeaderAsync(id);
-						if (header == null)
+						var header = await store.Documents.HeadAsync(ID);
+						if (!header.IsSuccess)
 							return;
-						if (lastQueriedValue == null || header.Rev != lastQueriedValue._rev)
+						if (Latest == null || header.Rev != Latest._rev)
 						{
-							var data = await store.GetByIdAsync<T>(id);
+							var data = await GetConflictResolvedAsync(store, ID, Merger);
+							if (data == null)
+								return; //try again later
 							sl.DoLocked(() =>
 							{
-								Log.Minor("Got new data on " + store.DBName + "['" + id + "']: rev " + header.Rev);
+								Log.Minor("Got new data on " + store.DBName + "['" + ID + "']: rev " + header.Rev);
 								//if (lastQueriedValue == null)
 								//	anyValueAsync.SetResult(data);
-								lastQueriedValue = data;
+								Latest = data;
 								OnChange?.Invoke(data);
 							});
 						}
@@ -385,12 +476,121 @@ namespace Shard
 					{}
 				}
 			}
+
+			#region IDisposable Support
+			private bool disposedValue = false; // To detect redundant calls
+
+			protected virtual void Dispose(bool disposing)
+			{
+				if (!disposedValue)
+				{
+					if (disposing)
+					{
+						cancellation.Cancel();
+					}
+
+					// TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+					// TODO: set large fields to null.
+
+					disposedValue = true;
+				}
+			}
+
+			// TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+			// ~ContinuousPoller() {
+			//   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+			//   Dispose(false);
+			// }
+
+			// This code added to correctly implement the disposable pattern.
+			public void Dispose()
+			{
+				// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+				Dispose(true);
+				// TODO: uncomment the following line if the finalizer is overridden above.
+				// GC.SuppressFinalize(this);
+			}
+			#endregion
 		}
+
+
+		private static async Task<T> GetConflictResolvedAsync<T>(DataBase store, string id, Func<ICollection<T>, T> merger) where T:Entity
+		{
+			GetEntityRequest req = new GetEntityRequest(id);
+			req.Conflicts = true;
+			var data = await store.Entities.GetAsync<T>(req);
+			if (!data.IsSuccess)
+				return null;
+			if (data.Conflicts == null || data.Conflicts.Length == 0)
+				return data.Content;
+
+			List<T> conflicting = new List<T>();
+			List<DocumentHeader> toDelete = new List<DocumentHeader>();
+			conflicting.Add(data.Content);
+			foreach (var fetch in data.Conflicts)
+			{
+				var item = await store.Entities.GetAsync<T>(id, fetch);
+				if (item.IsSuccess)
+				{
+					conflicting.Add(item.Content);
+					toDelete.Add(new DocumentHeader(item.Id, item.Rev));
+				}
+				else
+					return null;	//assume connection lost or competing merge
+			}
+			T merged = merger(conflicting);
+			if (merged == null)
+			{
+				Log.Error("Error trying to fetch conflicting data from "+store+":"+id+" with no merger set. Fixed. Result will be arbitrary");
+				merged = data.Content;
+			}
+			merged._id = id;
+			merged._rev = data.Rev;
+			var putResult = await store.Entities.PutAsync(merged);
+			if (putResult.IsSuccess)
+			{
+				var deleteRequest = new BulkRequest().Delete(toDelete.ToArray());
+				deleteRequest.AllOrNothing = true;
+				await store.Documents.BulkAsync(deleteRequest);//await, ignore result, let others clean it up if failed
+				return putResult.Content;
+			}
+			return null;	//assume connection lost or asynchronous update
+		}
+
 
 
 		public static SerialSDS Begin(Int3 myID)
 		{
-			sdsPoller = new ContinuousPoller<SerialSDS>(null);
+			sdsPoller = new ContinuousPoller<SerialSDS>(null, (collection)=>
+			{
+				SerialSDS latest = null;
+				foreach (var candidate in collection)
+				{
+					if (latest == null || latest.Generation < candidate.Generation)
+						latest = candidate;
+					else if (latest.Generation == candidate.Generation)
+					{
+						//weird, but let's check
+						if (!candidate.IC.IsEmpty)
+							throw new IntegrityViolation("SDS candidate at g=" + candidate.Generation + " is not consistent");
+						if (candidate.Generation != latest.Generation)
+							throw new IntegrityViolation("SDS candidate at g=" + candidate.Generation + " mismatch with favorite at g="+latest.Generation);
+						var comp = new Helper.Comparator()
+							.Append(candidate.SerialEntities, latest.SerialEntities)
+							.Append(candidate.SerialMessages,latest.SerialMessages)
+							.Finish();
+						if (comp != 0)
+						{
+							Log.Error("Persistent SDS data mismatch at g="+candidate.Generation);
+							if (comp < 0)
+								latest = candidate;
+						}
+					}
+				}
+				if (!latest.IC.IsEmpty)
+					throw new IntegrityViolation("Chosen persistent SDS candidate at g="+latest.Generation+" is not consistent");
+				return latest;
+			});
 			sdsPoller.Start(sdsStore, myID.Encoded);
 			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
 			return sdsPoller.Latest;
@@ -401,13 +601,18 @@ namespace Shard
 		{
 			private ConcurrentDictionary<K, ContinuousPoller<D>> requests = new ConcurrentDictionary<K, ContinuousPoller<D>>();
 
+			private readonly Func<ICollection<D>, D> m;
+			public MappedContinuousLookup(Func<ICollection<D>, D> merger)
+			{
+				m = merger;
+			}
 			public void BeginFetch(DataBase store, K id)
 			{
 				if (requests.ContainsKey(id))
 					return;
 				if (store == null)
 					return;
-				ContinuousPoller<D> poller = new ContinuousPoller<D>(null);
+				ContinuousPoller<D> poller = new ContinuousPoller<D>(null, m);
 				if (!requests.TryAdd(id, poller))
 					return;
 				poller.Start(store, id.ToString());
@@ -424,20 +629,42 @@ namespace Shard
 				BeginFetch(store, id);
 				return TryGet(store,id);
 			}
+
+			public void FilterRequests(Func<K, bool> filterFunction)
+			{
+				foreach (var pair in requests)
+				{
+					if (!filterFunction(pair.Key))
+					{
+						ContinuousPoller<D> p;
+						requests.ForceRemove(pair.Key, out p);
+						p.Dispose();
+					}
+				}
+			}
 		}
 
 
-		private static MappedContinuousLookup<RCS.StackID, SerialRCSStack> rcsRequests = new MappedContinuousLookup<RCS.StackID, SerialRCSStack>();
-		private static MappedContinuousLookup<ShardID, AddressEntry> hostRequests = new MappedContinuousLookup<ShardID, AddressEntry>();
+		//private static MappedContinuousLookup<RCS.StackID, SerialRCSStack> rcsRequests = new MappedContinuousLookup<RCS.StackID, SerialRCSStack>(stacks => SerialRCSStack.Merge(stacks));
 
-		public static void BeginFetch(RCS.StackID id)
+		private static MappedContinuousLookup<RCS.GenID, SerialRCS> rcsRequests = new MappedContinuousLookup<RCS.GenID, SerialRCS>(rcss => null);
+		private static MappedContinuousLookup<ShardID, AddressEntry> hostRequests = new MappedContinuousLookup<ShardID, AddressEntry>((collection)=>null);
+
+		public static void BeginFetch(RCS.GenID id)
 		{
 			rcsRequests.BeginFetch(rcsStore, id);
 		}
 
-		public static SerialRCSStack TryGet(RCS.StackID id)
+		public static SerialRCS TryGetInbound(RCS.GenID id)
 		{
+			if (id.Generation <= inboundRCSsRemoved)
+				throw new IntegrityViolation("Trying to query removed inbound RCS");
 			return rcsRequests.TryGet(rcsStore, id);
+		}
+
+		public static void StopFetchingRCSs(int generationOrOlder)
+		{
+			rcsRequests.FilterRequests(id => id.Generation > generationOrOlder);
 		}
 
 		public static void BeginFetch(ShardID id)
@@ -454,172 +681,11 @@ namespace Shard
 		}
 
 
-		public static void BeginFetch(IEnumerable<RCS.StackID> ids)
-		{
-			foreach (var id in ids)
-				BeginFetch(id);
-		}
+	
 
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
 		public static Action<ShardPeerAddress> OnPutLocalAddress { get; set; } = null;
 
-
-		public class AsyncRCSStack
-		{
-			SerialRCSStack state = new SerialRCSStack();  //protected by stateLock
-			SemaphoreSlim stateLock = new SemaphoreSlim(1); //protects lastKnownState
-
-
-			public AsyncRCSStack(RCS.StackID id)
-			{
-				state._id = id.ToString();
-				state.NumericID = id.IntArray;
-			}
-
-			public async Task ChangeAsync(Func<SerialRCSStack, Task> op)
-			{
-				await stateLock.DoLockedAsync(async () =>
-				{
-					await op(state);
-				});
-			}
-
-			public async Task ChangeAsync(Action<SerialRCSStack> op)
-			{
-				await stateLock.DoLockedAsync(() =>
-				{
-					op(state);
-				});
-			}
-
-			public async Task ReplaceAsync(Func<SerialRCSStack, Task<SerialRCSStack>> op)
-			{
-				await stateLock.DoLockedAsync(async () =>
-				{
-					state = await op(state);
-				});
-			}
-
-			public async Task ReplaceAsync(Func<SerialRCSStack, SerialRCSStack> op)
-			{
-				await stateLock.DoLockedAsync(() =>
-				{
-					state = op(state);
-				});
-			}
-
-		}
-		/// <summary>
-		/// Synchronized RCS stack.
-		/// The stack may be inserted into the database or retrieved from there
-		/// </summary>
-		public class RCSStack
-		{
-			AsyncRCSStack lastKnownState;
-			Task rcsPutTask;
-			readonly RCS.StackID myID;
-
-			public Action<RCS.SerialData, int> OnPutRCS { get; set; } = null;
-
-
-			public RCSStack(RCS.StackID id)
-			{
-				lastKnownState = new AsyncRCSStack(id);
-				myID = id;
-			}
-
-			/// <summary>
-			/// Updates the generation info the given replica index.
-			/// Potentially trims the stored RCSs.
-			/// </summary>
-			/// <param name="replicationIndex">Replication to update</param>
-			/// <param name="oldestGeneration">New oldest generation of the given replica index</param>
-			/// <param name="simulationTopGeneration">Current simulation progress</param>
-			/// <returns>Awaitable task</returns>
-			public async Task SignalOldestGenerationUpdateAsync(int replicationIndex, int oldestGeneration, int simulationTopGeneration)
-			{
-				await lastKnownState.ChangeAsync((stack) =>
-				{
-					int oldGen = stack.GetOldestGeneration();
-					stack.Destinations.Set(replicationIndex, simulationTopGeneration, oldestGeneration);
-
-					int newGen = stack.GetOldestGeneration();
-					if (oldGen > newGen)
-					{
-						throw new IntegrityViolation("Local generation offset changed backwards");
-					}
-					if (newGen > oldGen && stack.Entries != null)
-					{
-						int offset = (newGen - oldGen);
-						int remaining = stack.Entries.Length - offset;
-						if (remaining <= 0)
-						{
-							stack.Entries = null;
-						}
-						else
-						{
-							var entries = new RCS.SerialData[remaining];
-							for (int i = 0; i < remaining; i++)
-								entries[i] = stack.Entries[i + offset];
-							stack.Entries = entries;
-						}
-					}
-				});
-			}
-
-			public void Put(int generation, RCS data)
-			{
-				if (!data.IsFullyConsistent)
-					throw new IntegrityViolation("Trying to upload inconsistent RCS " + myID + " at generation " + generation);
-				if (rcsPutTask != null)
-					rcsPutTask.Wait();
-				rcsPutTask = PutAsync(generation, data.Export());
-			}
-
-			public async Task ViewAsync(Action<SerialRCSStack> action)
-			{
-				await lastKnownState.ChangeAsync(action);
-			}
-
-			public async Task PutAsync(int generation, RCS.SerialData data)
-			{
-				await lastKnownState.ReplaceAsync(async (stack) =>
-				{
-					int at = generation - stack.GetOldestGeneration();
-					if (stack.Entries == null || stack.Entries.Length <= at)
-					{
-						var entries = new RCS.SerialData[at + 1];
-						if (stack.Entries != null)
-							for (int i = 0; i < stack.Entries.Length; i++)
-								entries[i] = stack.Entries[i];
-						stack.Entries = entries;
-					}
-					stack.Entries[at] = data;
-
-					OnPutRCS?.Invoke(stack.Entries[at], generation);
-
-#if !DRY_RUN
-					if (rcsStore == null)	//for testing: DB not initialized. Return modified stack for replacement
-#endif
-						return stack;
-					for (int i = 0; i < 10; i++)
-					{
-						try
-						{
-							return await rcsStore.StoreAsync(stack);	
-						}
-						catch (MyCouchResponseException ex)
-						{
-							Log.Error(ex);
-							var existing = await rcsStore.GetByIdAsync<SerialRCSStack>(stack._id);
-							stack.IncludeNewerVersion(existing);
-						}
-					};
-					throw new Exception("Failed to update local RCS 10 times");
-				});
-			}
-			
-		}
 
 		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{
@@ -675,9 +741,9 @@ namespace Shard
 			}
 		}
 
-		private static async Task PutAsync(Link lnk, MyCouchStore store, Entity e, bool forceReplace)
+		private static async Task PutAsync<T>(Link lnk, DataBase store, T e, bool forceReplace) where T: Entity
 		{
-			string doc = store.Client.DocumentSerializer.Serialize(e);
+			//string doc = store.DocumentSerializer.Serialize(e);
 
 			if (forceReplace)
 			{
@@ -685,7 +751,13 @@ namespace Shard
 				{
 					try
 					{
-						await store.SetAsync(e._id, doc);
+						for (int i = 0; i < 3; i++)
+						{
+							var inserted = await TryForceReplace(store, e);
+							if (inserted != null)
+								return;
+						}
+						//await store.SetAsync(e._id, doc);
 						return;
 					}
 					catch (MyCouchResponseException)
@@ -695,17 +767,16 @@ namespace Shard
 			}
 			try
 			{
-				var header = e._rev != null?
-					await store.StoreAsync(e._id, e._rev, doc):
-					await store.StoreAsync(e._id, doc);
-
+				var header = await store.Entities.PutAsync(e._id, e);
+				if (!header.IsSuccess)
+					throw new MyCouchResponseException(header);
 				e._rev = header.Rev;
 			}
 			catch (MyCouchResponseException)
 			{
 				if (lnk != null)
 				{
-					var e2 = store.GetByIdAsync(e._id); //if we get here, then the copy script has rejected our data => read data must be newer
+					var e2 = store.Entities.GetAsync<T>(e._id); //if we get here, then the copy script has rejected our data => read data must be newer
 					Simulation.FetchIncoming(lnk, e2);
 				}
 			}

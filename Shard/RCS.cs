@@ -147,6 +147,11 @@ namespace Shard
 					return rs;
 				}
 			}
+
+			public GenID Generation(int generation)
+			{
+				return new GenID(this, generation);
+			}
 		}
 
 		public struct GenID

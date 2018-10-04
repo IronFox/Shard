@@ -157,8 +157,16 @@ namespace Shard
 		private TcpClient client;
 		private NetworkStream stream;
 		public readonly int LinearIndex;
+
+		public Action<RCS, int> OnPutRCS { get; set; }
+
+		public void UploadToDB(int generation, RCS rcs)
+		{
+			DB.PutAsync(new SerialRCS(GetOutboundRCSID(generation), rcs)).Wait();
+			OnPutRCS(rcs, generation);
+		}
+
 		public readonly bool IsSibling;
-		public readonly DB.RCSStack OutStack;
 		private PeerAddress address;
 
 
@@ -185,7 +193,6 @@ namespace Shard
 		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(DB.TryGet(id),isActive,linearIndex,isSibling)
 		{
 			ID = id;
-			OutStack = new DB.RCSStack(OutboundRCSStackID);
 		}
 		/// <summary>
 		/// Creates a new link to a sibling shard

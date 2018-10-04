@@ -98,11 +98,11 @@ namespace Shard
 				{
 					Log.Message("Dispatched "+oID);
 					n.Set(oID.ToString(), new RCS.Serial(rcs, generation));
+					if (rcs.IsFullyConsistent)
+						n.UploadToDB(generation, rcs);
 				}
 				else
 					Log.Error("Recomputed generation, but remote shard will not want generated RCS");
-				if (rcs.IsFullyConsistent)
-					n.OutStack.Put(generation, rcs);
 			}
 			data.localChangeSet.FilterByTargetLocation(Simulation.MySpace,ctx);
 		}

@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Net;
+using System.Linq;
 
 namespace Shard
 {
@@ -133,6 +134,11 @@ namespace Shard
 			var data = new OldestGeneration(gen);
 			siblings.AdvertiseOldestGeneration(data);
 			neighbors.AdvertiseOldestGeneration(data);
+			DB.StopFetchingRCSs(gen);
+
+			if (siblings.AllResponsive && siblings.OldestGeneration >= gen)
+				DB.RemoveInboundRCSsAsync(neighbors.Select(sibling => sibling.InboundRCSStackID),gen).Wait();
+
 		}
 
 		public static Link FindLink(ShardID id)
@@ -266,10 +272,10 @@ namespace Shard
 
 			Log.Message("Start Date="+DB.Timing.startTime);
 
-			{
-				foreach (var link in neighbors)
-					DB.BeginFetch(link.InboundRCSStackID);
-			}
+			//{
+			//	foreach (var link in neighbors)
+			//		DB.BeginFetch(link.InboundRCSStackID);
+			//}
 
 
 //			Log.Message("Catching up to g"+ TimingInfo.Current.TopLevelGeneration);
@@ -477,11 +483,11 @@ namespace Shard
 				if (inbound != null && inbound.IsFullyConsistent)
 					continue;
 				//try get from database:
-				SerialRCSStack rcsStack = DB.TryGet(other.InboundRCSStackID);
-				var rcs = rcsStack?.FindGeneration(sds.Generation);
-				if (rcs.HasValue)
+				SerialRCS rcs = DB.TryGetInbound(other.InboundRCSStackID.Generation(sds.Generation));
+				//SerialRCSStack rcsStack = DB.TryGet(other.InboundRCSStackID);
+				if (rcs != null)
 				{
-					sds.InboundRCS[other.LinearIndex] = new RCS(rcs.Value);
+					sds.InboundRCS[other.LinearIndex] = rcs.Deserialize();
 					rs.rcsRestoredFromDB++;
 					continue;
 				}
@@ -593,6 +599,9 @@ namespace Shard
 					int gen = ((OldestGeneration)obj).Generation;
 					if (gen == lnk.OldestGeneration)
 					{
+						if (siblings.AllResponsive && siblings.OldestGeneration >= gen)
+							DB.RemoveInboundRCSsAsync(neighbors.Select(sibling => sibling.InboundRCSStackID), gen).Wait();	//maybe only now responsive
+
 						Log.Minor("OldestGen update from sibling " + lnk + ": Warning: Already moved to generation " + gen);
 						return;
 					}
@@ -612,6 +621,8 @@ namespace Shard
 								return msg.Body.RecordedTLG + 2 >= gen;
 							return true;
 						});
+						if (siblings.AllResponsive && siblings.OldestGeneration >= gen)
+							DB.RemoveInboundRCSsAsync(neighbors.Select(sibling => sibling.InboundRCSStackID), gen).Wait();
 					}
 					return;
 				}

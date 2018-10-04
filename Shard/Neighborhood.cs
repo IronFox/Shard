@@ -19,6 +19,11 @@ namespace Shard
 				return links != null ? links.Length : 0;
 			}
 		}
+
+		public bool AllResponsive => Count == 0 || !links.Where(link => !link.IsResponsive).Any();
+
+		public int OldestGeneration => Count > 0 ? links.Aggregate((a, b) => a.OldestGeneration < b.OldestGeneration ? a : b).OldestGeneration : 0;
+
 		public IEnumerator<Link> GetEnumerator()
 		{
 			return ((IEnumerable<Link>)links).GetEnumerator();

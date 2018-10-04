@@ -355,14 +355,14 @@ namespace Shard.Tests
 			Vec3 crossingTarget = crosser.ID.Position + crossingLogic.Motion;
 
 			foreach (var n in Simulation.Neighbors)
-				n.OutStack.OnPutRCS = (rcs, gen) =>
+				n.OnPutRCS = (decoded, gen) =>
 				{
 					numRCS++;
 
 					Assert.AreEqual(gen, 1);
 
 
-					RCS decoded = new RCS(rcs);
+					//RCS decoded = new RCS(rcs);
 
 					Assert.IsTrue(decoded.IsFullyConsistent);
 					//RCS.GenID id = new RCS.GenID(rcs.NumericID,0);
@@ -455,7 +455,7 @@ namespace Shard.Tests
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 
 			foreach (var n in Simulation.Neighbors)
-				n.OutStack.OnPutRCS = (rcs, gen) =>
+				n.OnPutRCS = (rcs, gen) =>
 				{
 					Assert.Fail("This test generates no simulation neighbors. Should not generate RCSs");
 				};
