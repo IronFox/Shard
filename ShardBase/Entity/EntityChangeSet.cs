@@ -344,7 +344,7 @@ namespace Shard
 					{
 						st = e.Evolve(t, this, Helper.Concat(clientBroadcasts, messages), ctx, ic.IsInconsistentR(ctx.LocalSpace.Relativate(e.ID.Position)));
 						if (e.transientDeserializedLogic != null)
-							throw new IntegrityViolation("Transient deserialized logic was not whiped");
+							throw new IntegrityViolation("Transient deserialized logic was not wiped");
 					}
 					if (exceeded || watch0.Elapsed > budget)
 					{

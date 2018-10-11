@@ -1,5 +1,6 @@
 ﻿using MyCouch;
 using MyCouch.Requests;
+using MyCouch.Responses;
 using Newtonsoft.Json;
 using Shard.EntityChange;
 using System;
@@ -23,7 +24,7 @@ namespace Shard
 		public class ConfigContainer : Entity
 		{
 			public ShardID extent = new ShardID(Int3.One,1);
-			public float r = 0.5f, m=0.25f;
+			public float r = 0.5f, m=-1;
 			public string ntp = "uhr.uni-trier.de";
 		}
 
@@ -51,7 +52,7 @@ namespace Shard
 
 		public class TimingContainer : Entity
 		{
-			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) step comprise a top level generation
+			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) steps comprise a top level generation
 			public int msComputation = 500; //total milliseconds per step dedicated to computation. Must be less than msStep. Any extra time is used for communication
 			public int msMessageProcessing = 100;	//time allocated for message dispatch across all siblings
 			public string startTime = DateTime.Now.ToString();  //starting time of the computation of generation #0
@@ -60,7 +61,38 @@ namespace Shard
 			public int startGeneration = 0; //generation effective at startTime
 		}
 
+		internal static async Task ClearSimulationDataAsync()
+		{
+			if (haveCredentials)
+			{
+				await RecreateDB("sds");
+				await RecreateDB("rcs");
+			}
+			else
+			{
+				if (sdsStore != null)
+					await sdsStore.ClearAsync(false);
+				if (rcsStore != null)
+					await rcsStore.ClearAsync(false);
+			}
+		}
 
+		private static async Task RecreateDB(string name)
+		{
+			if (server != null)
+			{
+				var rs = await server.Databases.DeleteAsync(name);
+				if (!rs.IsSuccess && rs.Error != "not_found")
+					throw new Exception("Failed to delete '"+ name + "' database: "+rs.Reason);
+				rs = await server.Databases.PutAsync(name);
+				if (!rs.IsSuccess)
+					throw new Exception("Failed to recreate '" + name + "' database: " + rs.Reason);
+				//var rs = await sdsStore.Database.DeleteAsync();
+				//sdsStore.Dispose();
+				//sdsStore = new DataBase(url, "sds");
+				
+			}
+		}
 
 		public static ConfigContainer Config { get; private set; }
 
@@ -68,6 +100,7 @@ namespace Shard
 		public static PeerAddress Host { get; private set; }
 
 		private static DataBase sdsStore, rcsStore, logicStore,controlStore, hostsStore;
+		private static MyCouchServerClient server;
 
 		public static Func<string, Task<CSLogicProvider>> LogicLoader { get; set; }
 
@@ -151,14 +184,29 @@ namespace Shard
 					inboundRCSsRemoved = generationOrOlder - 10;
 				Log.Minor("Trimming inbound RCSs g" + (inboundRCSsRemoved+1)+" .. g"+generationOrOlder);
 
+				List<Task<DocumentHeaderResponse>> tasks = new List<Task<DocumentHeaderResponse>>();
 				List<DocumentHeader> bulkRemove = new List<DocumentHeader>();
 				for (int g = inboundRCSsRemoved + 1; g <= generationOrOlder; g++)
 				{
 					foreach (var s in enumerable)
-						bulkRemove.Add(new DocumentHeader(new RCS.GenID(s, g).ToString(), null));
+					{
+						HeadDocumentRequest req = new HeadDocumentRequest(new RCS.GenID(s, g).ToString());
+						tasks.Add(rcsStore.Documents.HeadAsync(req));
+					}
 				}
-				/*var result =*/
-				await rcsStore.Documents.BulkAsync(new BulkRequest().Delete(bulkRemove.ToArray()));
+				foreach (var t in tasks)
+				{
+					var rs = await t;
+					if (rs.IsSuccess)
+						bulkRemove.Add(new DocumentHeader(rs.Id,rs.Rev));
+				}
+				if (bulkRemove.Count > 0)
+				{
+					var result =
+						await rcsStore.Documents.BulkAsync(new BulkRequest().Delete(bulkRemove.ToArray()));
+					if (!result.IsSuccess)
+						Log.Error("Failed to remove some inbound RCSs: "+result.Error);
+				}
 				inboundRCSsRemoved = generationOrOlder;
 			});
 		}
@@ -175,14 +223,22 @@ namespace Shard
 			return prov;
 		}
 
+		private static bool haveCredentials = false;
+
 		public static void Connect(PeerAddress host, string username = null, string password = null)
 		{
 			url = "http://";
 			if (username != null && password != null)
+			{
+				haveCredentials = true;
 				url += Uri.EscapeDataString(username) + ":" + Uri.EscapeDataString(password) + "@";
+			}
+			else
+				haveCredentials = false;
 			url += host;
 			Host = host;
 
+			server = new MyCouchServerClient(url);
 			sdsStore = new DataBase(url, "sds");
 			rcsStore = new DataBase(url, "rcs");
 			logicStore = new DataBase(url, "logic");
@@ -290,16 +346,17 @@ namespace Shard
 		/// <returns></returns>
 		private static async Task<T> TryForceReplace<T>(DataBase store, T item) where T : Entity
 		{
-			var header = await controlStore.Entities.PutAsync(item._id, item);
+			var header = await store.Entities.PutAsync(item._id, item);
 			if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
 			{
-				if (!string.IsNullOrEmpty(header.Rev))
-					item._rev = header.Rev;
+				var head = await store.Documents.HeadAsync(item._id);
+				if (head.IsSuccess)
+					item._rev = head.Rev;
 				return null;
 			}
 			var echoRequest = new GetEntityRequest(header.Id);
 			echoRequest.Conflicts = true;
-			var echo = await controlStore.Entities.GetAsync<T>(header.Id);
+			var echo = await store.Entities.GetAsync<T>(header.Id);
 			if (!echo.IsSuccess)
 				return null;
 			if (echo.Conflicts != null && echo.Conflicts.Length > 0)
@@ -309,7 +366,7 @@ namespace Shard
 				for (int i = 0; i < echo.Conflicts.Length; i++)
 					deleteHeaders[i] = new DocumentHeader(header.Id, echo.Conflicts[i]);
 				BulkRequest breq = new BulkRequest().Delete(deleteHeaders);	//delete all conflicts
-				await controlStore.Documents.BulkAsync(breq);   //ignore result, but wait for it
+				await store.Documents.BulkAsync(breq);   //ignore result, but wait for it
 				item._rev = echo.Rev;   //replace again. we must win
 				return await TryForceReplace(store, item);
 			}
@@ -358,9 +415,18 @@ namespace Shard
 
 		class Change
 		{
-			public int seq = 0;
+			public string seq = "";
 			public string id = null;
 			public RevisionChange[] changes = null;
+		}
+
+		private class AllDocsValue
+		{
+			// ReSharper disable once UnusedAutoPropertyAccessor.Local
+			public string Rev { get; set; }
+
+			// ReSharper disable once UnusedAutoPropertyAccessor.Local
+			public bool Deleted { get; set; }
 		}
 
 		public class DataBase : MyCouchClient
@@ -370,6 +436,42 @@ namespace Shard
 			public DataBase(string url, string dbName) : base(url,dbName)
 			{
 				DBName = dbName;
+			}
+
+			public override string ToString()
+			{
+				return DBName;
+			}
+
+			public async Task ClearAsync(bool compact)
+			{
+				Log.Message("Clearing out " + this + "...");
+				var request = new QueryViewRequest(SystemViewIdentity.AllDocs);
+				var response = await Views.QueryAsync<AllDocsValue>(request);
+				if (!response.IsSuccess)
+					throw new Exception("Failed to clear local store " + this + ": " + response.Reason);
+				var headers = new List<DocumentHeader>();
+				for (long i = 0; i < response.RowCount; i++)
+				{
+					if (!response.Rows[i].Value.Deleted)
+						headers.Add( new DocumentHeader( response.Rows[i].Id, response.Rows[i].Value.Rev));
+				}
+				if (headers.Count > 0)
+				{
+					var rs = await Documents.BulkAsync(new BulkRequest().Delete(headers.ToArray()));
+					if (!rs.IsSuccess)
+						throw new Exception("Unable to delete all documents in " + this + ": " + rs.Reason);
+					if (compact)
+					{
+						var rs2 = await Database.CompactAsync();
+						if (!rs2.IsSuccess)
+							throw new Exception("Unable to compact documents in " + this + ": " + rs2.Reason);
+					}
+				}
+				if (compact)
+					Log.Message(this + " is clear and compacted");
+				else
+					Log.Message(this + " is clear");
 			}
 		}
 
@@ -685,7 +787,7 @@ namespace Shard
 
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
 		public static Action<ShardPeerAddress> OnPutLocalAddress { get; set; } = null;
-
+		public static bool HasAdminAccess => server != null && haveCredentials;
 
 		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{

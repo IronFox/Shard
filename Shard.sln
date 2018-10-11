@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardTests", "ShardTests1\S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardBase", "ShardBase\ShardBase.csproj", "{8247AE53-9109-4D16-AAEF-74B27F63DF39}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Consensus", "Consensus\Consensus.csproj", "{8100A8FC-5447-4381-9963-5E614E329EEF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,14 @@ Global
 		{8247AE53-9109-4D16-AAEF-74B27F63DF39}.Release|Any CPU.Build.0 = Release|Any CPU
 		{8247AE53-9109-4D16-AAEF-74B27F63DF39}.Release|x64.ActiveCfg = Release|Any CPU
 		{8247AE53-9109-4D16-AAEF-74B27F63DF39}.Release|x64.Build.0 = Release|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Debug|x64.Build.0 = Debug|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|x64.ActiveCfg = Release|Any CPU
+		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

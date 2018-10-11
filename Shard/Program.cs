@@ -56,6 +56,8 @@ namespace Shard
 		{
 			DB.PutConfigAsync(cfg).Wait();
 			Simulation.Configure(new ShardID(), cfg, true);
+			//if (DB.HasAdminAccess)
+			var clearTask = DB.ClearSimulationDataAsync();
 
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
@@ -73,6 +75,7 @@ namespace Shard
 				grid[cell.X, cell.Y, cell.Z].Include(e);
 			}
 
+			clearTask.Wait();
 			Task[] tasks = new Task[cfg.extent.XYZ.Product];
 			int idx = 0;
 			foreach (var factory in grid)
@@ -97,7 +100,7 @@ namespace Shard
 		}
 
 		static Random random = new Random();
-		static IEnumerable<Entity> Translate(IEnumerable<ScenarioEntity> e, Dictionary<string, Task<CSLogicProvider>> providerMap)
+		static IEnumerable<Entity> Translate(IEnumerable<ScenarioEntity> e, Dictionary<string, Task<CSLogicProvider>> providerMap, Random random)
 		{
 			foreach (var se in e)
 			{
@@ -107,13 +110,13 @@ namespace Shard
 				for (int i = 0; i < se.instances; i++)
 				{
 					Vec3 pos = Vec3.Zero;
-					if (se.position.Length == 3)
+					if (se.position.Length == 1)
 					{
-						pos = new Vec3(se.position, 0);
+						pos = new Vec3(se.position[0], 0);
 					}
-					else if (se.position.Length == 6)
+					else if (se.position.Length == 2)
 					{
-						pos = random.NextVec3(Box.FromMinAndMax(new Vec3(se.position, 0), new Vec3(se.position, 3), Bool3.True));
+						pos = random.NextVec3(Box.FromMinAndMax(new Vec3(se.position[0], 0), new Vec3(se.position[1], 0), Bool3.True));
 					}
 					else
 						throw new Exception("Invalid position declaration: " + se.position);
@@ -143,7 +146,7 @@ namespace Shard
 
 		public class ScenarioEntity
 		{
-			public float[] position = null;
+			public float[][] position = null;
 			public string logic = null;
 			public dynamic[] appearances = null;
 			public int instances = 1;
@@ -182,7 +185,7 @@ namespace Shard
 			{
 				int at = 0;
 				var dbHost = new PeerAddress(args[at++]);
-				DB.Connect(dbHost);
+				DB.Connect(dbHost);//,"admin","1234");
 
 				if (args[at] == "setup")
 				{
@@ -266,13 +269,14 @@ namespace Shard
 				}
 			}
 
+			Random rng = new Random(1024);
 			SetupScenario(new DB.ConfigContainer()
 						{
 							extent = new ShardID(scenario.worldSize[0], scenario.worldSize[1], scenario.worldSize[2], 1),
 							m = scenario.M,
 							r = scenario.R
 						},
-						Translate(scenario.entities,providerMap));
+						Translate(scenario.entities,providerMap,rng));
 			//			GenerateEntities(1000));
 
 		}

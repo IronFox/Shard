@@ -1,13 +1,13 @@
 {
-	"worldSize" : [2,1,1],
+	"worldSize" : [1,1,1],
 	
 	"R" : 0.025,
-	"M" : 0.025,
+	"M" : 0,
 	
 	"entities" :
 	[
 		{
-			"position" : [0,0,0, 2,1,1],
+			"position" : [[0,0,0], [1,1,1]],
 			"logic" : "randomMotion.v1",
 			"instances" : 200
 		}
