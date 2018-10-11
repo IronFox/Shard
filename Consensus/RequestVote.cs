@@ -27,19 +27,7 @@
 
 		public override void OnProcess(Member receiver, Connection sender)
 		{
-			receiver. 
-			bool upToDate = IsUpToDate(instance);
-			if ((instance.votedFor == null || instance.votedFor == sender.getDestinationActor() || term > instance.currentTerm) && upToDate)
-			{
-				instance.state = State.Follower;
-				instance.log(iface, "Recognized vote request for term " + term + " from " + sender.getDestinationActor());
-				instance.nextActionAt = instance.getElectionTimeout();
-				instance.votedFor = sender.getDestinationActor();
-				instance.currentTerm = term;
-				sender.sendMessage(new VoteConfirm(instance.currentTerm));
-			}
-			else
-				instance.log(iface, "Rejected vote request for term " + term + " (at term " + instance.currentTerm + ", upToDate=" + upToDate + ") from " + sender.getDestinationActor());
+			receiver.ProcessVoteRequest(sender, Term, IsUpToDate(receiver));
 		}
 	}
 }
