@@ -2,7 +2,7 @@
 
 namespace Consensus
 {
-	public interface IDispatchable
+	internal interface IDispatchable
 	{
 		void OnArrive(Member receiver, Connection sender);
 	}

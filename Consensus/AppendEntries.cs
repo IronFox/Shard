@@ -1,7 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Consensus
 {
+	[Serializable]
 	internal class AppendEntries : Package
 	{
 
@@ -36,10 +38,6 @@ namespace Consensus
 
 		public AppendEntries(Member source, LogEntry entry): this(source, entry != null ? new LogEntry[] { entry } : null)
 		{}
-
-		public void onReceive(ActorLink sender, ActorLogicInterface iface, ConsensusLogic receiver)
-		{
-		}
 
 	}
 }

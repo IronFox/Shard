@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Consensus
 {
@@ -6,14 +8,22 @@ namespace Consensus
 	public class Configuration
 	{
 		public Address[] Addresses { get; set; }
+
+		public Configuration()
+		{ }
+		public Configuration(IEnumerable<Address> addresses)
+		{
+			Addresses = addresses.ToArray();
+		}
 	}
 
 	[Serializable]
-	public class ConfigurationUpdate : Configuration, IDispatchable
+	internal class ConfigurationUpdate : Configuration, IDispatchable
 	{
-		public void Implement(Member owner)
+
+		public void OnArrive(Member receiver, Connection sender)
 		{
-			owner.Join(this);
+			receiver.Join(this);
 		}
 	}
 }

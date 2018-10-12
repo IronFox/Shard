@@ -9,12 +9,29 @@ using System.Threading;
 
 namespace Consensus
 {
+	[Serializable]
+	internal class AddressInfo : IDispatchable
+	{
+		public readonly Address Address;
+
+		public AddressInfo(Address addr)
+		{
+			Address = addr;
+		}
+
+		public void OnArrive(Member receiver, Connection sender)
+		{
+			sender.LogEvent("Changing remote address to " + Address);
+			sender.Address = Address;
+		}
+	}
+
 	internal class Connection : Identity, IDisposable
 	{
 		private TcpClient client;
 		private volatile bool disposed = false;
 		private bool active = false;
-		public bool Established => !disposed && client.Connected;
+		public bool Established => IsConnected;
 		private Thread activeThread;
 		private readonly Member owner;
 		private BinaryFormatter formatter = new BinaryFormatter();
@@ -32,13 +49,17 @@ namespace Consensus
 		public int CommitIndex { get; set; } = 0;
 		public long AppendTimeout { get; set; } = -1;
 
-		public Connection(Member owner, Address addr):base(addr)
+
+		public bool IsConnected => !disposed && client != null && client.Connected;
+
+
+		public Connection(Member owner, Address addr):base(owner,addr)
 		{
 			this.owner = owner;
 			Connect(addr);
 		}
 
-		public Connection(Member owner, Address addr, TcpClient client):base(addr)
+		public Connection(Member owner, Address addr, TcpClient client):base(owner, addr)
 		{
 			this.owner = owner;
 			Assign(client);
@@ -47,19 +68,26 @@ namespace Consensus
 		public delegate void Event(Connection connection);
 		public delegate void DataEvent<T>(Connection connection, T obj);
 
-		private event Event onConnect;
+		//private event Event onConnect = new Event();
 
 
 		private Connection Connect(Address addr)
 		{
 			active = true;
-			Assign(new TcpClient(addr.HostName, addr.Port));
+			try
+			{
+				Assign(new TcpClient(addr.HostName, addr.Port));
+				Dispatch(new AddressInfo(((Member)Parent).Address));
+			}
+			catch
+			{
+				Assign(null);
+			}
 			return this;
 		}
 
 		private void Assign(TcpClient newClient)
 		{
-			Debug.Assert(client == null);
 			client = newClient;
 			activeThread = new Thread(new ThreadStart(ActiveThread));
 			activeThread.Start();
@@ -69,11 +97,11 @@ namespace Consensus
 		{
 			if (disposed)
 				return;
-			if (activeThread != null)
-				activeThread.Join();
 			disposed = true;
 			if (client != null)
 				client.Dispose();
+			if (activeThread != null)
+				activeThread.Join();
 		}
 
 
@@ -81,100 +109,95 @@ namespace Consensus
 		{
 			while (!disposed)
 			{
-				try
+				if (client != null)
 				{
-					var stream = client.GetStream();
-
-					while (!disposed && client.Connected)
+					try
 					{
-						var item = formatter.Deserialize(stream) as IDispatchable;
-						try
+						var stream = client.GetStream();
+						LogEvent("Begin stream read");
+
+						while (!disposed && client.Connected)
 						{
-							item.OnArrive(owner,this);
-						}
-						catch (Exception ex)
-						{
-							LogError("On implement: " + ex);
+							var item = formatter.Deserialize(stream) as IDispatchable;
+							try
+							{
+								//LogEvent("Deserialized inbound " + item);
+								item.OnArrive(owner, this);
+							}
+							catch (Exception ex)
+							{
+								LogError("On implement: " + ex);
+							}
 						}
 					}
+					catch (ObjectDisposedException ex)
+					{
+						LogError(ex.Message);
+					}
+					catch (IOException ex)
+					{
+						LogError(ex.Message + " Closing link");
+						client.Close();
+					}
+					catch (ArgumentException ex)
+					{
+						LogError(ex.Message + " Closing link");
+						client.Close();
+					}
+					catch (SerializationException ex)
+					{
+						LogError(ex.Message + " Closing link");
+						client.Close();
+					}
+					catch (SocketException)
+					{
+						LogError("Socket exception. Closing link");
+						client.Close();
+					}
+					catch (Exception ex)
+					{
+						LogError(ex);
+						LogError("Closing link");
+						client.Close();
+					}
+					finally
+					{
+						LogEvent("End stream read");
+					}
 				}
-				catch (ObjectDisposedException ex)
-				{
-					LogError(ex.Message);
-				}
-				catch (IOException ex)
-				{
-					LogError(ex.Message + " Closing link");
-					client.Close();
-				}
-				catch (ArgumentException ex)
-				{
-					LogError(ex.Message + " Closing link");
-					client.Close();
-				}
-				catch (SerializationException ex)
-				{
-					LogError(ex.Message + " Closing link");
-					client.Close();
-				}
-				catch (SocketException)
-				{
-					LogError("Socket exception. Closing link");
-					client.Close();
-				}
-				catch (Exception ex)
-				{
-					LogError(ex);
-					LogError("Closing link");
-					client.Close();
-				}
-
 				if (active)
 				{
-					while (!disposed && !client.Connected)
+					while (!disposed && (client == null || !client.Connected))
 					{
 						try
 						{
+							LogEvent("Attempting to re-establish connection...");
 							client = new TcpClient(Address.HostName, Address.Port);
 						}
 						catch (Exception)
 						{
-							Thread.Sleep(1000);
+							Thread.Sleep(10);
 						}
 					}
-					lock (onConnect)
-						onConnect(this);
+					Dispatch(new AddressInfo(((Member)Parent).Address));
 				}
 				else
 				{
-					return;	//about to be diposed anyway
+					LogEvent("End read");
+					return;	//about to be disposed anyway
 				}
 			}
+			LogEvent("End read");
 		}
 
 
-		public event Event OnConnect
-		{
-			add
-			{
-				lock (onConnect)
-				{
-					onConnect += value;
-					if (Established)
-						value(this);
-				}
-			}
-			remove
-			{
-				lock (onConnect)
-				{
-					onConnect -= value;
-				}
-			}
-		}
+	
 
 		public void Dispatch(IDispatchable p)
 		{
+			if (!IsConnected)
+				return;
+			//LogEvent("Dispatching " + p);
 			formatter.Serialize(client.GetStream(), p);
 		}
 

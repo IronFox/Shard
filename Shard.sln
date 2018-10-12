@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardBase", "ShardBase\Shar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Consensus", "Consensus\Consensus.csproj", "{8100A8FC-5447-4381-9963-5E614E329EEF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsensusTests", "ConsensusTests\ConsensusTests.csproj", "{77C5533B-E95B-49B7-B910-8B709B283241}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,14 @@ Global
 		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|x64.ActiveCfg = Release|Any CPU
 		{8100A8FC-5447-4381-9963-5E614E329EEF}.Release|x64.Build.0 = Release|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Debug|x64.Build.0 = Debug|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|x64.ActiveCfg = Release|Any CPU
+		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

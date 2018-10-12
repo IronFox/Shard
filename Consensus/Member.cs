@@ -13,26 +13,29 @@ namespace Consensus
 {
 	public class Identity : IEquatable<Identity>
 	{
-		public readonly Address Address;
-
+		public Address Address { get; set; }
+		public readonly Identity Parent;
 
 		public override string ToString()
 		{
+			if (Parent != null)
+				return Parent + "->" + Address;
 			return Address.ToString();
 		}
 
 
-		public Identity(Address address)
+		public Identity(Identity parent, Address address)
 		{
+			Parent = parent;
 			Address = address;
 		}
 		internal void LogError(object error)
 		{
-			Console.Error.WriteLine(Address + ": " + error);
+			Console.Error.WriteLine(this + ": " + error);
 		}
 		internal void LogEvent(object ev)
 		{
-			Console.WriteLine(Address + ": " + ev);
+			Console.WriteLine(this + ": " + ev);
 		}
 
 		public override bool Equals(object obj)
@@ -85,12 +88,12 @@ namespace Consensus
 				entry = source;
 			}
 
-			public void Execute(Member parent)
+			public void Execute()
 			{
 				if (WasExecuted)
 					throw new InvalidOperationException("Cannot re-execute local log entry");
 				WasExecuted = true;
-				entry.Execute(parent);
+				entry.Execute();
 			}
 
 			public bool WasExecuted { get; private set; } = false;
@@ -98,23 +101,34 @@ namespace Consensus
 		}
 
 
+		private Connection LeaderConnection
+		{
+			get
+			{
+				Identity ld = leader;
+				if (ld == this)
+					throw new InvalidOperationException("Leader is this");
+				return (Connection)ld;
+			}
+		}
+
 		private Identity leader = null;
 		private Identity votedFor = null;
 		private State state = State.Follower;
 		private int currentTerm = 0;
-		private int commitIndex = 0, lastApplied = 0;
+		private int commitIndex = 0;//, lastApplied = 0;
 		private long nextActionAt;
 		private readonly List<PrivateEntry> log = new List<PrivateEntry>();
 		private int numVotes = 0;
 		private readonly Random localRandom = new Random();
-		private ConcurrentQueue<LogEntry> dispatchQueue = new ConcurrentQueue<LogEntry>();
+		private ConcurrentQueue<ICommitable> dispatchQueue = new ConcurrentQueue<ICommitable>();
 
 
 		private const long HEART_BEAT_TIMEOUT_NS = 50 * 1000000;
 
 		private static long GetNanoTime()
 		{
-			return (long)((double)Stopwatch.GetTimestamp()*1000 / TimeSpan.TicksPerMillisecond);
+			return (long)((double)Stopwatch.GetTimestamp() / TimeSpan.TicksPerMillisecond * 1000000);
 		}
 
 		private long GetElectionTimeoutNS()
@@ -164,7 +178,7 @@ namespace Consensus
 				{
 					PrivateEntry e = log[i];
 					LogEvent("Executing " + e.Entry);
-					e.Execute(this);
+					e.Execute();
 				}
 				commitIndex = newCommitIndex;
 			}
@@ -184,15 +198,17 @@ namespace Consensus
 		}
 
 
-		public Member(Address myAddress, Configuration config):base(myAddress)
+		public Member(Address myAddress, Configuration config):base(null,myAddress)
 		{
-			this.config = config;
 			IPAddress filter = IPAddress.Any;
+			LogEvent("Starting to listen on port "+myAddress.Port);
 			listener = new TcpListener(filter,myAddress.Port);
+			listener.Start();
 			listenThread = new Thread(new ThreadStart(ThreadListen));
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
+			Join(config);
 		}
 
 		private void ThreadListen()
@@ -205,6 +221,7 @@ namespace Consensus
 					var addr = new Address((IPEndPoint)client.Client.RemoteEndPoint);
 					Disconnect(addr);
 					var conn = new Connection(this, addr, client);
+					LogEvent("Adding incoming connection from " + addr);
 					if (!connections.TryAdd(addr, conn))
 						conn.Dispose();
 				}
@@ -251,58 +268,76 @@ namespace Consensus
 		private void ThreadConsensus()
 		{
 			nextActionAt = GetNanoTime() + localRandom.Next(100 * 1000000);//max 100ms
-
+			LogEvent("Next action at " + nextActionAt);
 
 			while (!disposed)
 			{
-				Tuple<Package,Connection> pack;
-				while (inboundPackages.TryDequeue(out pack))
+				try
 				{
-					if (pack.Item1.Term < currentTerm)
+					Tuple<Package, Connection> pack;
+					while (inboundPackages.TryDequeue(out pack))
 					{
-						pack.Item1.OnBadTermIgnore(this,pack.Item2);
+						if (pack.Item1.Term < currentTerm)
+						{
+							pack.Item1.OnBadTermIgnore(this, pack.Item2);
+							continue;
+						}
+						pack.Item1.OnProcess(this, pack.Item2);
+					}
+
+					if (state == State.Leader)
+						CheckTimeouts();
+
+					if (GetNanoTime() < nextActionAt)
+					{
+						//LogEvent(GetNanoTime()+"/"+nextActionAt);
+						Thread.Sleep(TimeSpan.FromMilliseconds(10));
 						continue;
 					}
-					pack.Item1.OnProcess(this, pack.Item2);
+					switch (state)
+					{
+						case State.Leader:
+							Broadcast(new AppendEntries(this));
+							break;
+						case State.Candidate:
+						case State.Follower:
+							{
+								//elect new leader
+								ClearRemoteInfo();
+								numVotes = 1;
+								currentTerm++;
+								votedFor = this;
+								state = State.Candidate;
+								leader = null;
+								nextActionAt = GetElectionTimeout();
+
+								LogEvent("Timeout reached. Starting new election");
+
+								Broadcast(new Wrapped(new RequestVote(this)));
+							}
+							break;
+					}
 				}
-
-				if (state == State.Leader)
-					CheckTimeouts();
-
-				if (GetNanoTime() < nextActionAt)
-				{
-					Thread.Sleep(TimeSpan.FromMilliseconds(10));
-					continue;
-				}
-				switch (state)
-				{
-					case State.Leader:
-						Broadcast(new AppendEntries(this));
-						break;
-					case State.Candidate:
-					case State.Follower:
-						{
-							//elect new leader
-							ClearRemoteInfo();
-							numVotes = 1;
-							currentTerm++;
-							votedFor = this;
-							state = State.Candidate;
-							leader = null;
-							nextActionAt = GetElectionTimeout();
-
-							LogEvent("Timeout reached. Starting new election");
-
-							Broadcast(new Wrapped(new RequestVote(this)));
-						}
-						break;
-				}
+				catch
+				{ }
 			}
 
-			while (!disposed)
+	
+		}
+
+		private void CheckTimeouts()
+		{
+			long now = GetNanoTime();
+			foreach (var info in connections.Values)
 			{
+				if (info.AppendTimeout != -1 && info.AppendTimeout < now)
+				{
+					LogEvent("Timeout reached. Re-sending " + info);
+					info.Dispatch(new Wrapped(new AppendEntries(this, info.MatchIndex + 1)));
+					info.AppendTimeout = GetAppendMessageTimeout();
+				}
+			};
 
-			}
 		}
 
 		private void ClearRemoteInfo()
@@ -346,12 +381,13 @@ namespace Consensus
 			ConnectTo(address);
 		}
 
-		public void Join(Configuration cfg)
+		internal void Join(Configuration cfg)
 		{
+			config = cfg;
 			var table = new HashSet<Address>();
 			foreach (var addr in cfg.Addresses)
 			{
-				if (addr != Address)
+				if (addr > Address)
 				{
 					ConnectTo(addr);
 					table.Add(addr);
@@ -371,17 +407,66 @@ namespace Consensus
 				return;
 			disposed = true;
 			listener.Stop();
+			foreach (var c in connections)
+				c.Value.Dispose();
+			connections.Clear();
+		}
+
+		public bool IsLeader => state == State.Leader;
+
+		public int ActiveConnectionCount
+		{
+			get
+			{
+				int cnt = 0;
+				foreach (var c in connections.Values)
+					if (c.IsConnected)
+						cnt++;
+				return cnt;
+			}
+		}
+
+		public bool IsFullyConnected => ActiveConnectionCount == config.Addresses.Length - 1;
+
+		public void Commit(ICommitable entry)
+		{
+			if (state == State.Leader)
+			{
+				LogEvent("Issueing " + entry);
+				PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
+				lock(log)
+					log.Add(p);
+				Broadcast(new Wrapped(new AppendEntries(this, p.Entry)));
+				foreach (var c in connections.Values)
+					c.AppendTimeout = GetAppendMessageTimeout();
+			}
+			else
+			{
+				if (leader != null)
+				{
+					LogEvent("Dispatching " + entry + " to " + leader);
+					LeaderConnection.Dispatch(new Wrapped(new CommitEntry(currentTerm, entry)));
+				}
+				else
+				{
+					LogEvent("Received message out of consensus. Logging " + entry);
+					dispatchQueue.Enqueue(entry);
+				}
+			}
+
+
 		}
 
 		internal void SignalAppendEntries(AppendEntries p,Connection sender)
 		{
+			//LogEvent("Inbound append entries " + p);
 			if (leader == null || p.Term > currentTerm)
 			{
 				state = State.Follower;
 				leader = sender;
 				votedFor = null;
 
-				LogEntry e;
+				ICommitable e;
 				while (dispatchQueue.TryDequeue(out e))
 					sender.Dispatch(new Wrapped(new CommitEntry(p.Term, e)));
 			}
@@ -389,7 +474,7 @@ namespace Consensus
 			if (GetLogTerm(p.PrevLogIndex) == -1)    //don't have (yet)
 			{
 				LogEvent("Rejecting append entries because don't have prev log index " + p.PrevLogIndex + ", term " + p.Term);
-				sender.Dispatch(new Wrapped(new AppendEntriesConfirmation(this, false));
+				sender.Dispatch(new Wrapped(new AppendEntriesConfirmation(this, false)));
 			}
 			else
 			{
@@ -426,12 +511,25 @@ namespace Consensus
 
 		internal void Receive(Tuple<Package, Connection> tuple)
 		{
+			//LogEvent("Received " + tuple.Item1);
 			inboundPackages.Enqueue(tuple);
 		}
 
 		internal void ReCheckCommitment()
 		{
-			throw new NotImplementedException();
+			for (int j = log.Count; j > commitIndex; j--)
+			{
+				int threshold = j;
+				int cnt = 1;    //self
+				foreach (var c in connections.Values)
+					if (c.MatchIndex >= threshold)
+						cnt++;
+				if (cnt > config.Addresses.Length / 2)
+				{
+					CommitTo(j);
+					return;
+				}
+			}
 		}
 
 		internal void ProcessVoteRequest(Connection sender, int term, bool upToDate)
@@ -452,10 +550,12 @@ namespace Consensus
 
 		internal void ProcessVoteConfirmation(Connection sender, int term)
 		{
+			LogEvent("Processing vote confirmation for term " + term);
 			if (state == State.Candidate && term == currentTerm)
 			{
 				nextActionAt = GetElectionTimeout();
 				numVotes++;
+				LogEvent("Num Votes now " + numVotes);
 				if (numVotes >= config.Addresses.Length / 2 + 1)
 				{
 					LogEvent("Elected leader of term " + currentTerm);
@@ -472,6 +572,8 @@ namespace Consensus
 					}
 				}
 			}
+			else
+				LogEvent("Confirmation rejected: " + state + ", t" + term);
 
 		}
 	}

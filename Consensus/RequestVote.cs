@@ -1,5 +1,8 @@
-﻿namespace Consensus
+﻿using System;
+
+namespace Consensus
 {
+	[Serializable]
 	internal class RequestVote : IndexedPackage
 	{
 		public readonly int LastLogTerm;

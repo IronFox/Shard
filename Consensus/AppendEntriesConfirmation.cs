@@ -1,5 +1,8 @@
-﻿namespace Consensus
+﻿using System;
+
+namespace Consensus
 {
+	[Serializable]
 	internal class AppendEntriesConfirmation : IndexedPackage
 	{
 		public readonly bool Succeeded;

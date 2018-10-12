@@ -24,6 +24,12 @@ namespace Consensus
 		{
 			receiver.Receive(new Tuple<Package, Connection>(Package, sender));
 		}
+
+
+		public override string ToString()
+		{
+			return "Wrapped: " + Package;
+		}
 	}
 
 

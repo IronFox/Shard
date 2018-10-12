@@ -4,11 +4,18 @@ namespace Consensus
 {
 	public class LogEntry
 	{
-		public int Term { get; internal set; }
+		public readonly ICommitable Operation;
+		public readonly int Term;
 
-		internal void Execute(Member parent)
+		public LogEntry(int term, ICommitable op)
 		{
-			throw new NotImplementedException();
+			Term = term;
+			Operation = op;
+		}
+
+		internal void Execute()
+		{
+			Operation.Commit();
 		}
 	}
 }

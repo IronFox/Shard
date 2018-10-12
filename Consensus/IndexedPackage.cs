@@ -1,5 +1,8 @@
-﻿namespace Consensus
+﻿using System;
+
+namespace Consensus
 {
+	[Serializable]
 	internal abstract class IndexedPackage : Package
 	{
 		public readonly int LastLogIndex;
