@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -9,32 +10,9 @@ using System.Threading;
 
 namespace Consensus
 {
-	[Serializable]
-	internal class AddressInfo : IDispatchable
+
+	internal class ConsensusState
 	{
-		public readonly Address Address;
-
-		public AddressInfo(Address addr)
-		{
-			Address = addr;
-		}
-
-		public void OnArrive(Member receiver, Connection sender)
-		{
-			sender.LogEvent("Changing remote address to " + Address);
-			sender.Address = Address;
-		}
-	}
-
-	internal class Connection : Identity, IDisposable
-	{
-		private TcpClient client;
-		private volatile bool disposed = false;
-		private bool active = false;
-		public bool Established => IsConnected;
-		private Thread activeThread;
-		private readonly Member owner;
-		private BinaryFormatter formatter = new BinaryFormatter();
 
 		/// <summary>
 		/// index of highest log entry known to be replicated on server
@@ -49,164 +27,329 @@ namespace Consensus
 		public int CommitIndex { get; set; } = 0;
 		public long AppendTimeout { get; set; } = -1;
 
+	}
 
-		public bool IsConnected => !disposed && client != null && client.Connected;
+	internal class Connection : Identity
+	{
+		protected TcpClient tcpClient;
+
+		private volatile bool closing = false;
+		private Thread readThread;
+		protected readonly Hub owner;
+		protected BinaryFormatter formatter = new BinaryFormatter();
+
+		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
 
 
-		public Connection(Member owner, Address addr):base(owner,addr)
+		public bool IsDisposed => closing;
+		public bool IsConnected
 		{
-			this.owner = owner;
-			Connect(addr);
+			get
+			{
+				return !closing && tcpClient != null && tcpClient.Connected;
+			}
 		}
 
-		public Connection(Member owner, Address addr, TcpClient client):base(owner, addr)
+		public long LastIncoming { get; private set; }
+
+		public bool IsAlive => IsConnected && (Hub.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
+
+		public Connection(Hub owner, Address addr, TcpClient client) : base(owner, null)
 		{
 			this.owner = owner;
-			Assign(client);
+			Address = () => addr;
+			Assign(client,null);
+			LastIncoming = Hub.GetNanoTime();
+		}
+		public Connection(Hub owner, Func<Address> addr) : base(owner, addr)
+		{
+			this.owner = owner;
+			LastIncoming = Hub.GetNanoTime();
 		}
 
-		public delegate void Event(Connection connection);
-		public delegate void DataEvent<T>(Connection connection, T obj);
+		public delegate void Event(ActiveConnection connection);
+		public delegate void DataEvent<T>(ActiveConnection connection, T obj);
 
 		//private event Event onConnect = new Event();
 
 
-		private Connection Connect(Address addr)
+
+		//		private SpinLock tcpLock = new SpinLock();
+		Mutex serialLock = new Mutex();
+		Thread serialLockedBy;
+		protected void TcpLocked(Action action)
 		{
-			active = true;
+			if (closing)
+				return;
+			if (!serialLock.WaitOne(100000))
+			{
+				throw new InvalidOperationException("Unable to acquire lock in 1000ms");
+			}
 			try
 			{
-				Assign(new TcpClient(addr.HostName, addr.Port));
-				Dispatch(new AddressInfo(((Member)Parent).Address));
+				serialLockedBy = Thread.CurrentThread;
+				action();
+				serialLockedBy = null;
 			}
-			catch
+			finally
 			{
-				Assign(null);
+				serialLock.ReleaseMutex();
 			}
-			return this;
+
+
+			//bool ack = false;
+			//tcpLock.Enter(ref ack);
+			//if (!ack)
+			//	throw new InvalidOperationException("Cannot lock spinlock");
+			//try
+			//{
+			//	ac();
+			//}
+			//catch (Exception ex)
+			//{
+			//	LogError(ex);
+			//	throw;
+			//}
+			//finally
+			//{
+			//	tcpLock.Exit();
+			//}
 		}
 
-		private void Assign(TcpClient newClient)
+		protected void Assign(TcpClient newClient, Action doLocked)
 		{
-			client = newClient;
-			activeThread = new Thread(new ThreadStart(ActiveThread));
-			activeThread.Start();
+			TcpLocked(() => { tcpClient = newClient; doLocked?.Invoke(); });
+			readThread = new Thread(new ThreadStart(ActiveThread));
+			readThread.Start();
 		}
 
-		public void Dispose()
+		public void Close()
 		{
-			if (disposed)
-				return;
-			disposed = true;
-			if (client != null)
-				client.Dispose();
-			if (activeThread != null)
-				activeThread.Join();
+			TcpLocked(() =>
+			{
+				closing = true;
+				if (tcpClient != null)
+				{
+					//client.Close();
+					tcpClient.Close();
+					//tcpClient = null;
+				}
+			});
+			if (readThread != null)
+				readThread.Join();
 		}
 
 
 		private void ActiveThread()
 		{
-			while (!disposed)
+			while (!closing)
 			{
-				if (client != null)
+				if (tcpClient != null)
 				{
+					string reason = "";
 					try
 					{
-						var stream = client.GetStream();
 						LogEvent("Begin stream read");
 
-						while (!disposed && client.Connected)
+						while (IsConnected)
 						{
-							var item = formatter.Deserialize(stream) as IDispatchable;
+							NetworkStream stream = null;
+							IDispatchable item;
+							try
+							{
+								TcpLocked(() => stream = tcpClient.Connected ? tcpClient.GetStream() : null);
+								if (stream == null)
+									continue;
+								item = formatter.Deserialize(stream) as IDispatchable;
+							}
+							finally
+							{
+								//stream.Close();
+							}
 							try
 							{
 								//LogEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
+								LastIncoming = Hub.GetNanoTime();
 							}
 							catch (Exception ex)
 							{
-								LogError("On implement: " + ex);
+								LogError("On implement " + item + " : " + ex);
 							}
 						}
+						reason = "Connection lost d=" + closing + ",c=" + tcpClient.Connected;
 					}
 					catch (ObjectDisposedException ex)
 					{
 						LogError(ex.Message);
+						reason = ex.Message;
 					}
 					catch (IOException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						client.Close();
+						TcpLocked(() => tcpClient.Close());
+						reason = ex.Message;
 					}
 					catch (ArgumentException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						client.Close();
+						TcpLocked(() => tcpClient.Close());
+						reason = ex.Message;
 					}
 					catch (SerializationException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						client.Close();
+						TcpLocked(() => tcpClient.Close());
+						reason = ex.Message;
 					}
-					catch (SocketException)
+					catch (SocketException ex)
 					{
 						LogError("Socket exception. Closing link");
-						client.Close();
+						TcpLocked(() => tcpClient.Close());
+						reason = ex.Message;
 					}
 					catch (Exception ex)
 					{
 						LogError(ex);
 						LogError("Closing link");
-						client.Close();
+						TcpLocked(() => tcpClient.Close());
+						reason = ex.Message;
 					}
 					finally
 					{
-						LogEvent("End stream read");
+						LogEvent("End stream read " + reason);
 					}
 				}
-				if (active)
-				{
-					while (!disposed && (client == null || !client.Connected))
-					{
-						try
-						{
-							LogEvent("Attempting to re-establish connection...");
-							client = new TcpClient(Address.HostName, Address.Port);
-						}
-						catch (Exception)
-						{
-							Thread.Sleep(10);
-						}
-					}
-					Dispatch(new AddressInfo(((Member)Parent).Address));
-				}
-				else
+				if (!Reconnect())
 				{
 					LogEvent("End read");
-					return;	//about to be disposed anyway
+					return; //about to be disposed anyway
 				}
 			}
 			LogEvent("End read");
 		}
 
 
-	
+		protected virtual bool Reconnect()
+		{
+			return false;
+		}
+
+
+
 
 		public void Dispatch(IDispatchable p)
 		{
-			if (!IsConnected)
-				return;
-			//LogEvent("Dispatching " + p);
-			formatter.Serialize(client.GetStream(), p);
+			//if (!IsConnected)
+			//return;
+			try
+			{
+				TcpLocked(() =>
+				{
+					var c = tcpClient;
+					if (c != null && c.Connected)
+					{
+						//LogEvent("Dispatching " + p);
+						try
+						{
+							var stream = c.GetStream();
+							formatter.Serialize(stream, p);
+						}
+						catch (Exception ex)
+						{
+							LogError(ex);
+							if (!(this is ActiveConnection))
+								Close();
+						}
+					}
+					else
+					{
+						LogEvent("Cannot dispatch " + p);
+					}
+				});
+			}
+			catch (Exception ex)
+			{
+				LogError(ex);
+				if (!(this is ActiveConnection))
+					Close();
+			}
 		}
 
 		internal void ResetConsensusState()
 		{
-			MatchIndex = 0;
-			NextIndex = -1;
-			CommitIndex = 0;
-			AppendTimeout = -1;
+			TcpLocked(() => ConsensusState = new ConsensusState());
+		}
+
+
+	}
+
+
+
+
+	internal class ActiveConnection : Connection
+	{
+		public readonly int MemberIndex;
+
+		public ActiveConnection(Hub owner, Func<Address> addr, int idx) : base(owner, addr)
+		{
+			MemberIndex = idx;
+			Connect();
+		}
+
+		private void Begin()
+		{
+			tcpClient.GetStream().Write(BitConverter.GetBytes(MemberIndex),0,4);
+		}
+
+		private ActiveConnection Connect()
+		{
+			Assign(null, null);
+			//try
+			//{
+			//	var addr = Address();
+			//	LogEvent("Attempting to connect to " + addr);
+			//	var cl = new TcpClient(addr.HostName, addr.Port);
+			//	Assign(cl,Begin);
+			//}
+			//catch
+			//{
+			//	Assign(null,null);
+			//}
+			return this;
+		}
+
+		protected override bool Reconnect()
+		{
+			LogEvent("Reconnecting...");
+			TcpClient nextClient = null;
+			while (!IsDisposed && (nextClient == null || !nextClient.Connected))
+			{
+				try
+				{
+					var addr = Address();
+					LogEvent("Attempting to re-establish connection to "+addr);
+					nextClient = new TcpClient(addr.HostName,addr.Port);
+					break;
+				}
+				catch { }
+			}
+			if (!IsDisposed)
+			{
+				LogEvent("Connection established");
+				TcpLocked(() =>
+				{
+					if (tcpClient != null)
+					{
+						tcpClient.Close();
+						//tcpClient = null;
+					}
+					tcpClient = nextClient;
+					Begin();
+				});
+				return true;
+			}
+			return false;
 		}
 	}
 }

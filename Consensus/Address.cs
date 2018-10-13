@@ -73,7 +73,9 @@ namespace Consensus
 
 		public override string ToString()
 		{
-			return HostName + ":" + Port;
+			if (HostName == null)
+				throw new Exception("Bad hostname");
+			return HostName != null ? HostName + ":" + Port : "<null>";
 		}
 
 

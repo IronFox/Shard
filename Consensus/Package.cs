@@ -3,34 +3,29 @@
 namespace Consensus
 {
 	[Serializable]
-	internal abstract class Package
+	internal abstract class Package : IDispatchable
 	{
 		public readonly int Term;
 
 		public Package(int term) => Term = term;
 
-		public abstract void OnProcess(Member receiver, Connection sender);
+		public abstract void OnProcess(Hub receiver, Connection sender);
 
-		public virtual void OnBadTermIgnore(Member processor, Connection sender) { }
-	}
+		public virtual void OnBadTermIgnore(Hub processor, Connection sender) { }
 
-	[Serializable]
-	internal class Wrapped : IDispatchable
-	{
-		public readonly Package Package;
-
-		public Wrapped(Package content) => Package = content;
-		public void OnArrive(Member receiver, Connection sender)
+		public void OnArrive(Hub receiver, Connection sender)
 		{
-			receiver.Receive(new Tuple<Package, Connection>(Package, sender));
-		}
-
-
-		public override string ToString()
-		{
-			return "Wrapped: " + Package;
+			receiver.DoSerialized(() =>
+			{
+				if (Term < receiver.CurrentTerm)
+					OnBadTermIgnore(receiver, sender);
+				else
+					OnProcess(receiver, sender);
+			});
 		}
 	}
+
+
 
 
 }

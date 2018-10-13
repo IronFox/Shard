@@ -12,7 +12,7 @@ namespace Consensus
 			this.e = e;
 		}
 
-		public override void OnProcess(Member receiver, Connection sender)
+		public override void OnProcess(Hub receiver, Connection sender)
 		{
 			receiver.Commit(e);
 		}

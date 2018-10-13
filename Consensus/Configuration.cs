@@ -4,26 +4,24 @@ using System.Linq;
 
 namespace Consensus
 {
-	[Serializable]
+
 	public class Configuration
 	{
-		public Address[] Addresses { get; set; }
+		public Func<Address>[] Addresses { get; set; }
+		public int Size => Addresses.Length;
+		public int Majority => Size / 2 + 1;
 
 		public Configuration()
 		{ }
 		public Configuration(IEnumerable<Address> addresses)
 		{
+			Addresses = addresses.Select<Address,Func<Address>>(addr => () => addr).ToArray();
+		}
+		public Configuration(IEnumerable<Func<Address>> addresses)
+		{
 			Addresses = addresses.ToArray();
 		}
 	}
 
-	[Serializable]
-	internal class ConfigurationUpdate : Configuration, IDispatchable
-	{
 
-		public void OnArrive(Member receiver, Connection sender)
-		{
-			receiver.Join(this);
-		}
-	}
 }

@@ -4,6 +4,6 @@ namespace Consensus
 {
 	internal interface IDispatchable
 	{
-		void OnArrive(Member receiver, Connection sender);
+		void OnArrive(Hub receiver, Connection sender);
 	}
 }

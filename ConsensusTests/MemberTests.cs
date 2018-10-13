@@ -20,21 +20,17 @@ namespace Consensus.Tests
 			Assert.AreEqual(new Address("::1", 1024), new Address(1024));
 		}
 
-		[TestMethod()]
-		public void GetLogTermTest()
-		{
-			Assert.Fail();
-		}
 
 		[TestMethod()]
 		public void MemberTest()
 		{
-			Configuration cfg = new Configuration(new Address[] { new Address(1024), new Address(1025), new Address(1026) });
+			int basePort = new Random().Next(1024, 32768);
+			Configuration cfg = new Configuration(new Address[] { new Address(basePort), new Address(basePort+1), new Address(basePort+2) });
 
-			Member[] members = new Member[]{
-				new Member(cfg.Addresses[0], cfg),
-				new Member(cfg.Addresses[1], cfg),
-				new Member(cfg.Addresses[2], cfg) };
+			Hub[] members = new Hub[]{
+				new Hub(cfg,0),
+				new Hub(cfg,1),
+				new Hub(cfg,2) };
 
 			for (int j = 0; j < 3; j++)
 			{
@@ -58,45 +54,29 @@ namespace Consensus.Tests
 						break;
 					}
 					else
-						Assert.AreEqual(members[i].CurrentState, Member.State.Follower);
+						Assert.AreEqual(members[i].CurrentState, Hub.State.Follower);
+
+				Console.WriteLine("Disposing leader");
 
 				var ad = members[leader].Address;
-				members[leader].Dispose();
-
+				members[leader].Close();
+				Thread.Sleep(100);
 				for (int i = 0; i < members.Length; i++)
 					if (i != leader)
 					{
-						Assert.IsFalse(members[i].IsFullyConnected);
+						Assert.IsFalse(members[i].IsDisposed);
+						if (members[i].IsFullyConnected)
+						{
+							bool grk = true;
+						}
+						Assert.IsFalse(members[i].IsFullyConnected,j+"["+i+"]L"+leader);
 					}
 
-				members[leader] = new Member(ad, cfg);
+				members[leader] = new Hub(cfg,leader);
 			}
 			foreach (var m in members)
-				m.Dispose();
+				m.Close();
 		}
 
-		[TestMethod()]
-		public void ConnectedToTest()
-		{
-			Assert.Fail();
-		}
-
-		[TestMethod()]
-		public void JoinTest()
-		{
-			Assert.Fail();
-		}
-
-		[TestMethod()]
-		public void DisposeTest()
-		{
-			Assert.Fail();
-		}
-
-		[TestMethod()]
-		public void CommitTest()
-		{
-			Assert.Fail();
-		}
 	}
 }

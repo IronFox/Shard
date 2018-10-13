@@ -13,18 +13,18 @@ namespace Consensus
 {
 	public class Identity : IEquatable<Identity>
 	{
-		public Address Address { get; set; }
+		public Func<Address> Address { get; set; }
 		public readonly Identity Parent;
 
 		public override string ToString()
 		{
 			if (Parent != null)
-				return Parent + "->" + Address;
-			return Address.ToString();
+				return Parent + ":" + Address();
+			return Address().ToString();
 		}
 
 
-		public Identity(Identity parent, Address address)
+		public Identity(Identity parent, Func<Address> address)
 		{
 			Parent = parent;
 			Address = address;
@@ -33,8 +33,18 @@ namespace Consensus
 		{
 			Console.Error.WriteLine(this + ": " + error);
 		}
+		internal void LogError(Exception ex)
+		{
+			LogEvent(ex.Message);
+			LogError(ex.ToString());
+		}
 		internal void LogEvent(object ev)
 		{
+			//string str = ev.ToString();
+			//if (str.StartsWith("Unable to write data"))
+			//{
+			//	bool brk = true;
+			//}
 			Console.WriteLine(this + ": " + ev);
 		}
 
@@ -46,18 +56,19 @@ namespace Consensus
 		public bool Equals(Identity other)
 		{
 			return other != null &&
-				   Address.Equals(other.Address);
+				   Address().Equals(other.Address());
 		}
 
 		public override int GetHashCode()
 		{
-			return -1984154133 + EqualityComparer<Address>.Default.GetHashCode(Address);
+			return -1984154133 + EqualityComparer<Address>.Default.GetHashCode(Address());
 		}
 	};
 
-    public class Member : Identity, IDisposable
+    public class Hub : Identity
     {
-		private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
+		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
+		private Connection[] remoteMembers;
 
 		internal long GetAppendMessageTimeout()
 		{
@@ -66,8 +77,11 @@ namespace Consensus
 
 		private TcpListener listener;
 		private Thread listenThread,consensusThread;
-		private volatile bool disposed = false;
+		private volatile bool closing = false;
+
+
 		private Configuration config;
+		private int myIndex;
 
 		public enum State
 		{
@@ -101,14 +115,14 @@ namespace Consensus
 		}
 
 
-		private Connection LeaderConnection
+		private ActiveConnection LeaderConnection
 		{
 			get
 			{
 				Identity ld = leader;
 				if (ld == this)
 					throw new InvalidOperationException("Leader is this");
-				return (Connection)ld;
+				return (ActiveConnection)ld;
 			}
 		}
 
@@ -126,7 +140,7 @@ namespace Consensus
 
 		private const long HEART_BEAT_TIMEOUT_NS = 50 * 1000000;
 
-		private static long GetNanoTime()
+		internal static long GetNanoTime()
 		{
 			return (long)((double)Stopwatch.GetTimestamp() / TimeSpan.TicksPerMillisecond * 1000000);
 		}
@@ -198,43 +212,59 @@ namespace Consensus
 		}
 
 
-		public Member(Address myAddress, Configuration config):base(null,myAddress)
+		public Hub(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
 		{
 			IPAddress filter = IPAddress.Any;
-			LogEvent("Starting to listen on port "+myAddress.Port);
-			listener = new TcpListener(filter,myAddress.Port);
+			int port = config.Addresses[myIndex]().Port;
+			LogEvent("Starting to listen on port "+ port);
+			listener = new TcpListener(filter,port);
 			listener.Start();
 			listenThread = new Thread(new ThreadStart(ThreadListen));
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
-			Join(config);
+			Join(config,myIndex);
 		}
 
+		private TcpClient lastAcceptedClient;
 		private void ThreadListen()
 		{
-			while (!disposed)
+			byte[] id = new byte[4];
+			while (!closing)
 			{
 				try
 				{
-					var client = listener.AcceptTcpClient();
-					var addr = new Address((IPEndPoint)client.Client.RemoteEndPoint);
-					Disconnect(addr);
-					var conn = new Connection(this, addr, client);
-					LogEvent("Adding incoming connection from " + addr);
-					if (!connections.TryAdd(addr, conn))
-						conn.Dispose();
-				}
-				catch (Exception)
-				{
+					var client = lastAcceptedClient = listener.AcceptTcpClient();
+
+					var stream = client.GetStream();
+					stream.Read(id, 0, 4);
+					int remoteID = BitConverter.ToInt32(id, 0);
+					if (remoteID < 0 || remoteID >= myIndex)
+						throw new ArgumentOutOfRangeException("Invalid remote member ID " + remoteID);
+
+					var conn = new Connection(this, config.Addresses[remoteID](), client);
+					DoSerialized(() =>
+					{
+						if (remoteMembers[remoteID] != null)
+							remoteMembers[remoteID].Close();
+						remoteMembers[remoteID] = conn;
+						LogEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
+					});
+
 
 				}
+				catch (Exception ex)
+				{
+					if (closing)
+						return;
+					LogError(ex);
+				}
 			}
+			bool brk = true;
 		}
 
 
 
-		private ConcurrentQueue<Tuple<Package,Connection>> inboundPackages = new ConcurrentQueue<Tuple<Package, Connection>>();
 
 		public int CurrentTerm => currentTerm;
 
@@ -246,23 +276,73 @@ namespace Consensus
 
 		private void Broadcast(IDispatchable p)
 		{
-			foreach (var c in connections)
+			ForeachConnection(c => c.Dispatch(p));
+		}
+
+
+		//private SpinLock serialLock = new SpinLock();
+
+		private Mutex serialLock = new Mutex();
+		private Thread lastLockedBy;
+
+		internal void DoSerialized(Action action, bool ignoreDisposed = false)
+		{
+			if (closing && !ignoreDisposed)
+				return;
+			if (!serialLock.WaitOne(10000))
+				throw new InvalidOperationException("Unable to acquire lock in 1000ms");
+			try
+			{
+				lastLockedBy = Thread.CurrentThread;
+				action();
+				lastLockedBy = null;
+				serialLock.ReleaseMutex();
+			}
+			catch
+			{
+				lastLockedBy = null;
+				serialLock.ReleaseMutex();
+				throw;
+			}
+			
+			//bool taken = false;
+			//while (!taken)
+			//	serialLock.Enter(ref taken);
+			//try
+			//{
+			//	action();
+			//}
+			//finally
+			//{
+			//	serialLock.Exit();
+			//}
+		}
+
+		internal void ForeachConnection(Action<Connection> action)
+		{
+			for (int i = 0; i < remoteMembers.Length; i++)
+			{
+				Connection c = remoteMembers[i];
+				if (c == null)
+					continue;
+				if (IsLeader && !c.IsAlive && !(c is ActiveConnection))
+				{
+					LogEvent("Disconnecting unresponsive " + c);
+					c.Close();
+					remoteMembers[i] = null;
+					continue;
+				}
 				try
 				{
-					c.Value.Dispatch(p);
+					action(c);
 				}
 				catch (Exception ex)
 				{
 					LogError(ex);
-					Connection c2;
-					if (connections.TryRemove(c.Key, out c2))
-						c2.Dispose();
+					c.Close();
+					remoteMembers[i] = null;
 				}
-		}
-
-		private void Broadcast(Package p)
-		{
-			Broadcast(new Wrapped(p));
+			}
 		}
 
 		private void ThreadConsensus()
@@ -270,21 +350,10 @@ namespace Consensus
 			nextActionAt = GetNanoTime() + localRandom.Next(100 * 1000000);//max 100ms
 			LogEvent("Next action at " + nextActionAt);
 
-			while (!disposed)
+			while (!closing)
 			{
 				try
 				{
-					Tuple<Package, Connection> pack;
-					while (inboundPackages.TryDequeue(out pack))
-					{
-						if (pack.Item1.Term < currentTerm)
-						{
-							pack.Item1.OnBadTermIgnore(this, pack.Item2);
-							continue;
-						}
-						pack.Item1.OnProcess(this, pack.Item2);
-					}
-
 					if (state == State.Leader)
 						CheckTimeouts();
 
@@ -301,6 +370,7 @@ namespace Consensus
 							break;
 						case State.Candidate:
 						case State.Follower:
+							DoSerialized(() =>
 							{
 								//elect new leader
 								ClearRemoteInfo();
@@ -313,8 +383,8 @@ namespace Consensus
 
 								LogEvent("Timeout reached. Starting new election");
 
-								Broadcast(new Wrapped(new RequestVote(this)));
-							}
+								Broadcast(new RequestVote(this));
+							});
 							break;
 					}
 				}
@@ -327,89 +397,97 @@ namespace Consensus
 
 		private void CheckTimeouts()
 		{
-			long now = GetNanoTime();
-			foreach (var info in connections.Values)
+			DoSerialized(() =>
 			{
-				if (info.AppendTimeout != -1 && info.AppendTimeout < now)
-				{
-					LogEvent("Timeout reached. Re-sending " + info);
-					info.Dispatch(new Wrapped(new AppendEntries(this, info.MatchIndex + 1)));
-					info.AppendTimeout = GetAppendMessageTimeout();
-				}
-			};
+				long now = GetNanoTime();
 
+				ForeachConnection(c =>
+				{
+					var info = c.ConsensusState;
+					if (info.AppendTimeout != -1 && info.AppendTimeout < now)
+					{
+						LogEvent("Timeout reached. Re-sending " + info);
+						c.Dispatch(new AppendEntries(this, info.MatchIndex + 1));
+						info.AppendTimeout = GetAppendMessageTimeout();
+					}
+				});
+			});
 		}
 
 		private void ClearRemoteInfo()
 		{
-			foreach (var c in connections.Values)
-				c.ResetConsensusState();
+			ForeachConnection(c => c.ResetConsensusState());
 		}
 
-		private void Disconnect(Address addr)
-		{
-			Connection conn;
-			if (connections.TryRemove(addr, out conn))
-				conn.Dispose();
-		}
 
-		private Connection ConnectTo(Address addr)
+		private ActiveConnection ConnectTo(int idx)
 		{
-			lock (this)
+			if (idx <= myIndex)
+				return null;	//passive
+			ActiveConnection rs = null;
+			DoSerialized(() =>
 			{
-				Connection rs;
-				if (connections.TryGetValue(addr, out rs))
-					return rs;
-				rs = new Connection(this,addr);
-				while (!connections.TryAdd(addr, rs))
+				if (remoteMembers[idx] != null)
+					rs = (ActiveConnection)remoteMembers[idx];
+				else
+					remoteMembers[idx] = rs = new ActiveConnection(this, config.Addresses[idx], idx);
+			}
+			);
+			return rs;
+		}
+
+		public bool ConnectedTo(int idx)
+		{
+			bool rs = false;
+			DoSerialized(() => rs = remoteMembers[idx] != null && remoteMembers[idx].IsConnected);
+			return rs;
+		}
+
+		internal void Join(Configuration cfg, int myIndex)
+		{
+			DoSerialized(() =>
+			{
+				if (remoteMembers != null)
+					foreach (var m in remoteMembers)
+						if (m != null)
+							m.Close();
+				remoteMembers = null;
+
+				if (myIndex < 0 || myIndex >= cfg.Size)
+					throw new ArgumentOutOfRangeException("myIndex");
+
+				remoteMembers = new Connection[cfg.Size];
+				config = cfg;
+				this.myIndex = myIndex;
+				for (int i = myIndex + 1; i < cfg.Size; i++)
 				{
-					Disconnect(addr);
+					remoteMembers[i] = new ActiveConnection(this, cfg.Addresses[i],myIndex);
 				}
-				return rs;
-			}
+			});
 		}
 
-		public bool ConnectedTo(Address addr)
-		{
-			return connections.ContainsKey(addr);
-		}
 
-		private void Join(Address address)
+		public void Close()
 		{
-			if (ConnectedTo(address))
+			if (closing)
 				return;
-			ConnectTo(address);
-		}
-
-		internal void Join(Configuration cfg)
-		{
-			config = cfg;
-			var table = new HashSet<Address>();
-			foreach (var addr in cfg.Addresses)
+			closing = true;
+			DoSerialized(() =>
 			{
-				if (addr > Address)
-				{
-					ConnectTo(addr);
-					table.Add(addr);
-				}
-			}
-			foreach (var pair in connections)
+				foreach (var c in remoteMembers)
+					if (c != null)
+						c.Close();
+			},true);
+			try
 			{
-				if (!table.Contains(pair.Key))
-					Disconnect(pair.Key);
+				if (lastAcceptedClient != null)
+					lastAcceptedClient.Close();
 			}
-		}
-
-
-		public void Dispose()
-		{
-			if (disposed)
-				return;
-			disposed = true;
+			catch { }
 			listener.Stop();
-			foreach (var c in connections)
-				c.Value.Dispose();
-			connections.Clear();
+			listener.Server.Close();
+			listenThread.Join();
+			consensusThread.Join();
 		}
 
 		public bool IsLeader => state == State.Leader;
@@ -418,15 +496,30 @@ namespace Consensus
 		{
 			get
 			{
-				int cnt = 0;
-				foreach (var c in connections.Values)
-					if (c.IsConnected)
-						cnt++;
-				return cnt;
+				try
+				{
+					if (closing)
+						return 0;
+					int rs = 0;
+					for (int i = 0; i < remoteMembers.Length; i++)
+					{
+						var c = remoteMembers[i];
+						if (c != null && c.IsConnected)
+							rs++;
+					}
+					return rs;
+				}
+				catch (Exception ex)
+				{
+					LogError(ex);
+					return 0;
+				}
 			}
 		}
 
 		public bool IsFullyConnected => ActiveConnectionCount == config.Addresses.Length - 1;
+
+		public bool IsDisposed => closing;
 
 		public void Commit(ICommitable entry)
 		{
@@ -436,16 +529,15 @@ namespace Consensus
 				PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
 				lock(log)
 					log.Add(p);
-				Broadcast(new Wrapped(new AppendEntries(this, p.Entry)));
-				foreach (var c in connections.Values)
-					c.AppendTimeout = GetAppendMessageTimeout();
+				Broadcast(new AppendEntries(this, p.Entry));
+				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
 			}
 			else
 			{
 				if (leader != null)
 				{
 					LogEvent("Dispatching " + entry + " to " + leader);
-					LeaderConnection.Dispatch(new Wrapped(new CommitEntry(currentTerm, entry)));
+					LeaderConnection.Dispatch(new CommitEntry(currentTerm, entry));
 				}
 				else
 				{
@@ -457,7 +549,7 @@ namespace Consensus
 
 		}
 
-		internal void SignalAppendEntries(AppendEntries p,Connection sender)
+		internal void SignalAppendEntries(AppendEntries p, Connection sender)
 		{
 			//LogEvent("Inbound append entries " + p);
 			if (leader == null || p.Term > currentTerm)
@@ -468,13 +560,13 @@ namespace Consensus
 
 				ICommitable e;
 				while (dispatchQueue.TryDequeue(out e))
-					sender.Dispatch(new Wrapped(new CommitEntry(p.Term, e)));
+					sender.Dispatch(new CommitEntry(p.Term, e));
 			}
 
 			if (GetLogTerm(p.PrevLogIndex) == -1)    //don't have (yet)
 			{
 				LogEvent("Rejecting append entries because don't have prev log index " + p.PrevLogIndex + ", term " + p.Term);
-				sender.Dispatch(new Wrapped(new AppendEntriesConfirmation(this, false)));
+				sender.Dispatch(new AppendEntriesConfirmation(this, false));
 			}
 			else
 			{
@@ -504,16 +596,11 @@ namespace Consensus
 						log.Add(new PrivateEntry(e));
 					}
 				CommitTo(Math.Min(p.LeaderCommit, log.Count));
-				sender.Dispatch(new Wrapped(new AppendEntriesConfirmation(this, true)));
+				sender.Dispatch(new AppendEntriesConfirmation(this, true));
 			}
 			nextActionAt = GetElectionTimeout();
 		}
 
-		internal void Receive(Tuple<Package, Connection> tuple)
-		{
-			//LogEvent("Received " + tuple.Item1);
-			inboundPackages.Enqueue(tuple);
-		}
 
 		internal void ReCheckCommitment()
 		{
@@ -521,9 +608,7 @@ namespace Consensus
 			{
 				int threshold = j;
 				int cnt = 1;    //self
-				foreach (var c in connections.Values)
-					if (c.MatchIndex >= threshold)
-						cnt++;
+				ForeachConnection(c => {if (c.ConsensusState.MatchIndex >= threshold) cnt++; });
 				if (cnt > config.Addresses.Length / 2)
 				{
 					CommitTo(j);
@@ -541,7 +626,14 @@ namespace Consensus
 				nextActionAt = GetElectionTimeout();
 				votedFor = sender;
 				currentTerm = term;
-				sender.Dispatch(new Wrapped( new VoteConfirm(currentTerm)));
+				try
+				{
+					sender.Dispatch(new VoteConfirm(currentTerm));
+				}
+				catch
+				{
+					bool brk = true;
+				}
 			}
 			else
 				LogEvent("Rejected vote request for term " + term + " (at term " + currentTerm + ", upToDate=" + upToDate + ") from " + sender);
@@ -567,8 +659,7 @@ namespace Consensus
 					if (commitIndex != LogSize)
 					{
 						Broadcast(new AppendEntries(this, commitIndex + 1));
-						foreach (var c in connections.Values)
-							c.AppendTimeout = GetAppendMessageTimeout();
+						ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
 					}
 				}
 			}

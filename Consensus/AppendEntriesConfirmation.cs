@@ -8,16 +8,17 @@ namespace Consensus
 		public readonly bool Succeeded;
 		public readonly int LastCommit;
 
-		public AppendEntriesConfirmation(Member source, bool success) : base(source)
+		public AppendEntriesConfirmation(Hub source, bool success) : base(source)
 		{
 			Succeeded = success;
 			LastCommit = source.CommitIndex;
 		}
 
-		public override void OnProcess(Member instance, Connection info)
+		public override void OnProcess(Hub instance, Connection c)
 		{
-			if (instance.CurrentState == Member.State.Leader)
+			if (instance.CurrentState == Hub.State.Leader)
 			{
+				var info = c.ConsensusState;
 				if (Succeeded)
 				{
 					//iface.log("Append entries confirmed by remote "+msg.getSender()+". commit="+conf.myLastCommit);
@@ -33,16 +34,16 @@ namespace Consensus
 					instance.LogEvent("Append entries rejected by remote " + info);
 					info.MatchIndex = LastLogIndex;
 					info.NextIndex = LastLogIndex + 1;
-					info.Dispatch(new Wrapped(new AppendEntries(instance, info.NextIndex)));
+					c.Dispatch(new AppendEntries(instance, info.NextIndex));
 					info.AppendTimeout = instance.GetAppendMessageTimeout();
 				}
 			}
 		}
 
 
-		public override void OnBadTermIgnore(Member processor, Connection sender)
+		public override void OnBadTermIgnore(Hub processor, Connection sender)
 		{
-			sender.Dispatch(new Wrapped(new AppendEntriesConfirmation(processor, false)));
+			sender.Dispatch(new AppendEntriesConfirmation(processor, false));
 		}
 
 	}
