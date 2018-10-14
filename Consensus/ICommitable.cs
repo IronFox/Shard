@@ -2,6 +2,6 @@
 {
 	public interface ICommitable
 	{
-		void Commit(Hub hub);
+		void Commit(Connector hub);
 	}
 }

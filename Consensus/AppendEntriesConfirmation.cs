@@ -8,15 +8,15 @@ namespace Consensus
 		public readonly bool Succeeded;
 		public readonly int LastCommit;
 
-		public AppendEntriesConfirmation(Hub source, bool success) : base(source)
+		public AppendEntriesConfirmation(Connector source, bool success) : base(source)
 		{
 			Succeeded = success;
 			LastCommit = source.CommitIndex;
 		}
 
-		public override void OnProcess(Hub instance, Connection c)
+		public override void OnProcess(Connector instance, Connection c)
 		{
-			if (instance.CurrentState == Hub.State.Leader)
+			if (instance.CurrentState == Connector.State.Leader)
 			{
 				var info = c.ConsensusState;
 				if (Succeeded)
@@ -41,7 +41,7 @@ namespace Consensus
 		}
 
 
-		public override void OnBadTermIgnore(Hub processor, Connection sender)
+		public override void OnBadTermIgnore(Connector processor, Connection sender)
 		{
 			sender.Dispatch(new AppendEntriesConfirmation(processor, false));
 		}

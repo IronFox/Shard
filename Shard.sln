@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Consensus", "Consensus\Cons
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsensusTests", "ConsensusTests\ConsensusTests.csproj", "{77C5533B-E95B-49B7-B910-8B709B283241}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BaseDB", "BaseDB\BaseDB.csproj", "{174A5B17-C113-45BD-85B6-009A1C5C3EF8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clock", "Clock\Clock.csproj", "{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +75,22 @@ Global
 		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|Any CPU.Build.0 = Release|Any CPU
 		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|x64.ActiveCfg = Release|Any CPU
 		{77C5533B-E95B-49B7-B910-8B709B283241}.Release|x64.Build.0 = Release|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Debug|x64.Build.0 = Debug|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Release|x64.ActiveCfg = Release|Any CPU
+		{174A5B17-C113-45BD-85B6-009A1C5C3EF8}.Release|x64.Build.0 = Release|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Debug|x64.Build.0 = Debug|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Release|x64.ActiveCfg = Release|Any CPU
+		{B52B3C3B-D0D9-4F05-97EE-9375EEB28E9E}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

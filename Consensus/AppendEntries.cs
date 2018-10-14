@@ -7,7 +7,7 @@ namespace Consensus
 	internal class AppendEntries : Package
 	{
 
-		public override void OnProcess(Hub receiver, Connection sender)
+		public override void OnProcess(Connector receiver, Connection sender)
 		{
 			receiver.SignalAppendEntries(this,sender);
 		}
@@ -18,10 +18,10 @@ namespace Consensus
 		public readonly int LeaderCommit;
 
 
-		public AppendEntries(Hub source, int firstLogIndex) : this(source, source.LogSubSet(firstLogIndex))
+		public AppendEntries(Connector source, int firstLogIndex) : this(source, source.LogSubSet(firstLogIndex))
 		{ }
 
-		public AppendEntries(Hub source, LogEntry[] entries) : base(source.CurrentTerm)
+		public AppendEntries(Connector source, LogEntry[] entries) : base(source.CurrentTerm)
 		{
 			Entries = entries;
 			LeaderCommit = source.CommitIndex;
@@ -30,13 +30,13 @@ namespace Consensus
 			PrevLogTerm = source.GetLogTerm(PrevLogIndex);
 		}
 
-		public AppendEntries(Hub source) : this(source, (LogEntry[])null)
+		public AppendEntries(Connector source) : this(source, (LogEntry[])null)
 		{ }
 
-		public AppendEntries(Hub source, List<LogEntry> entries) : this(source, entries?.ToArray())
+		public AppendEntries(Connector source, List<LogEntry> entries) : this(source, entries?.ToArray())
 		{}
 
-		public AppendEntries(Hub source, LogEntry entry): this(source, entry != null ? new LogEntry[] { entry } : null)
+		public AppendEntries(Connector source, LogEntry entry): this(source, entry != null ? new LogEntry[] { entry } : null)
 		{}
 
 	}

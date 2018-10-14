@@ -178,7 +178,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ByteBuffer.cs" />
-    <Compile Include="Clock.cs" />
     <Compile Include="Connectors\ObservationLink.cs" />
     <Compile Include="DB\SerialCSLogicProvider.cs" />
     <Compile Include="Entity\ClientMessageQueue.cs" />
@@ -186,7 +185,6 @@
     <Compile Include="Deque.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="IntermediateSDS.cs" />
-    <Compile Include="Log.cs" />
     <Compile Include="Neighborhood.cs" />
     <Compile Include="RCS.cs" />
     <Compile Include="SDSComputation.cs" />
@@ -208,6 +206,14 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\BaseDB\BaseDB.csproj">
+      <Project>{174A5B17-C113-45BD-85B6-009A1C5C3EF8}</Project>
+      <Name>BaseDB</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clock\Clock.csproj">
+      <Project>{b52b3c3b-d0d9-4f05-97ee-9375eeb28e9e}</Project>
+      <Name>Clock</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Consensus\Consensus.csproj">
       <Project>{8100A8FC-5447-4381-9963-5E614E329EEF}</Project>
       <Name>Consensus</Name>

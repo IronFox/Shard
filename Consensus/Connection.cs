@@ -35,7 +35,7 @@ namespace Consensus
 
 		private volatile bool closing = false;
 		private Thread readThread;
-		protected readonly Hub owner;
+		protected readonly Connector owner;
 		protected BinaryFormatter formatter = new BinaryFormatter();
 
 		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
@@ -52,19 +52,19 @@ namespace Consensus
 
 		public long LastIncoming { get; private set; }
 
-		public bool IsAlive => IsConnected && (Hub.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
+		public bool IsAlive => IsConnected && (Connector.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
 
-		public Connection(Hub owner, Address addr, TcpClient client) : base(owner, null)
+		public Connection(Connector owner, Address addr, TcpClient client) : base(owner, null)
 		{
 			this.owner = owner;
 			Address = () => addr;
 			Assign(client,null);
-			LastIncoming = Hub.GetNanoTime();
+			LastIncoming = Connector.GetNanoTime();
 		}
-		public Connection(Hub owner, Func<Address> addr) : base(owner, addr)
+		public Connection(Connector owner, Func<Address> addr) : base(owner, addr)
 		{
 			this.owner = owner;
-			LastIncoming = Hub.GetNanoTime();
+			LastIncoming = Connector.GetNanoTime();
 		}
 
 		public delegate void Event(ActiveConnection connection);
@@ -81,7 +81,7 @@ namespace Consensus
 		{
 			if (closing)
 				return;
-			if (!serialLock.WaitOne(100000))
+			if (!serialLock.WaitOne(1000))
 			{
 				throw new InvalidOperationException("Unable to acquire lock in 1000ms");
 			}
@@ -89,10 +89,10 @@ namespace Consensus
 			{
 				serialLockedBy = Thread.CurrentThread;
 				action();
-				serialLockedBy = null;
 			}
 			finally
 			{
+				serialLockedBy = null;
 				serialLock.ReleaseMutex();
 			}
 
@@ -149,7 +149,7 @@ namespace Consensus
 					string reason = "";
 					try
 					{
-						LogLowEvent("Begin stream read");
+						LogMinorEvent("Begin stream read");
 
 						while (IsConnected)
 						{
@@ -170,7 +170,7 @@ namespace Consensus
 							{
 								//LogEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
-								LastIncoming = Hub.GetNanoTime();
+								LastIncoming = Connector.GetNanoTime();
 							}
 							catch (Exception ex)
 							{
@@ -217,16 +217,16 @@ namespace Consensus
 					}
 					finally
 					{
-						LogLowEvent("End stream read " + reason);
+						LogMinorEvent("End stream read " + reason);
 					}
 				}
 				if (!Reconnect())
 				{
-					LogLowEvent("End read");
+					LogMinorEvent("End read");
 					return; //about to be disposed anyway
 				}
 			}
-			LogLowEvent("End read");
+			LogMinorEvent("End read");
 		}
 
 
@@ -264,7 +264,7 @@ namespace Consensus
 					}
 					else
 					{
-						LogLowEvent("Cannot dispatch " + p);
+						LogMinorEvent("Cannot dispatch " + p);
 					}
 				});
 			}
@@ -291,7 +291,7 @@ namespace Consensus
 	{
 		public readonly int MemberIndex;
 
-		public ActiveConnection(Hub owner, Func<Address> addr, int idx) : base(owner, addr)
+		public ActiveConnection(Connector owner, Func<Address> addr, int idx) : base(owner, addr)
 		{
 			MemberIndex = idx;
 			Connect();
@@ -321,14 +321,14 @@ namespace Consensus
 
 		protected override bool Reconnect()
 		{
-			LogLowEvent("Reconnecting...");
+			LogMinorEvent("Reconnecting...");
 			TcpClient nextClient = null;
 			while (!IsDisposed && (nextClient == null || !nextClient.Connected))
 			{
 				try
 				{
 					var addr = Address();
-					LogLowEvent("Attempting to re-establish connection to "+addr);
+					LogMinorEvent("Attempting to re-establish connection to "+addr);
 					nextClient = new TcpClient(addr.HostName,addr.Port);
 					break;
 				}
@@ -336,7 +336,7 @@ namespace Consensus
 			}
 			if (!IsDisposed)
 			{
-				LogLowEvent("Connection established");
+				LogMinorEvent("Connection established");
 				TcpLocked(() =>
 				{
 					if (tcpClient != null)

@@ -1,6 +1,6 @@
 ﻿namespace Shard
 {
-	public class SerialGenerationObject : DB.Entity
+	public class SerialGenerationObject : BaseDB.Entity
 	{
 		public int Generation { get; set; }
 

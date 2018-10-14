@@ -179,10 +179,10 @@ namespace Shard
 			int basePort = new Random().Next(1024, 32768);
 			Configuration cfg = new Configuration(new Address[] { new Address(basePort), new Address(basePort + 1), new Address(basePort + 2) });
 
-			Hub[] members = new Hub[]{
-				new Hub(cfg,0),
-				new Hub(cfg,1),
-				new Hub(cfg,2) };
+			Connector[] members = new Connector[]{
+				new Connector(cfg,0),
+				new Connector(cfg,1),
+				new Connector(cfg,2) };
 
 			for (int j = 0; j < 3; j++)
 			{
@@ -207,7 +207,7 @@ namespace Shard
 						break;
 					}
 					else
-						if (members[i].CurrentState!= Hub.State.Follower)
+						if (members[i].CurrentState!= Connector.State.Follower)
 							throw new Exception("Expected "+i+" to be a follower in iteration " + j);
 
 				Console.WriteLine("Disposing leader");
@@ -228,7 +228,7 @@ namespace Shard
 						//Assert.IsFalse(members[i].IsFullyConnected, j + "[" + i + "]L" + leader);
 					}
 
-				members[leader] = new Hub(cfg, leader);
+				members[leader] = new Connector(cfg, leader);
 			}
 			foreach (var m in members)
 			{

@@ -26,7 +26,7 @@ namespace Consensus.Tests
 
 		private class Cluster : IDisposable
 		{
-			private readonly Hub[] members;
+			private readonly Connector[] members;
 			private readonly Configuration cfg;
 
 			public int LeaderIndex
@@ -54,9 +54,9 @@ namespace Consensus.Tests
 				for (int i = 0; i < size; i++)
 					addresses[i] = new Address(basePort + i);
 				cfg = new Configuration(addresses);
-				members = new Hub[size];
+				members = new Connector[size];
 				for (int i = 0; i < size; i++)
-					members[i] = new Hub(cfg, i);
+					members[i] = new Connector(cfg, i);
 			}
 
 			public bool AwaitInterconnected()
@@ -92,7 +92,7 @@ namespace Consensus.Tests
 						break;
 					}
 					else
-						Assert.AreEqual(Hub.State.Follower, members[i].CurrentState);	//should be a follower now
+						Assert.AreEqual(Connector.State.Follower, members[i].CurrentState);	//should be a follower now
 				return leader;
 			}
 
@@ -112,7 +112,7 @@ namespace Consensus.Tests
 						Assert.IsFalse(members[i].IsDisposed);
 						Assert.IsFalse(members[i].IsFullyConnected, "[" + i + "]L" + idx);
 					}
-				members[idx] = new Hub(cfg, idx);
+				members[idx] = new Connector(cfg, idx);
 			}
 
 			internal void Attach<T>() where T: new()
@@ -131,7 +131,7 @@ namespace Consensus.Tests
 				members[memberIndex].Commit(comm);
 			}
 
-			internal void ForeachMember(Action<Hub> action)
+			internal void ForeachMember(Action<Connector> action)
 			{
 				for (int i = 0; i < members.Length; i++)
 					action(members[i]);
@@ -142,7 +142,7 @@ namespace Consensus.Tests
 		{
 			public readonly ConcurrentQueue<int> Received = new ConcurrentQueue<int>();
 
-			internal void AssertIsComplete(Hub hub, int range)
+			internal void AssertIsComplete(Connector hub, int range)
 			{
 				for (int i = 0; i < range; i++)
 				{
@@ -161,10 +161,15 @@ namespace Consensus.Tests
 			{
 				Index = index;
 			}
-			public void Commit(Hub hub)
+			public void Commit(Connector hub)
 			{
 				TestAttachment attach = (TestAttachment)hub.Attachment;
 				attach.Received.Enqueue(Index);
+			}
+
+			public override string ToString()
+			{
+				return "Test<" + Index + ">";
 			}
 		}
 

@@ -38,7 +38,7 @@ namespace Consensus
 			LogEvent(ex.Message);
 			LogError(ex.ToString());
 		}
-		internal void LogLowEvent(object ev)
+		internal void LogMinorEvent(object ev)
 		{
 			//ignore for now
 		}
@@ -69,7 +69,7 @@ namespace Consensus
 		}
 	};
 
-	public class Hub : Identity, IDisposable
+	public class Connector : Identity, IDisposable
     {
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
@@ -112,7 +112,7 @@ namespace Consensus
 				entry = source;
 			}
 
-			public void Execute(Hub owner)
+			public void Execute(Connector owner)
 			{
 				if (WasExecuted)
 					throw new InvalidOperationException("Cannot re-execute local log entry");
@@ -197,7 +197,7 @@ namespace Consensus
 		{
 			if (commitIndex < newCommitIndex)
 			{
-				LogEvent("Committing " + commitIndex + ".." + newCommitIndex + ", history length " + log.Count);
+				LogMinorEvent("Committing " + commitIndex + ".." + newCommitIndex + ", history length " + log.Count);
 				for (int i = commitIndex; i < newCommitIndex; i++)
 				{
 					PrivateEntry e = log[i];
@@ -205,6 +205,8 @@ namespace Consensus
 					e.Execute(this);
 				}
 				commitIndex = newCommitIndex;
+				if (IsLeader)
+					Broadcast(new AppendEntries(this));
 			}
 		}
 
@@ -222,11 +224,11 @@ namespace Consensus
 		}
 
 
-		public Hub(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
+		public Connector(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
 		{
 			IPAddress filter = IPAddress.Any;
 			int port = config.Addresses[myIndex]().Port;
-			LogLowEvent("Starting to listen on port "+ port);
+			LogMinorEvent("Starting to listen on port "+ port);
 			listener = new TcpListener(filter,port);
 			listener.Start();
 			listenThread = new Thread(new ThreadStart(ThreadListen));
@@ -258,7 +260,7 @@ namespace Consensus
 						if (remoteMembers[remoteID] != null)
 							remoteMembers[remoteID].Dispose();
 						remoteMembers[remoteID] = conn;
-						LogLowEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
+						LogMinorEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
 					});
 
 
@@ -358,7 +360,7 @@ namespace Consensus
 		private void ThreadConsensus()
 		{
 			nextActionAt = GetNanoTime() + localRandom.Next(100 * 1000000);//max 100ms
-			LogLowEvent("Started consensus engine: Next action at " + nextActionAt);
+			LogMinorEvent("Started consensus engine: Next action at " + nextActionAt);
 
 			while (!disposing)
 			{
@@ -391,7 +393,7 @@ namespace Consensus
 								leader = null;
 								nextActionAt = GetElectionTimeout();
 
-								LogLowEvent("Timeout reached. Starting new election");
+								LogMinorEvent("Timeout reached. Starting new election");
 
 								Broadcast(new RequestVote(this));
 							});
@@ -531,11 +533,20 @@ namespace Consensus
 
 		public bool IsDisposed => disposing;
 
+		/// <summary>
+		/// Registers an object to be committed to the consensus.
+		/// If a leader is currently known, the object is sent to the leader for logging.
+		/// The leader executes the commit protocol on the new entry.
+		/// If no leader is known, the message is queued for later delivery.
+		/// </summary>
+		/// <param name="entry">Object to commit. Null-objects are ignored. Type must be declared Serializable</param>
 		public void Commit(ICommitable entry)
 		{
+			if (entry == null)
+				return;
 			if (state == State.Leader)
 			{
-				LogEvent("Issueing " + entry);
+				LogMinorEvent("Issuing " + entry);
 				PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
 				lock(log)
 					log.Add(p);
@@ -546,7 +557,7 @@ namespace Consensus
 			{
 				if (leader != null)
 				{
-					LogEvent("Dispatching " + entry + " to " + leader);
+					LogMinorEvent("Dispatching " + entry + " to " + leader);
 					LeaderConnection.Dispatch(new CommitEntry(currentTerm, entry));
 				}
 				else
@@ -555,8 +566,6 @@ namespace Consensus
 					dispatchQueue.Enqueue(entry);
 				}
 			}
-
-
 		}
 
 		internal void SignalAppendEntries(AppendEntries p, Connection sender)
@@ -633,7 +642,7 @@ namespace Consensus
 			if ((votedFor == null || votedFor == sender || term > currentTerm) && upToDate)
 			{
 				state = State.Follower;
-				LogLowEvent("Recognized vote request for term " + term + " from " + sender);
+				LogMinorEvent("Recognized vote request for term " + term + " from " + sender);
 				nextActionAt = GetElectionTimeout();
 				votedFor = sender;
 				currentTerm = term;
@@ -647,18 +656,18 @@ namespace Consensus
 				}
 			}
 			else
-				LogLowEvent("Rejected vote request for term " + term + " (at term " + currentTerm + ", upToDate=" + upToDate + ") from " + sender);
+				LogMinorEvent("Rejected vote request for term " + term + " (at term " + currentTerm + ", upToDate=" + upToDate + ") from " + sender);
 
 		}
 
 		internal void ProcessVoteConfirmation(Connection sender, int term)
 		{
-			LogLowEvent("Processing vote confirmation for term " + term);
+			LogMinorEvent("Processing vote confirmation for term " + term);
 			if (state == State.Candidate && term == currentTerm)
 			{
 				nextActionAt = GetElectionTimeout();
 				numVotes++;
-				LogLowEvent("Num Votes now " + numVotes);
+				LogMinorEvent("Num Votes now " + numVotes);
 				if (numVotes >= config.Addresses.Length / 2 + 1)
 				{
 					LogEvent("Elected leader of term " + currentTerm);
@@ -676,7 +685,7 @@ namespace Consensus
 				}
 			}
 			else
-				LogLowEvent("Confirmation rejected: " + state + ", t" + term);
+				LogMinorEvent("Confirmation rejected: " + state + ", t" + term);
 
 		}
 	}
