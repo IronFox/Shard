@@ -6,12 +6,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Collections.Concurrent;
 
 namespace Consensus.Tests
 {
 	[TestClass()]
 	public class MemberTests
 	{
+		public static Random random = new Random();
+
 		[TestMethod()]
 		public void AddressTest()
 		{
@@ -36,6 +39,8 @@ namespace Consensus.Tests
 					return -1;
 				}
 			}
+
+			public int Size => members.Length;
 
 			public void Dispose()
 			{
@@ -109,6 +114,58 @@ namespace Consensus.Tests
 					}
 				members[idx] = new Hub(cfg, idx);
 			}
+
+			internal void Attach<T>() where T: new()
+			{
+				foreach (var m in members)
+					m.Attachment = new T();
+			}
+
+			internal void Commit(ICommitable comm)
+			{
+				Commit(random.Next(members.Length),comm);
+			}
+
+			internal void Commit(int memberIndex, ICommitable comm)
+			{
+				members[memberIndex].Commit(comm);
+			}
+
+			internal void ForeachMember(Action<Hub> action)
+			{
+				for (int i = 0; i < members.Length; i++)
+					action(members[i]);
+			}
+		}
+
+		private class TestAttachment
+		{
+			public readonly ConcurrentQueue<int> Received = new ConcurrentQueue<int>();
+
+			internal void AssertIsComplete(Hub hub, int range)
+			{
+				for (int i = 0; i < range; i++)
+				{
+					int got;
+					Assert.IsTrue(Received.TryDequeue(out got), hub + ": Dequeue " + i + "/" + range);
+					Assert.AreEqual(i, got, hub + ": Element " + i + "/" + range);
+				}
+			}
+		}
+
+		[Serializable]
+		private class TestCommitable : ICommitable
+		{
+			public readonly int Index;
+			public TestCommitable(int index)
+			{
+				Index = index;
+			}
+			public void Commit(Hub hub)
+			{
+				TestAttachment attach = (TestAttachment)hub.Attachment;
+				attach.Received.Enqueue(Index);
+			}
 		}
 
 
@@ -117,7 +174,19 @@ namespace Consensus.Tests
 		{
 			int basePort = new Random().Next(1024, 32768);
 			Cluster c = new Cluster(basePort, 3);
+			Assert.IsTrue(c.AwaitConsensus());
 
+			for (int j = 0; j < c.Size; j++)
+			{
+				c.Attach<TestAttachment>();
+				for (int i = 0; i < 10; i++)
+				{
+					c.Commit(j, new TestCommitable(i));
+				}
+
+				Thread.Sleep(1000);
+				c.ForeachMember(hub => ((TestAttachment)hub.Attachment).AssertIsComplete(hub, 10));
+			}
 
 			c.Dispose();
 

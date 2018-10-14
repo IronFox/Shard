@@ -38,6 +38,10 @@ namespace Consensus
 			LogEvent(ex.Message);
 			LogError(ex.ToString());
 		}
+		internal void LogLowEvent(object ev)
+		{
+			//ignore for now
+		}
 		internal void LogEvent(object ev)
 		{
 			//string str = ev.ToString();
@@ -65,10 +69,15 @@ namespace Consensus
 		}
 	};
 
-    public class Hub : Identity, IDisposable
+	public class Hub : Identity, IDisposable
     {
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
+
+		/// <summary>
+		/// Custom attachment
+		/// </summary>
+		public object Attachment { get; set; }
 
 		internal long GetAppendMessageTimeout()
 		{
@@ -82,6 +91,7 @@ namespace Consensus
 
 		private Configuration config;
 		private int myIndex;
+		public int Index => myIndex;
 
 		public enum State
 		{
@@ -102,12 +112,12 @@ namespace Consensus
 				entry = source;
 			}
 
-			public void Execute()
+			public void Execute(Hub owner)
 			{
 				if (WasExecuted)
 					throw new InvalidOperationException("Cannot re-execute local log entry");
 				WasExecuted = true;
-				entry.Execute();
+				entry.Execute(owner);
 			}
 
 			public bool WasExecuted { get; private set; } = false;
@@ -115,14 +125,14 @@ namespace Consensus
 		}
 
 
-		private ActiveConnection LeaderConnection
+		private Connection LeaderConnection
 		{
 			get
 			{
 				Identity ld = leader;
 				if (ld == this)
 					throw new InvalidOperationException("Leader is this");
-				return (ActiveConnection)ld;
+				return (Connection)ld;
 			}
 		}
 
@@ -192,7 +202,7 @@ namespace Consensus
 				{
 					PrivateEntry e = log[i];
 					LogEvent("Executing " + e.Entry);
-					e.Execute();
+					e.Execute(this);
 				}
 				commitIndex = newCommitIndex;
 			}
@@ -216,7 +226,7 @@ namespace Consensus
 		{
 			IPAddress filter = IPAddress.Any;
 			int port = config.Addresses[myIndex]().Port;
-			LogEvent("Starting to listen on port "+ port);
+			LogLowEvent("Starting to listen on port "+ port);
 			listener = new TcpListener(filter,port);
 			listener.Start();
 			listenThread = new Thread(new ThreadStart(ThreadListen));
@@ -248,7 +258,7 @@ namespace Consensus
 						if (remoteMembers[remoteID] != null)
 							remoteMembers[remoteID].Dispose();
 						remoteMembers[remoteID] = conn;
-						LogEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
+						LogLowEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
 					});
 
 
@@ -348,7 +358,7 @@ namespace Consensus
 		private void ThreadConsensus()
 		{
 			nextActionAt = GetNanoTime() + localRandom.Next(100 * 1000000);//max 100ms
-			LogEvent("Next action at " + nextActionAt);
+			LogLowEvent("Started consensus engine: Next action at " + nextActionAt);
 
 			while (!disposing)
 			{
@@ -381,7 +391,7 @@ namespace Consensus
 								leader = null;
 								nextActionAt = GetElectionTimeout();
 
-								LogEvent("Timeout reached. Starting new election");
+								LogLowEvent("Timeout reached. Starting new election");
 
 								Broadcast(new RequestVote(this));
 							});
@@ -554,6 +564,7 @@ namespace Consensus
 			//LogEvent("Inbound append entries " + p);
 			if (leader == null || p.Term > currentTerm)
 			{
+				LogEvent("Recognized new leader " + sender);
 				state = State.Follower;
 				leader = sender;
 				votedFor = null;
@@ -622,7 +633,7 @@ namespace Consensus
 			if ((votedFor == null || votedFor == sender || term > currentTerm) && upToDate)
 			{
 				state = State.Follower;
-				LogEvent("Recognized vote request for term " + term + " from " + sender);
+				LogLowEvent("Recognized vote request for term " + term + " from " + sender);
 				nextActionAt = GetElectionTimeout();
 				votedFor = sender;
 				currentTerm = term;
@@ -636,22 +647,23 @@ namespace Consensus
 				}
 			}
 			else
-				LogEvent("Rejected vote request for term " + term + " (at term " + currentTerm + ", upToDate=" + upToDate + ") from " + sender);
+				LogLowEvent("Rejected vote request for term " + term + " (at term " + currentTerm + ", upToDate=" + upToDate + ") from " + sender);
 
 		}
 
 		internal void ProcessVoteConfirmation(Connection sender, int term)
 		{
-			LogEvent("Processing vote confirmation for term " + term);
+			LogLowEvent("Processing vote confirmation for term " + term);
 			if (state == State.Candidate && term == currentTerm)
 			{
 				nextActionAt = GetElectionTimeout();
 				numVotes++;
-				LogEvent("Num Votes now " + numVotes);
+				LogLowEvent("Num Votes now " + numVotes);
 				if (numVotes >= config.Addresses.Length / 2 + 1)
 				{
 					LogEvent("Elected leader of term " + currentTerm);
 					state = State.Leader;
+					leader = this;
 					ClearRemoteInfo();
 					Broadcast(new AppendEntries(this));
 					nextActionAt = GetNanoTime() + HEART_BEAT_TIMEOUT_NS;
@@ -664,7 +676,7 @@ namespace Consensus
 				}
 			}
 			else
-				LogEvent("Confirmation rejected: " + state + ", t" + term);
+				LogLowEvent("Confirmation rejected: " + state + ", t" + term);
 
 		}
 	}

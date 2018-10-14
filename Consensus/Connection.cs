@@ -149,7 +149,7 @@ namespace Consensus
 					string reason = "";
 					try
 					{
-						LogEvent("Begin stream read");
+						LogLowEvent("Begin stream read");
 
 						while (IsConnected)
 						{
@@ -217,16 +217,16 @@ namespace Consensus
 					}
 					finally
 					{
-						LogEvent("End stream read " + reason);
+						LogLowEvent("End stream read " + reason);
 					}
 				}
 				if (!Reconnect())
 				{
-					LogEvent("End read");
+					LogLowEvent("End read");
 					return; //about to be disposed anyway
 				}
 			}
-			LogEvent("End read");
+			LogLowEvent("End read");
 		}
 
 
@@ -264,7 +264,7 @@ namespace Consensus
 					}
 					else
 					{
-						LogEvent("Cannot dispatch " + p);
+						LogLowEvent("Cannot dispatch " + p);
 					}
 				});
 			}
@@ -321,14 +321,14 @@ namespace Consensus
 
 		protected override bool Reconnect()
 		{
-			LogEvent("Reconnecting...");
+			LogLowEvent("Reconnecting...");
 			TcpClient nextClient = null;
 			while (!IsDisposed && (nextClient == null || !nextClient.Connected))
 			{
 				try
 				{
 					var addr = Address();
-					LogEvent("Attempting to re-establish connection to "+addr);
+					LogLowEvent("Attempting to re-establish connection to "+addr);
 					nextClient = new TcpClient(addr.HostName,addr.Port);
 					break;
 				}
@@ -336,7 +336,7 @@ namespace Consensus
 			}
 			if (!IsDisposed)
 			{
-				LogEvent("Connection established");
+				LogLowEvent("Connection established");
 				TcpLocked(() =>
 				{
 					if (tcpClient != null)

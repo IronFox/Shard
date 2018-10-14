@@ -2,6 +2,7 @@
 
 namespace Consensus
 {
+	[Serializable]
 	public class LogEntry
 	{
 		public readonly ICommitable Operation;
@@ -13,9 +14,9 @@ namespace Consensus
 			Operation = op;
 		}
 
-		internal void Execute()
+		internal void Execute(Hub location)
 		{
-			Operation.Commit();
+			Operation.Commit(location);
 		}
 	}
 }
