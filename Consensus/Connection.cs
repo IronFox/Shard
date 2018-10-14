@@ -29,7 +29,7 @@ namespace Consensus
 
 	}
 
-	internal class Connection : Identity
+	internal class Connection : Identity, IDisposable
 	{
 		protected TcpClient tcpClient;
 
@@ -123,7 +123,7 @@ namespace Consensus
 			readThread.Start();
 		}
 
-		public void Close()
+		public void Dispose()
 		{
 			TcpLocked(() =>
 			{
@@ -131,11 +131,11 @@ namespace Consensus
 				if (tcpClient != null)
 				{
 					//client.Close();
-					tcpClient.Close();
+					tcpClient.Dispose();
 					//tcpClient = null;
 				}
 			});
-			if (readThread != null)
+			if (readThread != null && readThread != Thread.CurrentThread)
 				readThread.Join();
 		}
 
@@ -187,32 +187,32 @@ namespace Consensus
 					catch (IOException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						TcpLocked(() => tcpClient.Close());
+						TcpLocked(() => tcpClient.Dispose());
 						reason = ex.Message;
 					}
 					catch (ArgumentException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						TcpLocked(() => tcpClient.Close());
+						TcpLocked(() => tcpClient.Dispose());
 						reason = ex.Message;
 					}
 					catch (SerializationException ex)
 					{
 						LogError(ex.Message + " Closing link");
-						TcpLocked(() => tcpClient.Close());
+						TcpLocked(() => tcpClient.Dispose());
 						reason = ex.Message;
 					}
 					catch (SocketException ex)
 					{
 						LogError("Socket exception. Closing link");
-						TcpLocked(() => tcpClient.Close());
+						TcpLocked(() => tcpClient.Dispose());
 						reason = ex.Message;
 					}
 					catch (Exception ex)
 					{
 						LogError(ex);
 						LogError("Closing link");
-						TcpLocked(() => tcpClient.Close());
+						TcpLocked(() => tcpClient.Dispose());
 						reason = ex.Message;
 					}
 					finally
@@ -259,7 +259,7 @@ namespace Consensus
 						{
 							LogError(ex);
 							if (!(this is ActiveConnection))
-								Close();
+								Dispose();
 						}
 					}
 					else
@@ -272,7 +272,7 @@ namespace Consensus
 			{
 				LogError(ex);
 				if (!(this is ActiveConnection))
-					Close();
+					Dispose();
 			}
 		}
 
@@ -341,7 +341,7 @@ namespace Consensus
 				{
 					if (tcpClient != null)
 					{
-						tcpClient.Close();
+						tcpClient.Dispose();
 						//tcpClient = null;
 					}
 					tcpClient = nextClient;

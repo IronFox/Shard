@@ -21,61 +21,125 @@ namespace Consensus.Tests
 		}
 
 
-		[TestMethod()]
-		public void MemberTest()
+		private class Cluster : IDisposable
 		{
-			int basePort = new Random().Next(1024, 32768);
-			Configuration cfg = new Configuration(new Address[] { new Address(basePort), new Address(basePort+1), new Address(basePort+2) });
+			private readonly Hub[] members;
+			private readonly Configuration cfg;
 
-			Hub[] members = new Hub[]{
-				new Hub(cfg,0),
-				new Hub(cfg,1),
-				new Hub(cfg,2) };
+			public int LeaderIndex
+			{
+				get
+				{
+					for (int i = 0; i < members.Length; i++)
+						if (members[i].IsLeader)
+							return i;
+					return -1;
+				}
+			}
 
-			for (int j = 0; j < 3; j++)
+			public void Dispose()
+			{
+				foreach (var m in members)
+					m.Dispose();
+			}
+
+			public Cluster(int basePort, int size)
+			{
+				Address[] addresses = new Address[size];
+				for (int i = 0; i < size; i++)
+					addresses[i] = new Address(basePort + i);
+				cfg = new Configuration(addresses);
+				members = new Hub[size];
+				for (int i = 0; i < size; i++)
+					members[i] = new Hub(cfg, i);
+			}
+
+			public bool AwaitInterconnected()
 			{
 				for (int i = 0; i < 100; i++)
 				{
 					if (members.All(m => m.IsFullyConnected))
-						break;
+						return true;
 					Thread.Sleep(100);
 				}
-				Assert.IsTrue(members.All(m => m.IsFullyConnected),j.ToString());
-				Thread.Sleep(1000);
+				return false;
+			}
 
+			public bool AwaitConsensus()
+			{
+				for (int i = 0; i < 100; i++)
+				{
+					if (members.Any(m => m.IsLeader))
+						return true;
+					Thread.Sleep(100);
+				}
+				return false;
+			}
 
-				Assert.IsTrue(members.Any(m => m.IsLeader));
-
+			internal int AssertLeaderFollowerCorrectness()
+			{
 				int leader = -1;
 				for (int i = 0; i < members.Length; i++)
 					if (members[i].IsLeader)
 					{
+						Assert.AreEqual(-1, leader);	//only one leader
 						leader = i;
 						break;
 					}
 					else
-						Assert.AreEqual(members[i].CurrentState, Hub.State.Follower);
+						Assert.AreEqual(Hub.State.Follower, members[i].CurrentState);	//should be a follower now
+				return leader;
+			}
 
-				Console.WriteLine("Disposing leader");
+			internal Func<Address> GetAddressOf(int idx)
+			{
+				return members[idx].Address;
+			}
 
-				var ad = members[leader].Address;
-				members[leader].Close();
+			internal void Failover(int idx)
+			{
+				members[idx].Dispose();
+
 				Thread.Sleep(100);
 				for (int i = 0; i < members.Length; i++)
-					if (i != leader)
+					if (i != idx)
 					{
 						Assert.IsFalse(members[i].IsDisposed);
-						if (members[i].IsFullyConnected)
-						{
-							bool grk = true;
-						}
-						Assert.IsFalse(members[i].IsFullyConnected,j+"["+i+"]L"+leader);
+						Assert.IsFalse(members[i].IsFullyConnected, "[" + i + "]L" + idx);
 					}
-
-				members[leader] = new Hub(cfg,leader);
+				members[idx] = new Hub(cfg, idx);
 			}
-			foreach (var m in members)
-				m.Close();
+		}
+
+
+		[TestMethod()]
+		public void LogTest()
+		{
+			int basePort = new Random().Next(1024, 32768);
+			Cluster c = new Cluster(basePort, 3);
+
+
+			c.Dispose();
+
+
+		}
+
+		[TestMethod()]
+		public void HubTest()
+		{
+			int basePort = new Random().Next(1024, 32768);
+			Cluster c = new Cluster(basePort, 3);
+
+			for (int j = 0; j < 3; j++)
+			{
+				Assert.IsTrue(c.AwaitInterconnected());
+				Assert.IsTrue(c.AwaitConsensus());
+				int leader = c.AssertLeaderFollowerCorrectness();
+				var ad = c.GetAddressOf(leader);
+				Console.WriteLine("Closing leader "+leader);
+				c.Failover(leader);
+			}
+			c.Dispose();
 		}
 
 	}

@@ -65,7 +65,7 @@ namespace Consensus
 		}
 	};
 
-    public class Hub : Identity
+    public class Hub : Identity, IDisposable
     {
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
@@ -77,7 +77,7 @@ namespace Consensus
 
 		private TcpListener listener;
 		private Thread listenThread,consensusThread;
-		private volatile bool closing = false;
+		private volatile bool disposing = false;
 
 
 		private Configuration config;
@@ -230,7 +230,7 @@ namespace Consensus
 		private void ThreadListen()
 		{
 			byte[] id = new byte[4];
-			while (!closing)
+			while (!disposing)
 			{
 				try
 				{
@@ -246,7 +246,7 @@ namespace Consensus
 					DoSerialized(() =>
 					{
 						if (remoteMembers[remoteID] != null)
-							remoteMembers[remoteID].Close();
+							remoteMembers[remoteID].Dispose();
 						remoteMembers[remoteID] = conn;
 						LogEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
 					});
@@ -255,7 +255,7 @@ namespace Consensus
 				}
 				catch (Exception ex)
 				{
-					if (closing)
+					if (disposing)
 						return;
 					LogError(ex);
 				}
@@ -287,7 +287,7 @@ namespace Consensus
 
 		internal void DoSerialized(Action action, bool ignoreDisposed = false)
 		{
-			if (closing && !ignoreDisposed)
+			if (disposing && !ignoreDisposed)
 				return;
 			if (!serialLock.WaitOne(10000))
 				throw new InvalidOperationException("Unable to acquire lock in 1000ms");
@@ -328,7 +328,7 @@ namespace Consensus
 				if (IsLeader && !c.IsAlive && !(c is ActiveConnection))
 				{
 					LogEvent("Disconnecting unresponsive " + c);
-					c.Close();
+					c.Dispose();
 					remoteMembers[i] = null;
 					continue;
 				}
@@ -339,7 +339,7 @@ namespace Consensus
 				catch (Exception ex)
 				{
 					LogError(ex);
-					c.Close();
+					c.Dispose();
 					remoteMembers[i] = null;
 				}
 			}
@@ -350,7 +350,7 @@ namespace Consensus
 			nextActionAt = GetNanoTime() + localRandom.Next(100 * 1000000);//max 100ms
 			LogEvent("Next action at " + nextActionAt);
 
-			while (!closing)
+			while (!disposing)
 			{
 				try
 				{
@@ -450,7 +450,7 @@ namespace Consensus
 				if (remoteMembers != null)
 					foreach (var m in remoteMembers)
 						if (m != null)
-							m.Close();
+							m.Dispose();
 				remoteMembers = null;
 
 				if (myIndex < 0 || myIndex >= cfg.Size)
@@ -467,25 +467,25 @@ namespace Consensus
 		}
 
 
-		public void Close()
+		public void Dispose()
 		{
-			if (closing)
+			if (disposing)
 				return;
-			closing = true;
+			disposing = true;
 			DoSerialized(() =>
 			{
 				foreach (var c in remoteMembers)
 					if (c != null)
-						c.Close();
+						c.Dispose();
 			},true);
 			try
 			{
 				if (lastAcceptedClient != null)
-					lastAcceptedClient.Close();
+					lastAcceptedClient.Dispose();
 			}
 			catch { }
 			listener.Stop();
-			listener.Server.Close();
+			listener.Server.Dispose();
 			listenThread.Join();
 			consensusThread.Join();
 		}
@@ -498,7 +498,7 @@ namespace Consensus
 			{
 				try
 				{
-					if (closing)
+					if (disposing)
 						return 0;
 					int rs = 0;
 					for (int i = 0; i < remoteMembers.Length; i++)
@@ -519,7 +519,7 @@ namespace Consensus
 
 		public bool IsFullyConnected => ActiveConnectionCount == config.Addresses.Length - 1;
 
-		public bool IsDisposed => closing;
+		public bool IsDisposed => disposing;
 
 		public void Commit(ICommitable entry)
 		{

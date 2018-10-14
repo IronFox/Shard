@@ -213,8 +213,8 @@ namespace Shard
 				Console.WriteLine("Disposing leader");
 
 				var ad = members[leader].Address;
-				members[leader].Close();
-				Thread.Sleep(10000);
+				members[leader].Dispose();
+				//Thread.Sleep(10000);
 				for (int i = 0; i < members.Length; i++)
 					if (i != leader)
 					{
@@ -233,7 +233,7 @@ namespace Shard
 			foreach (var m in members)
 			{
 				Console.WriteLine("Closing " + m);
-				m.Close();
+				m.Dispose();
 			}
 			Console.WriteLine("Done");
 
