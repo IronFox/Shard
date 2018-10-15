@@ -9,11 +9,11 @@ namespace Consensus
 
 		public Package(int term) => Term = term;
 
-		public abstract void OnProcess(Connector receiver, Connection sender);
+		public abstract void OnProcess(Member receiver, Connection sender);
 
-		public virtual void OnBadTermIgnore(Connector processor, Connection sender) { }
+		public virtual void OnBadTermIgnore(Member processor, Connection sender) { }
 
-		public void OnArrive(Connector receiver, Connection sender)
+		public void OnArrive(Member receiver, Connection sender)
 		{
 			receiver.DoSerialized(() =>
 			{

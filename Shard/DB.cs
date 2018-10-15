@@ -1,4 +1,5 @@
-﻿using MyCouch;
+﻿using Base;
+using MyCouch;
 using MyCouch.Requests;
 using MyCouch.Responses;
 using Newtonsoft.Json;

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -35,7 +36,7 @@ namespace Consensus
 
 		private volatile bool closing = false;
 		private Thread readThread;
-		protected readonly Connector owner;
+		protected readonly Member owner;
 		protected BinaryFormatter formatter = new BinaryFormatter();
 
 		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
@@ -52,19 +53,19 @@ namespace Consensus
 
 		public long LastIncoming { get; private set; }
 
-		public bool IsAlive => IsConnected && (Connector.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
+		public bool IsAlive => IsConnected && (Member.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
 
-		public Connection(Connector owner, Address addr, TcpClient client) : base(owner, null)
+		public Connection(Member owner, Address addr, TcpClient client) : base(owner, null)
 		{
 			this.owner = owner;
 			Address = () => addr;
 			Assign(client,null);
-			LastIncoming = Connector.GetNanoTime();
+			LastIncoming = Member.GetNanoTime();
 		}
-		public Connection(Connector owner, Func<Address> addr) : base(owner, addr)
+		public Connection(Member owner, Func<Address> addr) : base(owner, addr)
 		{
 			this.owner = owner;
-			LastIncoming = Connector.GetNanoTime();
+			LastIncoming = Member.GetNanoTime();
 		}
 
 		public delegate void Event(ActiveConnection connection);
@@ -170,7 +171,7 @@ namespace Consensus
 							{
 								//LogEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
-								LastIncoming = Connector.GetNanoTime();
+								LastIncoming = Member.GetNanoTime();
 							}
 							catch (Exception ex)
 							{
@@ -291,7 +292,7 @@ namespace Consensus
 	{
 		public readonly int MemberIndex;
 
-		public ActiveConnection(Connector owner, Func<Address> addr, int idx) : base(owner, addr)
+		public ActiveConnection(Member owner, Func<Address> addr, int idx) : base(owner, addr)
 		{
 			MemberIndex = idx;
 			Connect();
@@ -328,8 +329,14 @@ namespace Consensus
 				try
 				{
 					var addr = Address();
+					if (addr.IsEmpty)
+					{
+						LogMinorEvent("Unable to connect right now. Host address not known");
+						Thread.Sleep(500);
+						continue;
+					}
 					LogMinorEvent("Attempting to re-establish connection to "+addr);
-					nextClient = new TcpClient(addr.HostName,addr.Port);
+					nextClient = new TcpClient(addr.Host,addr.Port);
 					break;
 				}
 				catch { }

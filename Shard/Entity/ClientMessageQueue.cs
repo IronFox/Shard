@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -221,7 +222,7 @@ namespace Shard
 
 		private void LogError(string msg)
 		{
-			Shard.Log.Error("CMQ: " + msg);
+			Base.Log.Error("CMQ: " + msg);
 		}
 
 

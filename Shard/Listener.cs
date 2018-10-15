@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -11,29 +12,22 @@ namespace Shard
 		private readonly TcpListener server;
 		private readonly Thread listenerThread;
 		private readonly Func<ShardID, Link> linkLookup;
-		private int port = PeerAddress.DefaultPort;
+
+
+		public const int DefaultPort = 15211;
+
+		private int port = DefaultPort;
 
 		public Action<InteractionLink> OnNewInteractionLink { get; set; }
 
 		public int Port => port;
 
-		public Listener(Func<ShardID, Link> linkLookup)
+		public Listener(Func<ShardID, Link> linkLookup, int port=0)
 		{
 			this.linkLookup = linkLookup;
-			for (port = PeerAddress.DefaultPort; port < PeerAddress.DefaultPort + 1024; port++)
-			{
-				try
-				{
-					server = new TcpListener(IPAddress.Any, port);
-					server.Start();
-					break;
-				}
-				catch (SocketException)
-				{
-					try {server.Server.Dispose();} catch { };
-					server = null;
-				}
-			}
+			server = new TcpListener(IPAddress.Any, port);
+			server.Start();
+			port = ((IPEndPoint)server.LocalEndpoint).Port;
 			listenerThread = new Thread(new ThreadStart(Listen));
 			listenerThread.Start();
 		}
@@ -55,7 +49,7 @@ namespace Shard
 					try
 					{
 						IPEndPoint addr = (IPEndPoint)client.Client.RemoteEndPoint;
-						PeerAddress host = new PeerAddress(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
+						Address host = new Address(Dns.GetHostEntry(addr.Address).HostName, addr.Port);
 						//Link link = linkLookup?.Invoke(host);
 						//if (link == null)
 						{

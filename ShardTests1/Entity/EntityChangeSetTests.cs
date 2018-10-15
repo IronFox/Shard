@@ -9,6 +9,7 @@ using Shard.EntityChange;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using VectorMath;
+using Base;
 
 namespace Shard.Tests
 {

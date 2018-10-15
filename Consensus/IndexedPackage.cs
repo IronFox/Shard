@@ -7,7 +7,7 @@ namespace Consensus
 	{
 		public readonly int LastLogIndex;
 
-		public IndexedPackage(Connector source) : base(source.CurrentTerm)
+		public IndexedPackage(Member source) : base(source.CurrentTerm)
 		{
 			LastLogIndex = source.LogSize;
 		}

@@ -9,7 +9,7 @@ namespace Consensus
 		{
 		}
 
-		public override void OnProcess(Connector receiver, Connection sender)
+		public override void OnProcess(Member receiver, Connection sender)
 		{
 			receiver.ProcessVoteConfirmation(sender,Term);
 		}

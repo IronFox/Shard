@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.Serialization;
 using System.Net;
+using Base;
 
 namespace Shard
 {
@@ -167,15 +168,15 @@ namespace Shard
 		}
 
 		public readonly bool IsSibling;
-		private PeerAddress address;
+		private Address address;
 
 
-		private void UpdateAddress(PeerAddress addr)
+		private void UpdateAddress(Address addr)
 		{
 			if (address == addr)
 				return;
 			address = addr;
-			ObservationLink.SignalAddressUpdate(ShardPeerAddress);
+			ObservationLink.SignalAddressUpdate(FullShardAddress);
 		}
 
 		public Action<Link, object> OnData { get; set; } = (lnk, obj) => Simulation.FetchIncoming(lnk, obj);
@@ -190,7 +191,7 @@ namespace Shard
 		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
 		/// <param name="linearIndex">Linear index in the neighborhood</param>
 		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
-		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(BaseDB.TryGet(id),isActive,linearIndex,isSibling)
+		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(BaseDB.TryGetPeerAddress(id),isActive,linearIndex,isSibling)
 		{
 			ID = id;
 		}
@@ -201,7 +202,7 @@ namespace Shard
 		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
 		/// <param name="linearIndex">Linear index in the neighborhood</param>
 		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
-		public Link(PeerAddress remoteHost, bool isActive, int linearIndex, bool isSibling)
+		public Link(Address remoteHost, bool isActive, int linearIndex, bool isSibling)
 		{
 			IsSibling = isSibling;
 			LinearIndex = linearIndex;
@@ -272,7 +273,7 @@ namespace Shard
 						TryRefreshAddress();
 					if (!address.IsEmpty)
 					{
-						client = new TcpClient(address.Address, address.Port);
+						client = new TcpClient(address.Host, address.Port);
 
 						var stream = client.GetStream();
 						stream.Write(BitConverter.GetBytes((uint)InteractionLink.ChannelID.RegisterLink), 0, 4);
@@ -303,7 +304,7 @@ namespace Shard
 		{
 			if (AddressLocked)
 				return;
-			var addr = BaseDB.TryGet(ID);
+			var addr = BaseDB.TryGetPeerAddress(ID);
 			UpdateAddress(addr);
 		}
 
@@ -593,11 +594,11 @@ namespace Shard
 			}
 		}
 
-		public ShardPeerAddress ShardPeerAddress
+		public FullShardAddress FullShardAddress
 		{
 			get
 			{
-				return new ShardPeerAddress(ID, address);
+				return new FullShardAddress(ID, address.Host,address.Port,BaseDB.TryGetConsensusAddress(ID).Port);
 			}
 		}
 

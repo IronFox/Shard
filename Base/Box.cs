@@ -1,7 +1,7 @@
 ﻿using System;
 using VectorMath;
 
-namespace Shard
+namespace Base
 {
 	public struct Box
 	{

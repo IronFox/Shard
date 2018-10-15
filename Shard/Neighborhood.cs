@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -47,10 +48,10 @@ namespace Shard
 					return n;
 			return null;
 		}
-		public Link Find(PeerAddress addr)
+		public Link Find(Address addr)
 		{
 			foreach (var n in links)
-				if (n.ShardPeerAddress.Address == addr)
+				if (n.FullShardAddress.PeerAddress == addr)
 					return n;
 			return null;
 		}

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -69,7 +70,7 @@ namespace Consensus
 		}
 	};
 
-	public class Connector : Identity, IDisposable
+	public class Member : Identity, IDisposable
     {
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
@@ -112,7 +113,7 @@ namespace Consensus
 				entry = source;
 			}
 
-			public void Execute(Connector owner)
+			public void Execute(Member owner)
 			{
 				if (WasExecuted)
 					throw new InvalidOperationException("Cannot re-execute local log entry");
@@ -224,13 +225,18 @@ namespace Consensus
 		}
 
 
-		public Connector(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
+		public Member(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
 		{
 			IPAddress filter = IPAddress.Any;
-			int port = config.Addresses[myIndex]().Port;
-			LogMinorEvent("Starting to listen on port "+ port);
+			int port = config.Addresses[myIndex]() != null ? config.Addresses[myIndex]().Port : 0;
 			listener = new TcpListener(filter,port);
 			listener.Start();
+			if (port == 0)
+			{
+				port = ((IPEndPoint)listener.LocalEndpoint).Port;
+				Address = () => new Address(port);
+			}
+			LogMinorEvent("Started to listening on port " + port);
 			listenThread = new Thread(new ThreadStart(ThreadListen));
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));

@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Shard
+namespace Base
 {
 	public static class Clock
 	{

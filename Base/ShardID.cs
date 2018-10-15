@@ -2,7 +2,7 @@
 using System;
 using Newtonsoft.Json;
 
-namespace Shard
+namespace Base
 {
 	[Serializable]
 	public struct ShardID

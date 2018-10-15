@@ -9,6 +9,7 @@ using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Net;
 using System.Linq;
+using Base;
 
 namespace Shard
 {
@@ -147,7 +148,7 @@ namespace Shard
 				return siblings?.Find(id);
 			return neighbors?.Find(id);
 		}
-		public static Link FindLink(PeerAddress addr)
+		public static Link FindLink(Address addr)
 		{
 			var s = siblings?.Find(addr);
 			if (s == null)
@@ -216,28 +217,17 @@ namespace Shard
 			{ }
 		}
 
+		
+
 		public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
+			listener = new Listener(h => FindLink(h));
+			Consensus.Access.Begin(myID, listener.Port);
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);
 
-			listener = new Listener(h => FindLink(h));
-			{
-				Log.Message("Detecting address...");
-				//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
-				string localIP;
-				using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
-				{
-					socket.Connect("8.8.8.8", 65530);
-					IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
-					localIP = endPoint.Address.ToString();
-				}
-				var address = new ShardPeerAddress(myID, new PeerAddress(localIP, listener.Port));
-				Log.Message("Publishing address: "+address);
-				BaseDB.PutNow(address);
-			}
 
 			observationListener = new ObservationLink.Listener(listener.Port - 1000);
 

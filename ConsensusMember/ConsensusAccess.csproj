@@ -4,17 +4,17 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{8100A8FC-5447-4381-9963-5E614E329EEF}</ProjectGuid>
+    <ProjectGuid>{D8B6EC1B-3E3E-4F03-B122-5D480F284E1D}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Consensus</RootNamespace>
-    <AssemblyName>Consensus</AssemblyName>
+    <RootNamespace>ConsensusMember</RootNamespace>
+    <AssemblyName>ConsensusMember</AssemblyName>
     <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -24,12 +24,16 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -42,25 +46,28 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AppendEntries.cs" />
-    <Compile Include="AppendEntriesConfirmation.cs" />
-    <Compile Include="CommitEntry.cs" />
-    <Compile Include="Configuration.cs" />
-    <Compile Include="Connection.cs" />
-    <Compile Include="ICommitable.cs" />
-    <Compile Include="IDispatchable.cs" />
-    <Compile Include="IndexedPackage.cs" />
-    <Compile Include="LogEntry.cs" />
-    <Compile Include="Member.cs" />
-    <Compile Include="Package.cs" />
+    <Compile Include="Access.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RequestVote.cs" />
-    <Compile Include="VoteConfirm.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BaseDB\BaseDB.csproj">
+      <Project>{174a5b17-c113-45bd-85b6-009a1c5c3ef8}</Project>
+      <Name>BaseDB</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Base\Base.csproj">
       <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
       <Name>Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Consensus\Consensus.csproj">
+      <Project>{8100a8fc-5447-4381-9963-5e614e329eef}</Project>
+      <Name>Consensus</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Math\VectorMath.csproj">
+      <Project>{8B82845E-874B-4B7C-9EA6-85C968B73986}</Project>
+      <Name>VectorMath</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -96,7 +97,7 @@ namespace Shard
 			SendCompressed(Simulation.ID);
 
 			foreach (var n in Simulation.Neighbors)
-				SendCompressed(n.ShardPeerAddress);
+				SendCompressed(n.FullShardAddress);
 			SendCompressed(AssembleTiming());
 
 			if (sentProviders.Count != 0)
@@ -174,7 +175,7 @@ namespace Shard
 			}
 		}
 
-		internal static void SignalAddressUpdate(ShardPeerAddress addr)
+		internal static void SignalAddressUpdate(FullShardAddress addr)
 		{
 			lock (registry)
 			{

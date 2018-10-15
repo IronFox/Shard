@@ -14,7 +14,7 @@ namespace Consensus
 			Operation = op;
 		}
 
-		internal void Execute(Connector location)
+		internal void Execute(Member location)
 		{
 			Operation.Commit(location);
 		}

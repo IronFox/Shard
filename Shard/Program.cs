@@ -1,4 +1,5 @@
-﻿using Consensus;
+﻿using Base;
+using Consensus;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -179,10 +180,10 @@ namespace Shard
 			int basePort = new Random().Next(1024, 32768);
 			Configuration cfg = new Configuration(new Address[] { new Address(basePort), new Address(basePort + 1), new Address(basePort + 2) });
 
-			Connector[] members = new Connector[]{
-				new Connector(cfg,0),
-				new Connector(cfg,1),
-				new Connector(cfg,2) };
+			Member[] members = new Member[]{
+				new Member(cfg,0),
+				new Member(cfg,1),
+				new Member(cfg,2) };
 
 			for (int j = 0; j < 3; j++)
 			{
@@ -207,7 +208,7 @@ namespace Shard
 						break;
 					}
 					else
-						if (members[i].CurrentState!= Connector.State.Follower)
+						if (members[i].CurrentState!= Member.State.Follower)
 							throw new Exception("Expected "+i+" to be a follower in iteration " + j);
 
 				Console.WriteLine("Disposing leader");
@@ -228,7 +229,7 @@ namespace Shard
 						//Assert.IsFalse(members[i].IsFullyConnected, j + "[" + i + "]L" + leader);
 					}
 
-				members[leader] = new Connector(cfg, leader);
+				members[leader] = new Member(cfg, leader);
 			}
 			foreach (var m in members)
 			{
@@ -251,7 +252,7 @@ namespace Shard
 			try
 			{
 				int at = 0;
-				var dbHost = new PeerAddress(args[at++]);
+				var dbHost = new Address(args[at++]);
 				BaseDB.Connect(dbHost);//,"admin","1234");
 
 				if (args[at] == "setup")

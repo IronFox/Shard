@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 
-namespace Consensus
+namespace Base
 {
+
 	public struct AddressWrapper : IComparable<AddressWrapper>, IEquatable<AddressWrapper>
 	{
 		public readonly IPAddress IPAddress;
@@ -42,24 +43,35 @@ namespace Consensus
 	[Serializable]
 	public struct Address : IComparable<Address>, IEquatable<Address>
 	{
-		public readonly string HostName;
+		public readonly string Host;
 		public readonly int Port;
 
 		public Address(string hostname, int port)
 		{
-			HostName = hostname;
+			Host = hostname;
 			Port = port;
+		}
+
+		public Address(string hostPort)
+		{
+			int colonAt = hostPort.IndexOf(':');
+			if (colonAt < 0)
+				throw new ArgumentException("':' expected in hostPort '" + hostPort + "'");
+			Host = hostPort.Substring(0, colonAt);
+			Port = int.Parse(hostPort.Substring(colonAt + 1));
+			if (Port <= 0 || Port >= 65536)
+				throw new ArgumentOutOfRangeException("hostPort", "Expected valid port value");
 		}
 
 		public Address(int port)
 		{
-			HostName = "localhost";
+			Host = "localhost";
 			Port = port;
 		}
 
 		public Address(IPEndPoint remoteEndPoint) : this()
 		{
-			HostName = remoteEndPoint.Address.ToString();
+			Host = remoteEndPoint.Address.ToString();
 			Port = remoteEndPoint.Port;
 		}
 
@@ -67,15 +79,15 @@ namespace Consensus
 		{
 			get
 			{
-				return Dns.GetHostAddresses(HostName).Select(addr => new AddressWrapper(addr)).ToArray();
+				return Dns.GetHostAddresses(Host).Select(addr => new AddressWrapper(addr)).ToArray();
 			}
 		}
 
 		public override string ToString()
 		{
-			if (HostName == null)
-				throw new Exception("Bad hostname");
-			return HostName != null ? HostName + ":" + Port : "<null>";
+			if (IsEmpty)
+				return "<empty>";
+			return Host + ":" + Port;
 		}
 
 
@@ -93,6 +105,9 @@ namespace Consensus
 		{
 			int rs = Port.CompareTo(other.Port);
 			if (rs != 0)
+				return rs;
+			rs = IsSet.CompareTo(other.IsSet);
+			if (rs != 0 || IsEmpty)
 				return rs;
 			var local = Resolved;
 			var remote = other.Resolved;
@@ -122,6 +137,9 @@ namespace Consensus
 		{
 			return this == other;
 		}
+
+		public bool IsEmpty => string.IsNullOrWhiteSpace(Host);
+		public bool IsSet => !IsEmpty;
 
 		public override int GetHashCode()
 		{

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using VectorMath;
 using static Shard.Tests.ComputationTests;
+using Base;
 
 namespace Shard.Tests
 {

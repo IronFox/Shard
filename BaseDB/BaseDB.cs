@@ -1,4 +1,5 @@
-﻿using MyCouch;
+﻿using Base;
+using MyCouch;
 using MyCouch.Requests;
 using Newtonsoft.Json;
 using System;
@@ -15,7 +16,7 @@ namespace Shard
     public static class BaseDB
     {
 		private static string url;
-		public static PeerAddress Host { get; private set; }
+		public static Address Host { get; private set; }
 		public static MyCouchServerClient server;
 
 		public static ConfigContainer Config { get; private set; }
@@ -48,7 +49,7 @@ namespace Shard
 		private static bool haveCredentials = false;
 		public static bool HaveCredentials => haveCredentials;
 		public static bool HasAdminAccess => server != null && haveCredentials;
-		public static Action<ShardPeerAddress> OnPutLocalAddress { get; set; } = null;
+		public static Action<FullShardAddress> OnPutLocalAddress { get; set; } = null;
 
 		private class AllDocsValue
 		{
@@ -232,7 +233,7 @@ namespace Shard
 		}
 
 
-		public static void PutNow(ShardPeerAddress addr)
+		public static void PutNow(FullShardAddress addr)
 		{
 			if (OnPutLocalAddress != null)
 				OnPutLocalAddress(addr);
@@ -509,7 +510,7 @@ namespace Shard
 
 
 
-		public static string Connect(PeerAddress host, string username = null, string password = null)
+		public static string Connect(Address host, string username = null, string password = null)
 		{
 			url = "http://";
 			if (username != null && password != null)
@@ -597,12 +598,29 @@ namespace Shard
 			hostRequests.BeginFetch(hostsStore, id);
 		}
 
-		public static PeerAddress TryGet(ShardID id)
+
+		public static FullShardAddress TryGetAddress(ShardID id)
 		{
 			var h = hostRequests.TryGet(hostsStore, id);
 			if (h == null)
-				return new PeerAddress();
+				return new FullShardAddress();
+			return h.GetFullAddress(id);
+		}
+
+		public static Address TryGetPeerAddress(ShardID id)
+		{
+			var h = hostRequests.TryGet(hostsStore, id);
+			if (h == null)
+				return new Address();
 			return h.PeerAddress;
+		}
+
+		public static Address TryGetConsensusAddress(ShardID id)
+		{
+			var h = hostRequests.TryGet(hostsStore, id);
+			if (h == null)
+				return new Address();
+			return h.ConsensusAddress;
 		}
 
 
@@ -634,23 +652,26 @@ namespace Shard
 
 		public class AddressEntry : Entity
 		{
-			public string address;
-			public int port;
+			public string host;
+			public int peerPort, consensusPort;
 
-			public AddressEntry(ShardPeerAddress addr)
+			public AddressEntry(FullShardAddress addr)
 			{
 				_id = addr.ShardID.ToString();
-				address = addr.Address.Address;
-				port = addr.Address.Port;
+				host = addr.Host;
+				peerPort = addr.PeerPort;
+				consensusPort = addr.ConsensusPort;
 			}
 
 			[JsonIgnore]
-			public PeerAddress PeerAddress
+			public Address PeerAddress => new Address(host,peerPort);
+
+			[JsonIgnore]
+			public Address ConsensusAddress => new Address(host, consensusPort);
+
+			internal FullShardAddress GetFullAddress(ShardID id)
 			{
-				get
-				{
-					return new PeerAddress(address, port);
-				}
+				return new FullShardAddress(id, host, peerPort, consensusPort);
 			}
 		}
 
