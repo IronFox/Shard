@@ -9,9 +9,10 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>BaseDB</RootNamespace>
     <AssemblyName>BaseDB</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -59,9 +60,13 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clock\Clock.csproj">
-      <Project>{b52b3c3b-d0d9-4f05-97ee-9375eeb28e9e}</Project>
-      <Name>Clock</Name>
+    <ProjectReference Include="..\Base\Base.csproj">
+      <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
+      <Name>Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Math\VectorMath.csproj">
+      <Project>{8b82845e-874b-4b7c-9ea6-85c968b73986}</Project>
+      <Name>VectorMath</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

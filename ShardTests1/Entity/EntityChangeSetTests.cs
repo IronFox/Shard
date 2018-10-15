@@ -149,7 +149,7 @@ namespace Shard.Tests
 			float r0 = random.NextFloat(0.5f, 1f);
 			float m0 = random.NextFloat(0f, 1f);
 			SimulationContext ctx = new SimulationContext(
-				new DB.ConfigContainer()
+				new BaseDB.ConfigContainer()
 				{
 					extent = ext,
 					r = r0,

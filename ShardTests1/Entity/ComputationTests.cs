@@ -140,17 +140,17 @@ namespace Shard.Tests
 			SimulationContext ctx;
 			public SDSStack stack;
 
-			public SimulationRun(DB.ConfigContainer config, ShardID localShardID, IEnumerable<Entity> entities, bool allLinksArePassive = true)
+			public SimulationRun(BaseDB.ConfigContainer config, ShardID localShardID, IEnumerable<Entity> entities, bool allLinksArePassive = true)
 			{
-				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+				//BaseDB.ConfigContainer config = new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
 				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID,config.extent), allLinksArePassive);
 
 				FeedEntities(entities);
 			}
-			public SimulationRun(DB.ConfigContainer config, ShardID localShardID, bool allLinksArePassive = true)
+			public SimulationRun(BaseDB.ConfigContainer config, ShardID localShardID, bool allLinksArePassive = true)
 			{
-				//DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
+				//BaseDB.ConfigContainer config = new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
 				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID, config.extent), allLinksArePassive);
 			}
@@ -234,7 +234,7 @@ namespace Shard.Tests
 		public void PingPongTest()
 		{
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
 				new ShardID(Int3.Zero, 0), 
 				new Entity[]
 				{
@@ -286,7 +286,7 @@ namespace Shard.Tests
 		public void ConsistentStateTest()
 		{
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
 				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{
@@ -345,7 +345,7 @@ namespace Shard.Tests
 
 
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(3), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(3), 1), r = 1f / 8, m = 1f / 16 },
 				new ShardID(Int3.One, 0));
 
 			Vec3 outlierCoords = Simulation.MySpace.Min;
@@ -449,7 +449,7 @@ namespace Shard.Tests
 		public void IsolatedComputationTest()
 		{
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
 				new ShardID(Int3.Zero, 0));
 
 			Vec3 outlierCoords = Simulation.MySpace.Min;
@@ -506,7 +506,7 @@ namespace Shard.Tests
 		public void BroadcastRangeTest()
 		{
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f, m = 1f },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f, m = 1f },
 				new ShardID(Int3.Zero, 0));
 
 			Entity[] entities = new Entity[16];

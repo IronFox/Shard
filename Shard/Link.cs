@@ -190,7 +190,7 @@ namespace Shard
 		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
 		/// <param name="linearIndex">Linear index in the neighborhood</param>
 		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
-		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(DB.TryGet(id),isActive,linearIndex,isSibling)
+		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(BaseDB.TryGet(id),isActive,linearIndex,isSibling)
 		{
 			ID = id;
 		}
@@ -303,7 +303,7 @@ namespace Shard
 		{
 			if (AddressLocked)
 				return;
-			var addr = DB.TryGet(ID);
+			var addr = BaseDB.TryGet(ID);
 			UpdateAddress(addr);
 		}
 

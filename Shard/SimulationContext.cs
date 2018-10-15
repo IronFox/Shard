@@ -12,7 +12,7 @@ namespace Shard
 		{
 			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
 		}
-		public SimulationContext(DB.ConfigContainer cfg, Box mySpace, bool allowMotionToUnresponsiveNeighbor) : base(Simulation.ToRanges(cfg), mySpace)
+		public SimulationContext(BaseDB.ConfigContainer cfg, Box mySpace, bool allowMotionToUnresponsiveNeighbor) : base(Simulation.ToRanges(cfg), mySpace)
 		{
 			AllowMotionToUnresponsiveNeighbor = allowMotionToUnresponsiveNeighbor;
 		}

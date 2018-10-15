@@ -53,12 +53,12 @@ namespace Shard
 			}
 		}
 
-		static void SetupScenario(DB.ConfigContainer cfg, IEnumerable<Entity> entities)
+		static void SetupScenario(BaseDB.ConfigContainer cfg, IEnumerable<Entity> entities)
 		{
-			DB.PutConfigAsync(cfg).Wait();
+			BaseDB.PutConfigAsync(cfg).Wait();
 			Simulation.Configure(new ShardID(), cfg, true);
 			//if (DB.HasAdminAccess)
-			var clearTask = DB.ClearSimulationDataAsync();
+			var clearTask = BaseDB.ClearSimulationDataAsync();
 
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
 			cfg.extent.XYZ.Cover(at =>
@@ -252,7 +252,7 @@ namespace Shard
 			{
 				int at = 0;
 				var dbHost = new PeerAddress(args[at++]);
-				DB.Connect(dbHost);//,"admin","1234");
+				BaseDB.Connect(dbHost);//,"admin","1234");
 
 				if (args[at] == "setup")
 				{
@@ -263,10 +263,10 @@ namespace Shard
 
 
 
-				DB.PullConfig();
+				BaseDB.PullConfig();
 
 				Log.Message("Setting up clock");
-				Clock.NTPHost = DB.Config.ntp;
+				Clock.NTPHost = BaseDB.Config.ntp;
 
 				while (Clock.NumQueries < 1)
 				{
@@ -285,22 +285,22 @@ namespace Shard
 					while (true)
 					{
 						Thread.Sleep(100);
-						var t = DB.Timing;
+						var t = BaseDB.Timing;
 						if (t == null)
 							continue;
 
 						var n = Clock.Now + TimeSpan.FromSeconds(10);
 						t.startTime = n.ToShortDateString()+" "+n.ToLongTimeString();
 						t.msStep = 1000;	//make sure we compute slowly
-						DB.Timing = t;
+						BaseDB.Timing = t;
 						break;
 					}
 				}
 #endif
 
 
-				if ((addr >= DB.Config.extent).Any)
-					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + DB.Config.extent);
+				if ((addr >= BaseDB.Config.extent).Any)
+					throw new ArgumentOutOfRangeException("addr", addr, "Exceeds extent: " + BaseDB.Config.extent);
 				if ((addr < ShardID.Zero).Any)
 					throw new ArgumentOutOfRangeException("addr", addr, "Is (partially) negative");
 
@@ -337,7 +337,7 @@ namespace Shard
 			}
 
 			Random rng = new Random(1024);
-			SetupScenario(new DB.ConfigContainer()
+			SetupScenario(new BaseDB.ConfigContainer()
 						{
 							extent = new ShardID(scenario.worldSize[0], scenario.worldSize[1], scenario.worldSize[2], 1),
 							m = scenario.M,
@@ -360,7 +360,7 @@ namespace Shard
 								 //hence R = 4 / gridRes
 			float r = 4.5f / gridRes;
 
-			DB.ConfigContainer config = new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r * 0.5f };
+			BaseDB.ConfigContainer config = new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r * 0.5f };
 			Simulation.Configure(new ShardID(Int3.Zero, 0), config, true);
 			Vec3 outlierCoords = Simulation.MySpace.Min;
 

@@ -38,7 +38,7 @@ namespace Shard.Tests
 			float r = 4.5f / gridRes;
 
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r * 0.5f },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = r, m = r * 0.5f },
 				new ShardID(Int3.Zero, 0),
 				MakeGrid2D(gridRes));
 

@@ -306,7 +306,7 @@ namespace Shard.Tests
 			Random random = new Random();
 
 			SimulationRun run = new SimulationRun(
-				new DB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
 				new ShardID(Int3.Zero, 0),
 				new Entity[]
 				{

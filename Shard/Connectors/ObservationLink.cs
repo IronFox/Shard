@@ -107,7 +107,7 @@ namespace Shard
 		private ObserverTimingInfo AssembleTiming()
 		{
 			return new ObserverTimingInfo()
-			{ msPerTLG = (int)new TimingInfo(DB.Timing).GenerationTimeWindow.TotalMilliseconds };
+			{ msPerTLG = (int)new TimingInfo(BaseDB.Timing).GenerationTimeWindow.TotalMilliseconds };
 		}
 
 		private void Message(string msg)

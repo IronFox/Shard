@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Shard
 {
@@ -231,7 +232,7 @@ namespace Shard
 		}
 
 
-		internal static void PutNow(ShardPeerAddress addr)
+		public static void PutNow(ShardPeerAddress addr)
 		{
 			if (OnPutLocalAddress != null)
 				OnPutLocalAddress(addr);

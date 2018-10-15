@@ -23,7 +23,7 @@ namespace Shard
 		public readonly DateTime
 							Start;
 
-		public TimingInfo(DB.TimingContainer t)
+		public TimingInfo(BaseDB.TimingContainer t)
 		{
 			StepsPerGeneration = 1 + t.recoverySteps;
 			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msStep * StepsPerGeneration);
@@ -40,7 +40,7 @@ namespace Shard
 		{
 			get
 			{
-				return new TimingInfo(DB.Timing);
+				return new TimingInfo(BaseDB.Timing);
 			}
 		}
 
@@ -219,7 +219,7 @@ namespace Shard
 		public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
-			Configure(myID, DB.Config,false);
+			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);
 
@@ -236,7 +236,7 @@ namespace Shard
 				}
 				var address = new ShardPeerAddress(myID, new PeerAddress(localIP, listener.Port));
 				Log.Message("Publishing address: "+address);
-				DB.PutNow(address, true);
+				BaseDB.PutNow(address);
 			}
 
 			observationListener = new ObservationLink.Listener(listener.Port - 1000);
@@ -270,7 +270,7 @@ namespace Shard
 
 			stack.Append(sds);
 
-			Log.Message("Start Date="+DB.Timing.startTime);
+			Log.Message("Start Date="+BaseDB.Timing.startTime);
 
 			//{
 			//	foreach (var link in neighbors)
@@ -400,7 +400,7 @@ namespace Shard
 		public static int EstimateNextSuitableMessageTargetGeneration()
 		{
 			int step = 1;
-			var t0 = DB.Timing;
+			var t0 = BaseDB.Timing;
 			if (t0 != null)
 			{
 				var t = new TimingInfo(t0);
@@ -484,7 +484,7 @@ namespace Shard
 					continue;
 				//try get from database:
 				SerialRCS rcs = DB.TryGetInbound(other.InboundRCSStackID.Generation(sds.Generation));
-				//SerialRCSStack rcsStack = DB.TryGet(other.InboundRCSStackID);
+				//SerialRCSStack rcsStack = BaseDB.TryGet(other.InboundRCSStackID);
 				if (rcs != null)
 				{
 					sds.InboundRCS[other.LinearIndex] = rcs.Deserialize();
@@ -502,7 +502,7 @@ namespace Shard
 
 
 
-		public static EntityRanges ToRanges(DB.ConfigContainer config)
+		public static EntityRanges ToRanges(BaseDB.ConfigContainer config)
 		{
 			return new EntityRanges(config.r, config.m, ExtToWorld(config.extent.XYZ));
 		}
@@ -512,7 +512,7 @@ namespace Shard
 			return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
 		}
 
-		public static void Configure(ShardID addr, DB.ConfigContainer config, bool forceAllLinksPassive)
+		public static void Configure(ShardID addr, BaseDB.ConfigContainer config, bool forceAllLinksPassive)
 		{
 			CSLogicProvider.AsyncFactory = DB.GetLogicProviderAsync;
 

@@ -51,7 +51,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BitCube.cs" />
-    <Compile Include="Box.cs" />
     <Compile Include="BinaryReader.cs" />
     <Compile Include="ClientMessages.cs" />
     <Compile Include="Digest.cs" />
@@ -69,17 +68,17 @@
     <Compile Include="Entity\EntityRanges.cs" />
     <Compile Include="Entity\StandardAppearances.cs" />
     <Compile Include="Entity\TimeBudgetException.cs" />
-    <Compile Include="Extensions.cs" />
-    <Compile Include="Helper.cs" />
     <Compile Include="InconsistencyCoverage.cs" />
-    <Compile Include="IntegrityViolation.cs" />
     <Compile Include="LazyList.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SDS.cs" />
-    <Compile Include="ShardID.cs" />
     <Compile Include="ObserverTimingInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Base\Base.csproj">
+      <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
+      <Name>Base</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Math\VectorMath.csproj">
       <Project>{8b82845e-874b-4b7c-9ea6-85c968b73986}</Project>
       <Name>VectorMath</Name>

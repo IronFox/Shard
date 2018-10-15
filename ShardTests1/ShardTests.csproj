@@ -111,6 +111,14 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\BaseDB\BaseDB.csproj">
+      <Project>{174A5B17-C113-45BD-85B6-009A1C5C3EF8}</Project>
+      <Name>BaseDB</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Base\Base.csproj">
+      <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
+      <Name>Base</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Math\VectorMath.csproj">
       <Project>{8B82845E-874B-4B7C-9EA6-85C968B73986}</Project>
       <Name>VectorMath</Name>

@@ -265,8 +265,15 @@ namespace Shard
 		private IEnumerable<Assembly> EnumerateAssemblies()
 		{
 			yield return Assembly;
-
+			LazyList<Dependency> delayed = new LazyList<Dependency>();
+			//first iterate over all that are ready right now, giving others more time to complete
 			foreach (var d in Dependencies)
+				if (d.Provider.IsCompleted)
+					yield return d.Provider.Get().Assembly;
+				else
+					delayed.Add(d);	//add and directly continue with the next. maybe we are lucky
+			//no point distinguishing, wait for each
+			foreach (var d in delayed)
 				yield return d.Provider.Get().Assembly;
 		}
 

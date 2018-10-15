@@ -145,13 +145,9 @@ namespace Shard
 			return prov;
 		}
 
-		public static void Connect(PeerAddress host, string username = null, string password = null)
-		{
-			var url = BaseDB.Connect(host, username, password);
-		}
 
 
-		private static BaseDB.ContinuousPoller<SerialSDS> sdsPoller;
+		private static ContinuousPoller<SerialSDS> sdsPoller;
 
 
 		
