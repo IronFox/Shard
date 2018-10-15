@@ -6,14 +6,17 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Consensus
 {
-	public static class Access
+	public static class Interface
 	{
-		private static Member connector;
+		private static Node connector;
 		public static ShardID MyID { get; private set; }
+
+		private static Thread gecThread;
 
 		public static void Begin(ShardID myID, int peerPort)
 		{
@@ -28,7 +31,7 @@ namespace Consensus
 
 			Consensus.Configuration cfg = new Configuration(addresses);
 			MyID = myID;
-			connector = new Member(cfg, at);
+			connector = new Node(cfg, at);
 
 			int consensusPort = connector.Address().Port;
 
@@ -48,6 +51,26 @@ namespace Consensus
 				BaseDB.PutNow(address);
 			}
 
+			gecThread = new Thread(new ThreadStart(GECThreadMain));
+			gecThread.Start();
+
+		}
+
+		public static MessagePack QueryMessages()
+		{
+
+		}
+
+		private static int currentGen = 0;
+
+		private static void GECThreadMain()
+		{
+			while (true)
+			{
+				var c = TimingInfo.Current;
+				var remaining = c.TimeToGenerationDeadline;
+			}
+			int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
 
 		}
 	}

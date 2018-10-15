@@ -70,7 +70,7 @@ namespace Consensus
 		}
 	};
 
-	public class Member : Identity, IDisposable
+	public class Node : Identity, IDisposable
     {
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
@@ -113,7 +113,7 @@ namespace Consensus
 				entry = source;
 			}
 
-			public void Execute(Member owner)
+			public void Execute(Node owner)
 			{
 				if (WasExecuted)
 					throw new InvalidOperationException("Cannot re-execute local log entry");
@@ -225,7 +225,7 @@ namespace Consensus
 		}
 
 
-		public Member(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
+		public Node(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
 		{
 			IPAddress filter = IPAddress.Any;
 			int port = config.Addresses[myIndex]() != null ? config.Addresses[myIndex]().Port : 0;

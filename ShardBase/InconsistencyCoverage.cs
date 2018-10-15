@@ -16,6 +16,8 @@ namespace Shard
 			}
 		}
 
+		public bool IsCompletelyInconsistent => base.OneCount == base.Size.Product;
+
 		private InconsistencyCoverage(BitCube raw) : base(raw)
 		{ }
 

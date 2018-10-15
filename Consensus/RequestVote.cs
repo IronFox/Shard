@@ -7,7 +7,7 @@ namespace Consensus
 	{
 		public readonly int LastLogTerm;
 
-		public RequestVote(Member source) : base(source)
+		public RequestVote(Node source) : base(source)
 		{
 			LastLogTerm = source.GetLogTerm(LastLogIndex);
 		}
@@ -17,7 +17,7 @@ namespace Consensus
 			LastLogTerm = lastLogTerm;
 		}
 
-		public bool IsUpToDate(Member target)
+		public bool IsUpToDate(Node target)
 		{
 			int logSize = target.LogSize;
 			int myTerm = target.GetLogTerm(logSize);
@@ -28,7 +28,7 @@ namespace Consensus
 			return LastLogIndex >= logSize;
 		}
 
-		public override void OnProcess(Member receiver, Connection sender)
+		public override void OnProcess(Node receiver, Connection sender)
 		{
 			receiver.ProcessVoteRequest(sender, Term, IsUpToDate(receiver));
 		}

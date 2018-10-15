@@ -102,95 +102,15 @@ namespace Shard
 				.Finish();
 		}
 	}
-
-	[Serializable]
-	public class ClientMessageBody : IComparable<ClientMessageBody>
-	{
-		public ClientMessageBody(byte[] data, int tlg, int targetTLG, int myReplicaIndex, bool isHashedDigest)
-		{
-			Data = data;
-			RecordedTLG = tlg;
-			RecordedByReplicaIndex = myReplicaIndex;
-			IsHashedDigest = isHashedDigest;
-			TargetTLG = targetTLG;
-		}
-
-		public ClientMessageBody ToDigestedMessage()
-		{
-			if (IsHashedDigest)
-				return this;
-			var digest = Digest.FromBinaryData(Data);
-			return new ClientMessageBody(digest.Bytes, RecordedTLG, TargetTLG, RecordedByReplicaIndex, digest.IsHashed);
-		}
-
-		public Digest GetDigestedData()
-		{
-			if (IsHashedDigest)
-				return new Digest(Data,true);
-			return Digest.FromBinaryData(Data);
-		}
-
-		public readonly byte[] Data;
-		public readonly bool IsHashedDigest;
-
-		public readonly int RecordedTLG;
-		public readonly int RecordedByReplicaIndex;
-		/// <summary>
-		/// Generation at which the message should be processed.
-		/// The farther in the future, the more likely it will be delivered.
-		/// Among multiple confirmations, the highest one will ultimately be applied
-		/// </summary>
-		public readonly int TargetTLG;
-
-		public static bool operator ==(ClientMessageBody a, ClientMessageBody b)
-		{
-			return a.IsHashedDigest == b.IsHashedDigest && Helper.AreEqual(a.Data, b.Data);
-			;//ignore RecordedTLG here, as timing differences might cause variances
-		}
-
-		public static bool operator !=(ClientMessageBody a, ClientMessageBody b)
-		{
-			return !(a == b);
-		}
-
-		public override bool Equals(object obj)
-		{
-			var other = obj as ClientMessageBody;
-			if (other == null)
-				return false;
-			return this == other;
-		}
-
-		public override int GetHashCode()
-		{
-			return new Helper.HashCombiner(GetType())
-				.Add(IsHashedDigest)
-				.Add(Data)
-				.GetHashCode();
-		}
-
-		public override string ToString()
-		{
-			return IsHashedDigest ? "<digest>" : "[" + Helper.Length(Data) + "]";
-		}
-
-		public int CompareTo(ClientMessageBody other)
-		{
-			return new Helper.Comparator()
-				.Append(IsHashedDigest, other.IsHashedDigest)
-				.Append(Data, other.Data)
-				.Finish();
-		}
-	}
-
+	
 	[Serializable]
 	public class ClientMessage : IComparable<ClientMessage>
 	{
 		public readonly ClientMessageID ID;
-		public readonly ClientMessageBody Body;
+		public readonly byte[] Body;
 
 
-		public ClientMessage(ClientMessageID id, ClientMessageBody body)
+		public ClientMessage(ClientMessageID id, byte[] body)
 		{
 			ID = id;
 			Body = body;
@@ -221,77 +141,23 @@ namespace Shard
 
 		public EntityMessage ToEntityMessage()
 		{
-			if (Body.IsHashedDigest)
-				throw new IntegrityViolation("Bad message body");
-			return new EntityMessage(new Actor(ID.From), ID.IsBroadcast, ID.Channel, Body.Data);
+			return new EntityMessage(new Actor(ID.From), ID.IsBroadcast, ID.Channel, Body);
 		}
 	};
 
-	/// <summary>
-	/// Container for multi-sibling message handling
-	/// </summary>
-	public class ConsistentClientMessageContainer
+	public struct MessagePack
 	{
-		public readonly ClientMessageID ID;
-		private int firstRecorded = int.MaxValue;
-		private int targetTLG = int.MinValue;
-		private Dictionary<int, Digest> digests = new Dictionary<int, Digest>();
-		public byte[] MessagePayload { get; private set; }
-		private int confirmationsRequired = 0;
-		public ConsistentClientMessageContainer(ClientMessage msg, int confirmationsRequired)
-		{
-			ID = msg.ID;
-			Add(msg.Body, confirmationsRequired);
-		}
-		public void Add(ClientMessageBody body, int confirmationsRequired)
-		{
-			digests.Add(body.RecordedByReplicaIndex, body.GetDigestedData());
-			firstRecorded = Math.Min(firstRecorded, body.RecordedTLG);
-			targetTLG = Math.Max(targetTLG, body.TargetTLG);
-			if (!body.IsHashedDigest)
-				MessagePayload = body.Data; //don't care if we overwrite previous data. IsConflicting will return true then
-			if (confirmationsRequired > 0)
-				this.confirmationsRequired = confirmationsRequired;
-		}
+		public readonly Dictionary<Guid, ClientMessage[]> Messages;
+		public readonly bool IsComplete;
 
-		public bool IsConfirmed
+		public MessagePack(Dictionary<Guid, ClientMessage[]> msg, bool complete)
 		{
-			get
-			{
-				for (int i = 0; i < confirmationsRequired; i++)
-					if (!digests.ContainsKey(i))
-						return false;
-				return true;
-			}
-		}
-
-
-		public int TargetTLG
-		{
-			get
-			{
-				return targetTLG;
-			}
-		}
-		public ClientMessage ToMessage()
-		{
-			return new ClientMessage(ID, new ClientMessageBody(MessagePayload, firstRecorded, targetTLG, 0, false));
-		}
-
-		public bool IsConflicting
-		{
-			get
-			{
-				Digest? compareWith = null;
-				foreach (var t in digests)
-					if (compareWith == null)
-						compareWith = t.Value;
-					else
-						if (compareWith != t.Value)
-							return false;
-				return true;
-			}
+			Messages = msg;
+			IsComplete = complete;
+			if (complete && msg == null)
+				throw new ArgumentNullException("msg");
 		}
 	}
+
 
 }

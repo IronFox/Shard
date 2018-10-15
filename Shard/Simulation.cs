@@ -13,97 +13,6 @@ using Base;
 
 namespace Shard
 {
-	public struct TimingInfo
-	{
-		public readonly int StepsPerGeneration, StartGeneration, MaxGeneration;
-		public readonly TimeSpan
-							GenerationTimeWindow,
-							StepTimeWindow,
-							MessageProcessingTimeWindow,
-							StepComputationTimeWindow;
-		public readonly DateTime
-							Start;
-
-		public TimingInfo(BaseDB.TimingContainer t)
-		{
-			StepsPerGeneration = 1 + t.recoverySteps;
-			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msStep * StepsPerGeneration);
-			StepTimeWindow = TimeSpan.FromMilliseconds(t.msStep);
-			StepComputationTimeWindow = TimeSpan.FromMilliseconds(t.msComputation);
-			MessageProcessingTimeWindow = TimeSpan.FromMilliseconds(t.msMessageProcessing);
-
-			Start = Convert.ToDateTime(t.startTime);
-			StartGeneration = t.startGeneration;
-			MaxGeneration = t.maxGeneration;
-		}
-
-		public static TimingInfo Current
-		{
-			get
-			{
-				return new TimingInfo(BaseDB.Timing);
-			}
-		}
-
-		public int TopLevelGeneration
-		{
-			get
-			{
-				var rs = StartGeneration + Math.Max(0, (int)(SimulationTime.TotalSeconds / GenerationTimeWindow.TotalSeconds));
-				if (MaxGeneration >= 0)
-					rs = Math.Min(rs, MaxGeneration);
-				return rs;
-			}
-		}
-
-		public TimeSpan SimulationTime
-		{
-			get
-			{
-				return Clock.Now - Start;
-			}
-		}
-
-		public DateTime LatestGenerationStart
-		{
-			get
-			{
-				return Start + TimeSpan.FromTicks(GenerationTimeWindow.Ticks * TopLevelGeneration);
-			}
-		}
-
-		public TimeSpan LatestGenerationElapsed
-		{
-			get
-			{
-				return Clock.Now - LatestGenerationStart;
-			}
-		}
-
-		public DateTime NextStepDeadline
-		{
-			get
-			{
-				var remainingRelative = 1.0 - Helper.Frac(SimulationTime.TotalSeconds / StepTimeWindow.TotalSeconds);
-				return Clock.Now + TimeSpan.FromTicks((long)( remainingRelative * StepTimeWindow.Ticks ));
-			}
-		}
-
-		/// <summary>
-		/// Determines the generation step.
-		/// 0 indicates the main processing step, >0 a recovery step.
-		/// Note that this index can exceed the configured number of recovery steps
-		/// if the simulation has reached the maximum generation
-		/// </summary>
-		public int LatestStepIndex
-		{
-			get
-			{
-				return LatestGenerationElapsed.FloorDiv(StepTimeWindow);
-			}
-		}
-
-	}
 
 
 
@@ -124,8 +33,6 @@ namespace Shard
 
 		public static Neighborhood Neighbors { get { return neighbors; } }
 
-
-		public static ClientMessageQueue ClientMessageQueue { get; private set; } = new ClientMessageQueue();
 
 
 		public static void AdvertiseOldestGeneration(int gen)
@@ -223,7 +130,7 @@ namespace Shard
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
-			Consensus.Access.Begin(myID, listener.Port);
+			Consensus.Interface.Begin(myID, listener.Port);
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);
@@ -408,28 +315,7 @@ namespace Shard
 
 
 
-		/// <summary>
-		/// Relays an incoming user message to all known siblings
-		/// </summary>
-		/// <returns>Number of siblings that must relay this message to the local shard</returns>
-		public static int RelayMessageToSiblings(ClientMessage msg)
-		{
-			if (siblings == null || siblings.Count == 0)
-				return 0;
-
-			int rs = 0;
-			foreach (var s in siblings)
-			{
-				if (s.ShouldBeConnected)
-				{
-					if (!s.IsResponsive)
-						return -1;
-					s.Set(msg.ID.ToString(),msg);
-				}
-			}
-			return rs;
-		}
-
+	
 		public struct RecoveryCheck
 		{
 			public int missingRCS,

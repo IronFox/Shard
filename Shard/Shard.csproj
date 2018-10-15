@@ -178,10 +178,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ByteBuffer.cs" />
+    <Compile Include="Connectors\InteractionLink.cs" />
     <Compile Include="Connectors\ObservationLink.cs" />
     <Compile Include="DB\SerialCSLogicProvider.cs" />
-    <Compile Include="Entity\ClientMessageQueue.cs" />
-    <Compile Include="Connectors\InteractionLink.cs" />
     <Compile Include="Deque.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="IntermediateSDS.cs" />

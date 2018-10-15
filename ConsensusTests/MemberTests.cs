@@ -27,7 +27,7 @@ namespace Consensus.Tests
 
 		private class Cluster : IDisposable
 		{
-			private readonly Member[] members;
+			private readonly Node[] members;
 			private readonly Configuration cfg;
 
 			public int LeaderIndex
@@ -55,9 +55,9 @@ namespace Consensus.Tests
 				for (int i = 0; i < size; i++)
 					addresses[i] = new Address(basePort + i);
 				cfg = new Configuration(addresses);
-				members = new Member[size];
+				members = new Node[size];
 				for (int i = 0; i < size; i++)
-					members[i] = new Member(cfg, i);
+					members[i] = new Node(cfg, i);
 			}
 
 			public bool AwaitInterconnected()
@@ -93,7 +93,7 @@ namespace Consensus.Tests
 						break;
 					}
 					else
-						Assert.AreEqual(Member.State.Follower, members[i].CurrentState);	//should be a follower now
+						Assert.AreEqual(Node.State.Follower, members[i].CurrentState);	//should be a follower now
 				return leader;
 			}
 
@@ -113,7 +113,7 @@ namespace Consensus.Tests
 						Assert.IsFalse(members[i].IsDisposed);
 						Assert.IsFalse(members[i].IsFullyConnected, "[" + i + "]L" + idx);
 					}
-				members[idx] = new Member(cfg, idx);
+				members[idx] = new Node(cfg, idx);
 			}
 
 			internal void Attach<T>() where T: new()
@@ -132,7 +132,7 @@ namespace Consensus.Tests
 				members[memberIndex].Commit(comm);
 			}
 
-			internal void ForeachMember(Action<Member> action)
+			internal void ForeachMember(Action<Node> action)
 			{
 				for (int i = 0; i < members.Length; i++)
 					action(members[i]);
@@ -143,7 +143,7 @@ namespace Consensus.Tests
 		{
 			public readonly ConcurrentQueue<int> Received = new ConcurrentQueue<int>();
 
-			internal void AssertIsComplete(Member hub, int range)
+			internal void AssertIsComplete(Node hub, int range)
 			{
 				for (int i = 0; i < range; i++)
 				{
@@ -162,7 +162,7 @@ namespace Consensus.Tests
 			{
 				Index = index;
 			}
-			public void Commit(Member hub)
+			public void Commit(Node hub)
 			{
 				TestAttachment attach = (TestAttachment)hub.Attachment;
 				attach.Received.Enqueue(Index);

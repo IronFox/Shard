@@ -36,7 +36,7 @@ namespace Consensus
 
 		private volatile bool closing = false;
 		private Thread readThread;
-		protected readonly Member owner;
+		protected readonly Node owner;
 		protected BinaryFormatter formatter = new BinaryFormatter();
 
 		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
@@ -53,19 +53,19 @@ namespace Consensus
 
 		public long LastIncoming { get; private set; }
 
-		public bool IsAlive => IsConnected && (Member.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
+		public bool IsAlive => IsConnected && (Node.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
 
-		public Connection(Member owner, Address addr, TcpClient client) : base(owner, null)
+		public Connection(Node owner, Address addr, TcpClient client) : base(owner, null)
 		{
 			this.owner = owner;
 			Address = () => addr;
 			Assign(client,null);
-			LastIncoming = Member.GetNanoTime();
+			LastIncoming = Node.GetNanoTime();
 		}
-		public Connection(Member owner, Func<Address> addr) : base(owner, addr)
+		public Connection(Node owner, Func<Address> addr) : base(owner, addr)
 		{
 			this.owner = owner;
-			LastIncoming = Member.GetNanoTime();
+			LastIncoming = Node.GetNanoTime();
 		}
 
 		public delegate void Event(ActiveConnection connection);
@@ -171,7 +171,7 @@ namespace Consensus
 							{
 								//LogEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
-								LastIncoming = Member.GetNanoTime();
+								LastIncoming = Node.GetNanoTime();
 							}
 							catch (Exception ex)
 							{
@@ -292,7 +292,7 @@ namespace Consensus
 	{
 		public readonly int MemberIndex;
 
-		public ActiveConnection(Member owner, Func<Address> addr, int idx) : base(owner, addr)
+		public ActiveConnection(Node owner, Func<Address> addr, int idx) : base(owner, addr)
 		{
 			MemberIndex = idx;
 			Connect();

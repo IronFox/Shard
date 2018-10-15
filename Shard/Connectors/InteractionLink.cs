@@ -224,23 +224,15 @@ namespace Shard
 								int msgChannel = reader.NextInt();
 								byte[] data = reader.NextBytes();
 
-								int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
+								//int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
 								if (!guids.Contains(from))
 									Error("Not registered as " + from + ". Ignoring message");
 								else
 								{
-									int gen = Simulation.Stack.NewestFinishedSDSGeneration;
-									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), new ClientMessageBody(data,gen,targetGen, Simulation.ID.ReplicaLevel,false));
+									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
+									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
 
-									int expectConfirmations = Simulation.RelayMessageToSiblings(msg);
-									if (expectConfirmations < 0)
-										SignalDeliveryFailure(msg.ID.MessageID, "Sibling(s) currently not responsive. Try again later");
-									else
-									{
-										Simulation.ClientMessageQueue.HandleIncomingMessage(msg, expectConfirmations);
-										orderIndex++;
-										OnMessage?.Invoke(from, to, data);
-									}
+									Consensus.Interface.Commit(new CommitMessage(msg));
 								}
 								break;
 

@@ -8,6 +8,7 @@ using VectorMath;
 
 namespace Shard
 {
+
 	public class SDSComputation
 	{
 		//private SDS output;
@@ -31,7 +32,7 @@ namespace Shard
 
 		private readonly EntityChange.ExecutionContext ctx;
 
-		public SDSComputation(DateTime stepDeadline, ClientMessageQueue freshClientMessages, TimeSpan entityLogicTimeout, EntityChange.ExecutionContext ctx)
+		public SDSComputation(DateTime stepDeadline, MessagePack freshClientMessages, TimeSpan entityLogicTimeout, EntityChange.ExecutionContext ctx)
 		{
 			this.ctx = ctx;
 			generation = ctx.GenerationNumber;
@@ -53,10 +54,32 @@ namespace Shard
 			data.inputConsistent = input.IsFullyConsistent;
 			data.inputHash = input.SDS.HashDigest;
 
-			tagAllInconsistent = false;
-			clientMessages = old.SDS?.ClientMessages;
 
-			freshClientMessages?.Collect(ref clientMessages, out tagAllInconsistent, generation, ctx.ReplicaCount);
+			bool oldClientMessagesComplete = old.SDS != null && !old.SDS.IC.IsCompletelyInconsistent;
+			if (!oldClientMessagesComplete)
+			{
+				//old bad or dont exist, new maybe good
+				clientMessages = freshClientMessages.Messages;
+				tagAllInconsistent = !freshClientMessages.IsComplete;
+			}
+			else
+			{
+				if (freshClientMessages.IsComplete)
+				{
+					//old good
+					if (!Helper.AreEqual(freshClientMessages.Messages, old.SDS.ClientMessages))
+						throw new IntegrityViolation("Mismatch of existing and recorded consistent client messages");	//check this
+				}
+				else
+				{
+					//old good, new not good or not there.
+					//nothing to check. don't care, have everything
+				}
+				clientMessages = old.SDS.ClientMessages;
+				tagAllInconsistent = false;
+				//nothing to complain
+			}
+
 			if (clientMessages == null && old.SDS != null) //nothing new, check locally archived...
 			{
 				clientMessages = old.SDS.ClientMessages;
