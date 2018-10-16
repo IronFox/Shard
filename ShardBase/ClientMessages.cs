@@ -145,17 +145,58 @@ namespace Shard
 		}
 	};
 
+	[Serializable]
 	public struct MessagePack
 	{
+		/// <summary>
+		/// Messages received from a client to be dispatched to one or all entities.
+		/// The key equals the targeted entity Guid or Guid.Empty if the message should be broadcast to all entities.
+		/// </summary>
 		public readonly Dictionary<Guid, ClientMessage[]> Messages;
-		public readonly bool IsComplete;
+		public readonly bool Completed;
 
 		public MessagePack(Dictionary<Guid, ClientMessage[]> msg, bool complete)
 		{
 			Messages = msg;
-			IsComplete = complete;
+			Completed = complete;
 			if (complete && msg == null)
 				throw new ArgumentNullException("msg");
+		}
+		public static bool operator !=(MessagePack a, MessagePack b) => !(a == b);
+		public static bool operator==(MessagePack a, MessagePack b) => a.Completed == b.Completed && Helper.AreEqual(a.Messages, b.Messages);
+
+		public override bool Equals(object obj)
+		{
+			if (!(obj is MessagePack))
+			{
+				return false;
+			}
+			return this == (MessagePack)obj;
+		}
+
+		public override int GetHashCode()
+		{
+			var hashCode = 1800494447;
+			hashCode = hashCode * -1521134295 + EqualityComparer<Dictionary<Guid, ClientMessage[]>>.Default.GetHashCode(Messages);
+			hashCode = hashCode * -1521134295 + Completed.GetHashCode();
+			return hashCode;
+		}
+	}
+
+	public struct ExtMessagePack
+	{
+		public readonly MessagePack MessagePack;
+		public readonly bool HasBeenDiscarded;
+
+		public ExtMessagePack(MessagePack pack)
+		{
+			MessagePack = pack;
+			HasBeenDiscarded = false;
+		}
+
+		public ExtMessagePack(bool v) : this()
+		{
+			HasBeenDiscarded = v;
 		}
 	}
 

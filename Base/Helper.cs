@@ -14,6 +14,15 @@ namespace Base
 {
 	public static class Helper
 	{
+
+		public static DateTime Min(DateTime a, DateTime b)
+		{
+			return a < b ? a : b;
+		}
+		public static DateTime Max(DateTime a, DateTime b)
+		{
+			return a > b ? a : b;
+		}
 		public static float Max(float a, float b, float c)
 		{
 			return Math.Max(Math.Max(a, b), c);

@@ -14,10 +14,9 @@ namespace Shard
 		//private SDS output;
 		IntermediateSDS data;
 		int generation;
-		bool tagAllInconsistent;
 		SDSStack.Entry old;
 		List<EntityError> errors;
-		Dictionary<Guid, ClientMessage[]> clientMessages;
+		MessagePack clientMessages;
 
 		public List<EntityError> Errors { get { return errors; } }
 
@@ -25,18 +24,18 @@ namespace Shard
 		public int Generation { get { return generation; } }
 
 		/// <summary>
-		/// Time at which this computation will be completed.
+		/// Time at which this computation and synchronization are complete and application should commence.
 		/// Ignored during tests
 		/// </summary>
 		public readonly DateTime Deadline;
 
 		private readonly EntityChange.ExecutionContext ctx;
 
-		public SDSComputation(DateTime stepDeadline, MessagePack freshClientMessages, TimeSpan entityLogicTimeout, EntityChange.ExecutionContext ctx)
+		public SDSComputation(DateTime applicationBeginDeadline, ExtMessagePack freshClientMessages, TimeSpan entityLogicTimeout, EntityChange.ExecutionContext ctx)
 		{
 			this.ctx = ctx;
 			generation = ctx.GenerationNumber;
-			Deadline = stepDeadline;
+			Deadline = applicationBeginDeadline;
 			SDSStack stack = Simulation.Stack;
 			SDSStack.Entry input = stack.FindGeneration(generation - 1);
 			if (input == null)
@@ -55,19 +54,20 @@ namespace Shard
 			data.inputHash = input.SDS.HashDigest;
 
 
-			bool oldClientMessagesComplete = old.SDS != null && !old.SDS.IC.IsCompletelyInconsistent;
+			bool oldClientMessagesComplete = old.SDS != null && old.SDS.ClientMessages.Completed;
 			if (!oldClientMessagesComplete)
 			{
 				//old bad or dont exist, new maybe good
-				clientMessages = freshClientMessages.Messages;
-				tagAllInconsistent = !freshClientMessages.IsComplete;
+				if (freshClientMessages.HasBeenDiscarded)
+					throw new IntegrityViolation("Available client messages are incomplete but recorded messages have been discarded");
+				clientMessages = freshClientMessages.MessagePack;
 			}
 			else
 			{
-				if (freshClientMessages.IsComplete)
+				if (freshClientMessages.MessagePack.Completed)
 				{
 					//old good
-					if (!Helper.AreEqual(freshClientMessages.Messages, old.SDS.ClientMessages))
+					if (freshClientMessages.MessagePack != old.SDS.ClientMessages)
 						throw new IntegrityViolation("Mismatch of existing and recorded consistent client messages");	//check this
 				}
 				else
@@ -76,7 +76,6 @@ namespace Shard
 					//nothing to check. don't care, have everything
 				}
 				clientMessages = old.SDS.ClientMessages;
-				tagAllInconsistent = false;
 				//nothing to complain
 			}
 
@@ -98,10 +97,10 @@ namespace Shard
 			data.entities = new EntityPool(input.SDS.FinalEntities, ctx);
 			data.localChangeSet = new EntityChangeSet();
 			data.ic = input.SDS.IC.Clone();
-			if (tagAllInconsistent)
+			if (!clientMessages.Completed)
 				data.ic.SetAllOne();
 			//bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
-			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, clientMessages, data.ic, entityLogicTimeout,ctx);
+			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, clientMessages.Messages, data.ic, entityLogicTimeout,ctx);
 			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
 				throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");
 
@@ -158,7 +157,7 @@ namespace Shard
 			EntityPool p2 = data.entities.Clone();
 			cs.Execute(p2,ic,ctx);
 
-			SDS rs = new SDS(generation, p2.ToArray(), ic, tagAllInconsistent, clientMessages);
+			SDS rs = new SDS(generation, p2.ToArray(), ic, clientMessages);
 
 #if !DRY_RUN
 			if (!ic.AnySet)

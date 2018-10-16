@@ -65,16 +65,7 @@ namespace Shard
 		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
 		public readonly InconsistencyCoverage IC;
-		/// <summary>
-		/// Messages received from a client to be dispatched to one or all entities.
-		/// The key equals the targeted entity Guid or Guid.Empty if the message should be broadcast to all entities.
-		/// </summary>
-		public readonly Dictionary<Guid, ClientMessage[]> ClientMessages;
-		/// <summary>
-		/// Indicates that at least one client message was not properly received,
-		/// and the entire IC should be tagged inconsistent when revisited
-		/// </summary>
-		public readonly bool MessagesInconsistent;
+		public readonly MessagePack ClientMessages;
 
 
 
@@ -83,12 +74,11 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, bool messagesInconsistent, Dictionary<Guid, ClientMessage[]> clientMessages)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, MessagePack clientMessages)
 		{
 			Generation = generation;
 			FinalEntities = entities;
 			IC = ic;
-			MessagesInconsistent = messagesInconsistent;
 			ClientMessages = clientMessages;
 		}
 
@@ -107,7 +97,6 @@ namespace Shard
 				using (var ms = new MemoryStream())
 				{
 					f.Serialize(ms, IsFullyConsistent);
-					f.Serialize(ms, MessagesInconsistent);
 					f.Serialize(ms, Generation);
 					f.Serialize(ms, FinalEntities);
 					f.Serialize(ms, IC);
@@ -460,16 +449,16 @@ namespace Shard
 					MergeInconsistentEntitiesEx(pool, exclusiveSource, strategy == MergeStrategy.ExclusiveWithPositionCorrection,merged, ctx);
 			}
 
-			if (MessagesInconsistent == other.MessagesInconsistent)
+			if (ClientMessages.Completed == other.ClientMessages.Completed)
 			{
 				var dict = new Dictionary<Guid, ActorMessages>();
 
-				foreach (var tuple in ClientMessages)
+				foreach (var tuple in ClientMessages.Messages)
 				{
 					foreach (var msg in tuple.Value)
 						dict.GetOrCreate(msg.ID.From).AddA(tuple.Key, msg);
 				}
-				foreach (var tuple in other.ClientMessages)
+				foreach (var tuple in other.ClientMessages.Messages)
 				{
 					foreach (var msg in tuple.Value)
 						dict.GetOrCreate(msg.ID.From).AddB(tuple.Key, msg);
@@ -491,12 +480,12 @@ namespace Shard
 				}
 
 
-				return new SDS(Generation, pool.ToArray(), merged, MessagesInconsistent, finalMessages);
+				return new SDS(Generation, pool.ToArray(), merged, new MessagePack(finalMessages,ClientMessages.Completed));
 			}
 			else
 			{
-				var messages = MessagesInconsistent ? other.ClientMessages : ClientMessages;
-				return new SDS(Generation, pool.ToArray(), merged,false, messages);
+				var messages = other.ClientMessages.Completed ? other.ClientMessages : ClientMessages;
+				return new SDS(Generation, pool.ToArray(), merged,messages);
 			}
 
 		}
@@ -507,7 +496,7 @@ namespace Shard
 		{
 			return IC.Equals(other.IC) 
 				&& Helper.AreEqual(FinalEntities, other.FinalEntities) 
-				&& Helper.AreEqual(ClientMessages, other.ClientMessages);
+				&& ClientMessages == other.ClientMessages;
 		}
 
 	}

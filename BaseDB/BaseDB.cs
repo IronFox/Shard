@@ -677,9 +677,9 @@ namespace Shard
 
 		public class TimingContainer : Entity
 		{
-			public int msStep = 1000;   //total milliseconds per step, where (1+recoverySteps) steps comprise a top level generation
+			public int msGenerationBudget = 3000;   //total milliseconds per generation, split among (1+recoverySteps) steps
 			public int msComputation = 500; //total milliseconds per step dedicated to computation. Must be less than msStep. Any extra time is used for communication
-			public int msMessageProcessing = 100;   //time allocated for message dispatch across all siblings
+			public int msApplication = 400;   //time allocated for CS application
 			public string startTime = DateTime.Now.ToString();  //starting time of the computation of generation #0
 			public int recoverySteps = 2;  //number of steps per generation dedicated to recovery. The total number of steps per top level generation equals 1+recoverySteps
 			public int maxGeneration = -1;  //maximum top level generation. Negative when disabled

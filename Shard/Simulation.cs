@@ -124,9 +124,19 @@ namespace Shard
 			{ }
 		}
 
-		
+		private static bool Complete(SDSComputation comp, TimingInfo timing, bool force)
+		{
+			if (Clock.Now >= comp.Deadline || force)
+			{
+				stack.Insert(comp.Complete());
+				comp = null;
+				return true;
+			}
+			return false;
+		}
 
-		public static void Run(ShardID myID)
+
+	public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
@@ -182,65 +192,66 @@ namespace Shard
 				//Log.Message("Catching up to g" + TimingInfo.Current.TopLevelGeneration);
 				Console.Write(".");
 				Console.Out.Flush();
-				int nextGen = stack.NewestFinishedSDSGeneration + 1;
+				int currentGen = stack.NewestFinishedSDSGeneration;
+				int nextGen = currentGen + 1;
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
-				stack.Insert(new SDSComputation(Clock.Now,ClientMessageQueue, TimingInfo.Current.StepComputationTimeWindow,ctx).Complete());
+				stack.Insert(new SDSComputation(Clock.Now,Consensus.Interface.QueryMessages(currentGen), TimingInfo.Current.EntityEvaluationTimeWindow,ctx).Complete());
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
-
-				ClientMessageQueue.Trim(stack.NewestFinishedSDSGeneration - 2, stack.NewestConsistentSDSGeneration + 1);
-
 			}
 			Log.Message("done. Starting main loop...");
 
 
-			SDSComputation comp = null;
+			SDSComputation mainComputation = null, recoveryComputation = null; //main computation plus one recovery computation max
 
 			while (true)
 			{
 				var timing = TimingInfo.Current;
 				CheckIncoming(timing.TopLevelGeneration,ctx);
-				Log.Minor("TLG "+stack.NewestFinishedSDSGeneration + "/"+timing.TopLevelGeneration+" @stepIndex "+timing.LatestStepIndex);
+				Log.Minor("TLG "+stack.NewestFinishedSDSGeneration + "/"+timing.TopLevelGeneration+" @recoveryStepIndex "+timing.LatestRecoveryStepIndex);
 				{
 					var newest = stack.NewestFinishedSDS;
 					string title  = ID+" g" + newest.Generation + " " + (float)(newest.IC.Size.Product - newest.IC.OneCount)*100/ newest.IC.Size.Product+"% consistent";
 					var con = stack.NewestConsistentSDS;
 					if (con != newest)
 						title += ", newest consistent at g" + con.Generation;
-					title += ", " + timing.LatestStepIndex;
+					title += ", rec " + timing.LatestRecoveryStepIndex;
 					UpdateTitle(title);
 				}
 
 				int newestSDSGeneration = stack.NewestFinishedSDSGeneration;
-				if (comp == null)
+				if (mainComputation == null)
 				{
 					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
 					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
 				}
-				if (comp != null)
+				if (recoveryComputation != null && Complete(recoveryComputation,timing, timing.TopLevelGeneration != newestSDSGeneration))
+					recoveryComputation = null;
+				if (mainComputation != null && Complete(mainComputation, timing, timing.TopLevelGeneration != newestSDSGeneration && timing.TopLevelGeneration > mainComputation.Generation))
 				{
-					if (Clock.Now >= comp.Deadline || (timing.TopLevelGeneration != newestSDSGeneration && timing.TopLevelGeneration > comp.Generation))
-					{
-						stack.Insert(comp.Complete());
-						ClientMessageQueue.Trim(stack.NewestFinishedSDSGeneration - 2, stack.NewestConsistentSDSGeneration + 1);
-						comp = null;
-						newestSDSGeneration = stack.NewestFinishedSDSGeneration;
-						Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
-						Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
-						Debug.Assert(stack.NewestConsistentSDSIndex != -1);
-					}
-					else
-					{
-						if (timing.TopLevelGeneration == newestSDSGeneration)
-							Clock.SleepUntil(comp.Deadline);
-						continue;
-					}
+					mainComputation = null;
+					newestSDSGeneration = stack.NewestFinishedSDSGeneration;
+					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
+					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
+					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
 				}
 
-				if (timing.TopLevelGeneration > newestSDSGeneration)
+				if (recoveryComputation != null && mainComputation != null)
+					Clock.SleepUntil(Helper.Min(recoveryComputation.Deadline, mainComputation.Deadline));
+				else
+					if (recoveryComputation != null)
+						Clock.SleepUntil(recoveryComputation.Deadline);
+				else
+					if (mainComputation != null)
+						Clock.SleepUntil(mainComputation.Deadline);
+
+				if (recoveryComputation != null)	//recovery computations are analogue to main computation, so main computation will not be done. but recovery must be
+					continue;
+
+				if (mainComputation == null && timing.TopLevelGeneration > newestSDSGeneration)
 				{
 					//fast forward: process now. don't care if we're at the beginning
 					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
@@ -250,10 +261,11 @@ namespace Shard
 					Log.Minor("Processing next TLG g" + nextGen);
 					stack.Insert(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
-					Debug.Assert(comp == null);
-					comp = new SDSComputation(timing.NextStepDeadline , ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
+					Debug.Assert(mainComputation == null);
+					mainComputation = new SDSComputation(timing.NextGenerationDeadline - timing.CSApplicationTimeWindow, Consensus.Interface.QueryMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
 				}
-				else
+				
+				if (timing.ShouldStartRecovery)
 				{
 					//see if we can recover something
 					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;	//must be > 0
@@ -277,40 +289,14 @@ namespace Shard
 							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
-							Debug.Assert(comp == null);
-							comp = new SDSComputation(timing.NextStepDeadline, ClientMessageQueue, timing.StepComputationTimeWindow,ctx);
+							recoveryComputation = new SDSComputation(timing.NextRecoveryStepDeadline, Consensus.Interface.QueryMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}
-					if (comp == null && timing.TopLevelGeneration == newestSDSGeneration)
-					{
-						//nothing to recover
-						Log.Minor("Nothing to do");
-						Clock.SleepUntil(timing.NextStepDeadline);
-					}
 				}
 			}
 
 
-		}
-
-		public static int EstimateNextSuitableMessageTargetGeneration()
-		{
-			int step = 1;
-			var t0 = BaseDB.Timing;
-			if (t0 != null)
-			{
-				var t = new TimingInfo(t0);
-				var remainingWindow = t.StepTimeWindow - t.LatestGenerationElapsed;
-				var deliveryTimeEstimate = t.MessageProcessingTimeWindow;
-				var at = t.LatestGenerationElapsed + deliveryTimeEstimate;
-				while (at > t.StepTimeWindow)
-				{
-					at -= t.StepTimeWindow;
-					step++;
-				}
-			}
-			return stack.NewestRegisteredSDSGeneration + step;
 		}
 
 
@@ -403,8 +389,6 @@ namespace Shard
 			if (ext.ReplicaLevel > 1)
 				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel, forceAllLinksPassive);
 			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ, forceAllLinksPassive);
-
-			ClientMessageQueue = new ClientMessageQueue();
 		}
 
 		public static bool Owns(Vec3 position)
@@ -465,8 +449,7 @@ namespace Shard
 
 				if (obj is ClientMessage)
 				{
-					var msg = (ClientMessage)obj;
-					ClientMessageQueue.Confirm(msg);
+					Log.Error("Received client message via peer socket");
 					return;
 				}
 
@@ -492,9 +475,6 @@ namespace Shard
 							RCS.Serial rcs = o as RCS.Serial;
 							if (rcs != null)
 								return rcs.Generation >= gen;
-							ClientMessage msg = o as ClientMessage;
-							if (msg != null)
-								return msg.Body.RecordedTLG + 2 >= gen;
 							return true;
 						});
 						if (siblings.AllResponsive && siblings.OldestGeneration >= gen)

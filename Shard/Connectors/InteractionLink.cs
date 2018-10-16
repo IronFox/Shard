@@ -232,7 +232,7 @@ namespace Shard
 									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
 									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
 
-									Consensus.Interface.Commit(new CommitMessage(msg));
+									Consensus.Interface.Dispatch(msg);
 								}
 								break;
 

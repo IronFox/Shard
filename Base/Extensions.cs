@@ -224,10 +224,11 @@ namespace Base
 				throw new IntegrityViolation("Unable to remove '" + key + "' from dictionary");
 		}
 
-		public static void ForceRemove<K,V>(this ConcurrentDictionary<K,V> dict, K key)
+		public static V ForceRemove<K,V>(this ConcurrentDictionary<K,V> dict, K key)
 		{
 			V temp;
 			ForceRemove(dict, key, out temp);
+			return temp;
 		}
 		public static void ForceAdd<K, V>(this ConcurrentDictionary<K, V> dict, K key, V value)
 		{
@@ -237,6 +238,10 @@ namespace Base
 
 
 
+		public static TimeSpan Times(this TimeSpan t, int multiplier)
+		{
+			return TimeSpan.FromTicks(t.Ticks * multiplier);
+		}
 
 		public static void Read(this NetworkStream source, byte[] data, int bytes)
 		{

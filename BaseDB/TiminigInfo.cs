@@ -9,22 +9,49 @@ namespace Shard
 {
 	public struct TimingInfo
 	{
-		public readonly int StepsPerGeneration, StartGeneration, MaxGeneration;
-		public readonly TimeSpan
-							GenerationTimeWindow,
-							StepTimeWindow,
-							MessageProcessingTimeWindow,
-							StepComputationTimeWindow;
-		public readonly DateTime
-							Start;
+		/// <summary>
+		/// Total steps (main+N*recovery) per generation
+		/// The first step is the main progression which evaluates before all recovery steps but applies after
+		/// </summary>
+		public readonly int RecoveryStepsPerGeneration;
+		/// <summary>
+		/// First simulation generation. Typically 0
+		/// </summary>
+		public readonly int StartGeneration;
+		/// <summary>
+		/// Last generation allowing the simulation to halt. Due to latency not guaranteed to be applied immediately. Usually -1 (no limit)
+		/// </summary>
+		public readonly int MaxGeneration;
+
+		/// <summary>
+		/// Time budge per generation, including recovery
+		/// </summary>
+		public readonly TimeSpan GenerationTimeWindow;
+		/// <summary>
+		/// Time budget per recovery step
+		/// </summary>
+		public readonly TimeSpan RecoveryStepTimeWindow;
+		/// <summary>
+		/// Time budget for change set application
+		/// </summary>
+		public readonly TimeSpan CSApplicationTimeWindow;
+		/// <summary>
+		/// Time budget for entity evaluation
+		/// </summary>
+		public readonly TimeSpan EntityEvaluationTimeWindow;
+		/// <summary>
+		/// Simulation start time. When starting the simulation, this value should be set sufficiently into the future such that its value can propagate before it is reached
+		/// </summary>
+		public readonly DateTime Start;
+
 
 		public TimingInfo(BaseDB.TimingContainer t)
 		{
-			StepsPerGeneration = 1 + t.recoverySteps;
-			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msStep * StepsPerGeneration);
-			StepTimeWindow = TimeSpan.FromMilliseconds(t.msStep);
-			StepComputationTimeWindow = TimeSpan.FromMilliseconds(t.msComputation);
-			MessageProcessingTimeWindow = TimeSpan.FromMilliseconds(t.msMessageProcessing);
+			RecoveryStepsPerGeneration = t.recoverySteps;
+			GenerationTimeWindow = TimeSpan.FromMilliseconds(t.msGenerationBudget);
+			RecoveryStepTimeWindow = TimeSpan.FromMilliseconds(t.msGenerationBudget / (1 + t.recoverySteps));
+			EntityEvaluationTimeWindow = TimeSpan.FromMilliseconds(t.msComputation);
+			CSApplicationTimeWindow = TimeSpan.FromMilliseconds(t.msApplication);
 
 			Start = Convert.ToDateTime(t.startTime);
 			StartGeneration = t.startGeneration;
@@ -50,6 +77,12 @@ namespace Shard
 			}
 		}
 
+		public DateTime GetGenerationStart(int gen)
+		{
+			gen -= StartGeneration;
+			return Start + TimeSpan.FromTicks(GenerationTimeWindow.Ticks * gen);
+		}
+
 		public TimeSpan SimulationTime
 		{
 			get
@@ -62,7 +95,7 @@ namespace Shard
 		{
 			get
 			{
-				return Start + TimeSpan.FromTicks(GenerationTimeWindow.Ticks * TopLevelGeneration);
+				return Start + GenerationTimeWindow.Times(TopLevelGeneration);
 			}
 		}
 
@@ -78,8 +111,7 @@ namespace Shard
 		{
 			get
 			{
-				var remainingRelative = 1.0 - Helper.Frac(SimulationTime.TotalSeconds / GenerationTimeWindow.TotalSeconds);
-				return TimeSpan.FromTicks((long)(remainingRelative * GenerationTimeWindow.Ticks));
+				return NextGenerationDeadline - LatestGenerationStart;
 			}
 		}
 
@@ -87,33 +119,48 @@ namespace Shard
 		{
 			get
 			{
-				
-				return Clock.Now + TimeToGenerationDeadline;
+				return Start + GenerationTimeWindow.Times(TopLevelGeneration + 1);
 			}
 		}
-		public DateTime NextStepDeadline
+		public DateTime NextRecoveryStepDeadline
 		{
 			get
 			{
-				var remainingRelative = 1.0 - Helper.Frac(SimulationTime.TotalSeconds / StepTimeWindow.TotalSeconds);
-				return Clock.Now + TimeSpan.FromTicks((long)(remainingRelative * StepTimeWindow.Ticks));
+				return LatestGenerationStart + RecoveryStepTimeWindow.Times(LatestRecoveryStepIndex + 1);
 			}
 		}
-
+		public DateTime NextRecoveryApplicationDeadline
+		{
+			get
+			{
+				return LatestGenerationStart + RecoveryStepTimeWindow.Times(LatestRecoveryStepIndex + 1) - CSApplicationTimeWindow;
+			}
+		}
 		/// <summary>
 		/// Determines the generation step.
-		/// 0 indicates the main processing step, >0 a recovery step.
-		/// Note that this index can exceed the configured number of recovery steps
-		/// if the simulation has reached the maximum generation
+		/// 0 indicates the main processing step, RecoverySteps> x >0 a recovery step.
+		/// Note that this index can exceed the configured number of recovery steps when entering the final application phase
+		/// or if the simulation has reached the maximum generation
 		/// </summary>
-		public int LatestStepIndex
+		public int LatestRecoveryStepIndex
 		{
 			get
 			{
-				return LatestGenerationElapsed.FloorDiv(StepTimeWindow);
+				var recoveryElapsed = LatestGenerationElapsed - EntityEvaluationTimeWindow;
+				return (int)Math.Floor(recoveryElapsed.TotalSeconds / RecoveryStepTimeWindow.TotalSeconds) + 1;
 			}
 		}
-
+		/// <summary>
+		/// Detects whether or not a recovery operation should be initiated right now if not found active
+		/// </summary>
+		public bool ShouldStartRecovery
+		{
+			get
+			{
+				var s = LatestRecoveryStepIndex;
+				return s > 0 && s <= RecoveryStepsPerGeneration;
+			}
+		}
 	}
 
 }
