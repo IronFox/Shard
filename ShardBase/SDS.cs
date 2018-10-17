@@ -21,35 +21,43 @@ namespace Shard
 		[Serializable]
 		public struct ID
 		{
-			public readonly Int3 shardID;
-			public readonly int generation;
+			public readonly Int3 ShardID;
+			public readonly int Generation;
 
+
+			public int[] IntArray=>new int[]{ShardID.X,ShardID.Y,ShardID.Z,Generation };
+			
+			public ID(int[] array, int offset)
+			{
+				ShardID = new Int3(array, offset);
+				Generation = array[offset + 3];
+			}
 			public ID(Int3 shardID, int generation)
 			{
-				this.shardID = shardID;
-				this.generation = generation;
+				this.ShardID = shardID;
+				this.Generation = generation;
 			}
 
 			public override string ToString()
 			{
-				return shardID + "g" + generation;
+				return ShardID + "g" + Generation;
 			}
 			public string P2PKey
 			{
 				get
 				{
-					return shardID.Encoded + "g" + generation;
+					return ShardID.Encoded + "g" + Generation;
 				}
 			}
 
 			public override int GetHashCode()
 			{
-				return shardID.GetHashCode() * 31 + generation.GetHashCode();
+				return ShardID.GetHashCode() * 31 + Generation.GetHashCode();
 			}
 
 			public static bool operator ==(ID a, ID b)
 			{
-				return a.shardID == b.shardID && a.generation == b.generation;
+				return a.ShardID == b.ShardID && a.Generation == b.Generation;
 			}
 			public static bool operator !=(ID a, ID b)
 			{
@@ -65,7 +73,6 @@ namespace Shard
 		public readonly Entity[] FinalEntities;
 		public readonly int Generation;
 		public readonly InconsistencyCoverage IC;
-		public readonly MessagePack ClientMessages;
 
 
 
@@ -74,12 +81,11 @@ namespace Shard
 			Generation = generation;
 		}
 
-		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic, MessagePack clientMessages)
+		public SDS(int generation, Entity[] entities, InconsistencyCoverage ic)
 		{
 			Generation = generation;
 			FinalEntities = entities;
 			IC = ic;
-			ClientMessages = clientMessages;
 		}
 
 
@@ -100,8 +106,6 @@ namespace Shard
 					f.Serialize(ms, Generation);
 					f.Serialize(ms, FinalEntities);
 					f.Serialize(ms, IC);
-					if (ClientMessages != null)
-						f.Serialize(ms, ClientMessages);
 					ms.Seek(0, SeekOrigin.Begin);
 					return new Digest(SHA256.Create().ComputeHash(ms),true);
 				}
@@ -448,46 +452,7 @@ namespace Shard
 				else
 					MergeInconsistentEntitiesEx(pool, exclusiveSource, strategy == MergeStrategy.ExclusiveWithPositionCorrection,merged, ctx);
 			}
-
-			if (ClientMessages.Completed == other.ClientMessages.Completed)
-			{
-				var dict = new Dictionary<Guid, ActorMessages>();
-
-				foreach (var tuple in ClientMessages.Messages)
-				{
-					foreach (var msg in tuple.Value)
-						dict.GetOrCreate(msg.ID.From).AddA(tuple.Key, msg);
-				}
-				foreach (var tuple in other.ClientMessages.Messages)
-				{
-					foreach (var msg in tuple.Value)
-						dict.GetOrCreate(msg.ID.From).AddB(tuple.Key, msg);
-				}
-
-				var tempMessages = new Dictionary<Guid, List<ClientMessage>>();
-
-				foreach (var t in dict)
-				{
-					t.Value.MergeTo(tempMessages);
-				}
-
-				var finalMessages = new Dictionary<Guid, ClientMessage[]>();
-
-				foreach (var t in tempMessages)
-				{
-					t.Value.Sort();
-					finalMessages[t.Key] = t.Value.ToArray();
-				}
-
-
-				return new SDS(Generation, pool.ToArray(), merged, new MessagePack(finalMessages,ClientMessages.Completed));
-			}
-			else
-			{
-				var messages = other.ClientMessages.Completed ? other.ClientMessages : ClientMessages;
-				return new SDS(Generation, pool.ToArray(), merged,messages);
-			}
-
+			return new SDS(Generation,pool.ToArray(),merged);
 		}
 
 
@@ -496,7 +461,7 @@ namespace Shard
 		{
 			return IC.Equals(other.IC) 
 				&& Helper.AreEqual(FinalEntities, other.FinalEntities) 
-				&& ClientMessages == other.ClientMessages;
+				;
 		}
 
 	}

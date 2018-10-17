@@ -29,7 +29,9 @@ namespace Shard
 		private static ObservationLink.Listener observationListener;
 
 		private static SDSStack stack = new SDSStack();
+		private static MessageHistory messages = new MessageHistory();
 
+		public static MessageHistory Messages => messages;
 
 		public static Neighborhood Neighbors { get { return neighbors; } }
 
@@ -47,6 +49,8 @@ namespace Shard
 			if (siblings.AllResponsive && siblings.OldestGeneration >= gen)
 				DB.RemoveInboundRCSsAsync(neighbors.Select(sibling => sibling.InboundRCSStackID),gen).Wait();
 
+			Consensus.TrimOut(gen - 1);
+			Messages.TrimGenerations(gen - 1);
 		}
 
 		public static Link FindLink(ShardID id)
@@ -128,19 +132,38 @@ namespace Shard
 		{
 			if (Clock.Now >= comp.Deadline || force)
 			{
-				stack.Insert(comp.Complete());
+				var rs = comp.Complete();
+				stack.Insert(rs);
+				if (rs.Item1.IsFullyConsistent)
+					DB.PutNow(new SerialSDS(rs.Item1, ID.XYZ),true);
 				comp = null;
 				return true;
 			}
 			return false;
 		}
 
+		private class DefaultNotify : Consensus.INotifiable
+		{
 
-	public static void Run(ShardID myID)
+			
+			public void OnMessageCommit(Address clientAddress, ClientMessage message)
+			{
+				Messages.Add(message);
+				if (!clientAddress.IsEmpty)
+					InteractionLink.OnMessageCommit(clientAddress, message.ID);
+			}
+
+			public void OnGenerationEnd(int generation)
+			{
+				Messages.EndGeneration(generation);
+			}
+		}
+
+		public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
-			Consensus.Interface.Begin(myID, listener.Port);
+			Consensus = new Consensus.Interface(myID, listener.Port, true,new DefaultNotify());
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);
@@ -155,9 +178,11 @@ namespace Shard
 			while (true)
 			{
 				var data = DB.Begin(myID.XYZ);
-				if (data != null)
+				if (data.Item2 != null)
+					Messages.Insert(data.Item2.Generation, data.Item2.Deserialize());
+				if (data.Item1 != null)
 				{
-					sds = data.Deserialize();
+					sds = data.Item1.Deserialize();
 					break;
 				}
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
@@ -165,6 +190,8 @@ namespace Shard
 				Console.Write('.');
 				Console.Out.Flush();
 			}
+			Consensus.ForwardMessageGeneration(sds.Generation + 1);
+			Messages.TrimGenerations(sds.Generation);
 			Log.Message(" done. Waiting for logic assemblies to finish loading...");
 
 			foreach (var e in sds.FinalEntities)
@@ -197,7 +224,7 @@ namespace Shard
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
-				stack.Insert(new SDSComputation(Clock.Now,Consensus.Interface.QueryMessages(currentGen), TimingInfo.Current.EntityEvaluationTimeWindow,ctx).Complete());
+				stack.Insert(new SDSComputation(Clock.Now,Messages.GetMessages(currentGen), TimingInfo.Current.EntityEvaluationTimeWindow,ctx).Complete());
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
 			}
@@ -262,7 +289,7 @@ namespace Shard
 					stack.Insert(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
 					Debug.Assert(mainComputation == null);
-					mainComputation = new SDSComputation(timing.NextGenerationDeadline - timing.CSApplicationTimeWindow, Consensus.Interface.QueryMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
+					mainComputation = new SDSComputation(timing.NextGenerationDeadline - timing.CSApplicationTimeWindow, Messages.GetMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
 				}
 				
 				if (timing.ShouldStartRecovery)
@@ -289,7 +316,7 @@ namespace Shard
 							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
-							recoveryComputation = new SDSComputation(timing.NextRecoveryStepDeadline, Consensus.Interface.QueryMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
+							recoveryComputation = new SDSComputation(timing.NextRecoveryStepDeadline, Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}
@@ -422,12 +449,15 @@ namespace Shard
 			}
 		}
 
-
-
-
+		public static Consensus.Interface Consensus { get; private set; }
 
 		internal static void FetchIncoming(Link lnk, object obj)
 		{
+			if (obj is SerialCCS)
+			{
+				var c = (SerialCCS)obj;
+				obj = new Tuple<int, MessagePack>(c.Generation, (MessagePack)Helper.Deserialize(c.Data));
+			}
 			if (obj is RCS.Serial)
 			{
 				//Stopwatch w = Stopwatch.StartNew();
@@ -541,6 +571,18 @@ namespace Shard
 					return;
 				}
 
+				if (obj is Tuple<int, MessagePack>)
+				{
+					//Debug.Assert(HaveSibling(lnk));
+					var m = (Tuple<int, MessagePack>)obj;
+					if (m.Item1 <= stack.OldestSDSGeneration)
+					{
+						Log.Minor("CCS update from sibling or DB: Rejected. Already moved past generation " + m.Item1);
+						return;
+					}
+					Messages.Insert(m.Item1, m.Item2);
+					return;
+				}
 				Log.Error("Unsupported update from sibling " + lnk + ": " + obj.GetType());
 			}
 		}

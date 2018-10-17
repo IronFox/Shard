@@ -91,6 +91,7 @@ namespace Consensus
 
 
 		private Configuration config;
+		protected Configuration Configuration => config;
 		private int myIndex;
 		public int Index => myIndex;
 

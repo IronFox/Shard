@@ -149,12 +149,13 @@ namespace Shard
 
 
 		private static ContinuousPoller<SerialSDS> sdsPoller;
+		private static ContinuousPoller<SerialCCS> ccsPoller;
 
 
 		
 
 
-		public static SerialSDS Begin(Int3 myID)
+		public static Tuple<SerialSDS,SerialCCS> Begin(Int3 myID)
 		{
 			sdsPoller = new ContinuousPoller<SerialSDS>(null, (collection)=>
 			{
@@ -172,7 +173,6 @@ namespace Shard
 							throw new IntegrityViolation("SDS candidate at g=" + candidate.Generation + " mismatch with favorite at g="+latest.Generation);
 						var comp = new Helper.Comparator()
 							.Append(candidate.SerialEntities, latest.SerialEntities)
-							.Append(candidate.SerialMessages,latest.SerialMessages)
 							.Finish();
 						if (comp != 0)
 						{
@@ -188,7 +188,37 @@ namespace Shard
 			});
 			sdsPoller.Start(SDSStore, myID.Encoded);
 			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
-			return sdsPoller.Latest;
+
+
+			ccsPoller = new ContinuousPoller<SerialCCS>(null, (collection) =>
+			{
+				SerialCCS latest = null;
+				foreach (var candidate in collection)
+				{
+					if (latest == null || latest.Generation < candidate.Generation)
+						latest = candidate;
+					else if (latest.Generation == candidate.Generation)
+					{
+						//weird, but let's check
+						if (candidate.Generation != latest.Generation)
+							throw new IntegrityViolation("CCS candidate at g=" + candidate.Generation + " mismatch with favorite at g=" + latest.Generation);
+						var comp = new Helper.Comparator()
+							.Append(candidate.Data, latest.Data)
+							.Finish();
+						if (comp != 0)
+						{
+							Log.Error("Persistent CCS data mismatch at g=" + candidate.Generation);
+							if (comp < 0)
+								latest = candidate;
+						}
+					}
+				}
+				return latest;
+			});
+			ccsPoller.Start(CCSStore, myID.Encoded);
+			ccsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
+
+			return new Tuple<SerialSDS, SerialCCS>(sdsPoller.Latest, ccsPoller.Latest);
 		}
 
 
@@ -218,6 +248,7 @@ namespace Shard
 	
 
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
+		public static Action<SerialCCS> OnPutCCS { get; set; } = null;
 
 		internal static void PutNow(SerialSDS serial, bool forceReplace)
 		{
@@ -230,7 +261,16 @@ namespace Shard
 			}, 3);
 		}
 
-
+		internal static void PutNow(SerialCCS serial, bool forceReplace)
+		{
+			if (OnPutCCS != null)
+				OnPutCCS(serial);
+			Try(() =>
+			{
+				PutAsync(null, CCSStore, serial, forceReplace).Wait();
+				return true;
+			}, 3);
+		}
 
 
 		private static SerialSDS latestPut = null;

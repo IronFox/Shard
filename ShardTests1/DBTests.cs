@@ -19,7 +19,7 @@ namespace Shard.Tests
 
 		public static SDS RandomSDS(SimulationContext ctx)
 		{
-			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(ctx.LocalSpace,16).ToArray(), BitCubeTests.RandomIC(), random.NextBool(0.01f), RandomClientMessages());
+			return new SDS(random.Next(100), EntityPoolTests.CreateEntities(ctx.LocalSpace,16).ToArray(), BitCubeTests.RandomIC());
 		}
 
 		public static RCS[] RandomOutboundRCSs(SimulationContext ctx)
@@ -27,11 +27,11 @@ namespace Shard.Tests
 			return RandomOutboundRCSs(ctx,random.Next(26));
 		}
 
-		public static Dictionary<Guid, ClientMessage[]> RandomClientMessages()
+		public static MessagePack RandomClientMessages()
 		{
 			if (random.NextBool(0.8f))
-				return null;
-			return RandomClientMessages(random.Next(2), random.Next(16)+1);
+				return MessagePack.CompleteBlank;
+			return new MessagePack(RandomClientMessages(random.Next(2), random.Next(16)+1),random.NextBool(0.01f));
 		}
 
 		public static Dictionary<Guid, ClientMessage[]> RandomClientMessages(int numGuids, int maxMessagesEach)
@@ -65,7 +65,7 @@ namespace Shard.Tests
 		{
 			return new ClientMessage(
 				new ClientMessageID(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), random.Next(3), random.Next(100)),
-				new ClientMessageBody(EntityChangeSetTests.RandomByteArray(true), random.Next(1000), random.Next(1000), random.Next(3), false)
+				EntityChangeSetTests.RandomByteArray(true)
 				);
 		}
 

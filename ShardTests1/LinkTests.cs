@@ -308,7 +308,7 @@ namespace Shard.Tests
 
 			SimulationRun run = new SimulationRun(
 				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
-				new ShardID(Int3.Zero, 0),
+				ShardID.Zero,
 				new Entity[]
 				{
 					new Entity(
@@ -317,7 +317,10 @@ namespace Shard.Tests
 						new SineLogic()),
 				}
 			);
-			run.clientMessageQueue = Simulation.ClientMessageQueue;
+			run.iface = new Consensus.Interface(new Tuple<Consensus.Configuration, int, ShardID>(
+				new Consensus.Configuration(new Address[] { new Address(random.Next(1024, 16000)) }),
+				0,ShardID.Zero
+				), run.Notify);
 
 			bool keepRunning = true;
 			//parallel evolution:

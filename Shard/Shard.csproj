@@ -180,10 +180,12 @@
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Connectors\InteractionLink.cs" />
     <Compile Include="Connectors\ObservationLink.cs" />
+    <Compile Include="DB\SerialCCS.cs" />
     <Compile Include="DB\SerialCSLogicProvider.cs" />
     <Compile Include="Deque.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="IntermediateSDS.cs" />
+    <Compile Include="MessageHistory.cs" />
     <Compile Include="Neighborhood.cs" />
     <Compile Include="RCS.cs" />
     <Compile Include="SDSComputation.cs" />

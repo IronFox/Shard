@@ -18,13 +18,11 @@ namespace Shard
 			SerialEntities = Entity.Export(sds.FinalEntities);
 			Generation = sds.Generation;
 			IC = sds.IC.Export();
-			SerialMessages = sds.ClientMessages != null ? Helper.SerializeToArray(sds.ClientMessages) : null;
 			_id = sectorID.Encoded;
 		}
 
 		public byte[] SerialEntities { get; set; }
 		public InconsistencyCoverage.DBSerial IC { get; set; }
-		public byte[] SerialMessages { get; set; }
 
 		public override bool Equals(object obj)
 		{
@@ -33,7 +31,6 @@ namespace Shard
 				return false;
 			return Helper.AreEqual(SerialEntities, other.SerialEntities)
 					&& IC.Equals(other.IC)
-					&& Helper.AreEqual(SerialMessages, other.SerialMessages)
 					;
 		}
 
@@ -41,9 +38,7 @@ namespace Shard
 		{
 			return Helper.Hash(this)
 				.Add(SerialEntities)
-				.Add(MessagesInconsistent)
 				.Add(IC)
-				.Add(SerialMessages)
 				.GetHashCode();
 		}
 
@@ -54,7 +49,7 @@ namespace Shard
 
 		public SDS Deserialize()
 		{
-			return new SDS(Generation, Entity.Import(SerialEntities), new InconsistencyCoverage(IC), SerialMessages != null ? (MessagePack)Helper.Deserialize(SerialMessages) : new MessagePack());
+			return new SDS(Generation, Entity.Import(SerialEntities), new InconsistencyCoverage(IC));
 		}
 	}
 

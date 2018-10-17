@@ -119,6 +119,14 @@
       <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
       <Name>Base</Name>
     </ProjectReference>
+    <ProjectReference Include="..\ConsensusMember\ConsensusAccess.csproj">
+      <Project>{d8b6ec1b-3e3e-4f03-b122-5d480f284e1d}</Project>
+      <Name>ConsensusAccess</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Consensus\Consensus.csproj">
+      <Project>{8100A8FC-5447-4381-9963-5E614E329EEF}</Project>
+      <Name>Consensus</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Math\VectorMath.csproj">
       <Project>{8B82845E-874B-4B7C-9EA6-85C968B73986}</Project>
       <Name>VectorMath</Name>

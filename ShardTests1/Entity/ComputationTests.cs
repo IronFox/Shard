@@ -1,4 +1,5 @@
 ﻿using Base;
+using Consensus;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ShardTests1;
 using System;
@@ -140,12 +141,14 @@ namespace Shard.Tests
 		{
 			SimulationContext ctx;
 			public SDSStack stack;
+			public Shard.MessageHistory messages;
 
 			public SimulationRun(BaseDB.ConfigContainer config, ShardID localShardID, IEnumerable<Entity> entities, bool allLinksArePassive = true)
 			{
 				//BaseDB.ConfigContainer config = new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
 				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID,config.extent), allLinksArePassive);
+				Notify = new MyNotify(this);
 
 				FeedEntities(entities);
 			}
@@ -154,6 +157,8 @@ namespace Shard.Tests
 				//BaseDB.ConfigContainer config = new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 };
 				Simulation.Configure(localShardID, config, allLinksArePassive);
 				ctx = new SimulationContext(config, Simulation.ShardIDToBox(localShardID, config.extent), allLinksArePassive);
+				messages = new MessageHistory(0, new MessagePack[] { MessagePack.CompleteBlank });
+				Notify = new MyNotify(this);
 			}
 
 			public void FeedEntities(IEnumerable<Entity> entities)
@@ -166,18 +171,43 @@ namespace Shard.Tests
 
 				var root =
 					new SDSStack.Entry(
-					new SDS(0, intermediate.entities.ToArray(), intermediate.ic, false, null),
+					new SDS(0, intermediate.entities.ToArray(), intermediate.ic),
 					intermediate
 					);
 				Assert.IsTrue(root.IsFullyConsistent);
 				stack = Simulation.Stack;
 				stack.ResetToRoot(root);
+
+				messages = new MessageHistory(0, new MessagePack[] { MessagePack.CompleteBlank  });
 			}
 
 			private SDSComputation tlgComp;
 			private int tlgGen;
 			public SDSStack.Entry tlgEntry;
-			public ClientMessageQueue clientMessageQueue = null;
+			public Consensus.Interface iface = null;
+
+//			public Action<Address,ClientMessage> 
+			private class MyNotify : Consensus.INotifiable
+			{
+				private SimulationRun simulationRun;
+
+				public MyNotify(SimulationRun simulationRun)
+				{
+					this.simulationRun = simulationRun;
+				}
+
+				public void OnGenerationEnd(int generation)
+				{
+					simulationRun.messages.EndGeneration(generation);
+				}
+
+				public void OnMessageCommit(Address clientAddress, ClientMessage message)
+				{
+					simulationRun.messages.Add(message);
+				}
+			}
+
+			public readonly INotifiable Notify;
 
 			public SDSComputation BeginAdvanceTLG(bool intermediateShouldBeConsistent)
 			{
@@ -186,7 +216,7 @@ namespace Shard.Tests
 				Assert.AreEqual(tlgEntry.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));
 				ctx.SetGeneration(i + 1);
-				tlgComp = new SDSComputation(new DateTime(), clientMessageQueue, TimeSpan.FromMilliseconds(10), ctx);
+				tlgComp = new SDSComputation(new DateTime(), iface != null ? messages.GetMessages(i) : ExtMessagePack.CompleteBlank, TimeSpan.FromMilliseconds(10), ctx);
 				if (intermediateShouldBeConsistent)
 					AssertNoErrors(tlgComp, i.ToString());
 				if (intermediateShouldBeConsistent)
@@ -195,8 +225,9 @@ namespace Shard.Tests
 					Assert.IsTrue(tlgComp.Intermediate.inputConsistent);
 				}
 				Assert.AreEqual(tlgComp.Generation, i + 1);
-				if (clientMessageQueue != null)
-					clientMessageQueue.Trim(tlgGen - 2, stack.NewestConsistentSDSGeneration+1);
+				if (iface != null)
+					iface.TrimOut(stack.NewestConsistentSDSGeneration);
+				messages.TrimGenerations(stack.NewestConsistentSDSGeneration);
 
 				return tlgComp;
 			}
@@ -223,7 +254,7 @@ namespace Shard.Tests
 			public SDSStack.Entry RecomputeGeneration(int generation, bool trim = true)
 			{
 				ctx.SetGeneration(generation);
-				var comp = new SDSComputation(new DateTime(), null, TimeSpan.FromMilliseconds(10),ctx);
+				var comp = new SDSComputation(new DateTime(), ExtMessagePack.CompleteBlank, TimeSpan.FromMilliseconds(10),ctx);
 				AssertNoErrors(comp, "Recompute (" + generation + ")");
 				var sds = comp.Complete();
 				return stack.Insert(sds, trim);

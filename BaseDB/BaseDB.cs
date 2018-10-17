@@ -202,7 +202,7 @@ namespace Shard
 			set
 			{
 				value._id = timingPoller.ID;
-				Put(controlStore, value).Wait();
+				Put(ControlStore, value).Wait();
 			}
 		}
 
@@ -239,7 +239,7 @@ namespace Shard
 				OnPutLocalAddress(addr);
 			Try(() =>
 			{
-				Put(hostsStore, new AddressEntry(addr)).Wait();
+				Put(HostsStore, new AddressEntry(addr)).Wait();
 				return true;
 			}, 3);
 		}
@@ -249,7 +249,7 @@ namespace Shard
 			TryAsync(async () =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
-				var rc = await controlStore.Entities.GetAsync<ConfigContainer>("config");
+				var rc = await ControlStore.Entities.GetAsync<ConfigContainer>("config");
 				if (!rc.IsSuccess)
 					return false;
 				Config = rc.Content;
@@ -257,7 +257,7 @@ namespace Shard
 			}, numTries).Wait();
 
 			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer(), (collection) => null);
-			timingPoller.Start(controlStore, "timing");
+			timingPoller.Start(ControlStore, "timing");
 		}
 
 
@@ -349,11 +349,11 @@ namespace Shard
 			Config = container;
 			Config._id = "config";
 			//Config._rev = null;
-			string doc = controlStore.Serializer.Serialize(Config);
+			string doc = ControlStore.Serializer.Serialize(Config);
 			bool success = await TryAsync(async () =>
 			{
 				Log.Minor("Storing simulation configuration on " + Host + " ...");
-				var newCfg = await TryForceReplace(controlStore, Config);
+				var newCfg = await TryForceReplace(ControlStore, Config);
 				if (newCfg == null)
 					return false;   //retry
 				Config = newCfg;
@@ -524,21 +524,22 @@ namespace Shard
 			Host = host;
 
 			server = new MyCouchServerClient(url);
-			sdsStore = new DataBase(url, "sds");
-			rcsStore = new DataBase(url, "rcs");
-			logicStore = new DataBase(url, "logic");
-			controlStore = new DataBase(url, "control");
-			hostsStore = new DataBase(url, "hosts");
+			SDSStore = new DataBase(url, "sds");
+			CCSStore = new DataBase(url, "ccs");	//client messages (and other changes, possibly; not right now)
+			RCSStore = new DataBase(url, "rcs");
+			LogicStore = new DataBase(url, "logic");
+			ControlStore = new DataBase(url, "control");
+			HostsStore = new DataBase(url, "hosts");
 
 			return url;
 		}
 
-		private static DataBase sdsStore, rcsStore, logicStore, controlStore, hostsStore;
-		public static DataBase SDSStore => sdsStore;
-		public static DataBase RCSStore => rcsStore;
-		public static DataBase LogicStore => logicStore;
-		public static DataBase ControlStore => controlStore;
-		public static DataBase HostsStore => hostsStore;
+		public static DataBase SDSStore { get; private set; }
+		public static DataBase CCSStore { get; private set; }
+		public static DataBase RCSStore { get; private set; }
+		public static DataBase LogicStore { get; private set; }
+		public static DataBase ControlStore { get; private set; }
+		public static DataBase HostsStore { get; private set; }
 
 
 		private static MappedContinuousLookup<ShardID, AddressEntry> hostRequests = new MappedContinuousLookup<ShardID, AddressEntry>((collection) => null);
@@ -595,13 +596,13 @@ namespace Shard
 
 		public static void BeginFetch(ShardID id)
 		{
-			hostRequests.BeginFetch(hostsStore, id);
+			hostRequests.BeginFetch(HostsStore, id);
 		}
 
 
 		public static FullShardAddress TryGetAddress(ShardID id)
 		{
-			var h = hostRequests.TryGet(hostsStore, id);
+			var h = hostRequests.TryGet(HostsStore, id);
 			if (h == null)
 				return new FullShardAddress();
 			return h.GetFullAddress(id);
@@ -609,7 +610,7 @@ namespace Shard
 
 		public static Address TryGetPeerAddress(ShardID id)
 		{
-			var h = hostRequests.TryGet(hostsStore, id);
+			var h = hostRequests.TryGet(HostsStore, id);
 			if (h == null)
 				return new Address();
 			return h.PeerAddress;
@@ -617,7 +618,7 @@ namespace Shard
 
 		public static Address TryGetConsensusAddress(ShardID id)
 		{
-			var h = hostRequests.TryGet(hostsStore, id);
+			var h = hostRequests.TryGet(HostsStore, id);
 			if (h == null)
 				return new Address();
 			return h.ConsensusAddress;
@@ -630,13 +631,16 @@ namespace Shard
 			{
 				await BaseDB.RecreateDB("sds");
 				await BaseDB.RecreateDB("rcs");
+				await BaseDB.RecreateDB("ccs");
 			}
 			else
 			{
-				if (sdsStore != null)
-					await sdsStore.ClearAsync(false);
-				if (rcsStore != null)
-					await rcsStore.ClearAsync(false);
+				if (SDSStore != null)
+					await SDSStore.ClearAsync(false);
+				if (RCSStore != null)
+					await RCSStore.ClearAsync(false);
+				if (CCSStore != null)
+					await CCSStore.ClearAsync(false);
 			}
 		}
 

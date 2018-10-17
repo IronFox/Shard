@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -153,7 +154,13 @@ namespace Shard
 		/// The key equals the targeted entity Guid or Guid.Empty if the message should be broadcast to all entities.
 		/// </summary>
 		public readonly Dictionary<Guid, ClientMessage[]> Messages;
+		/// <summary>
+		/// If true, no more messages will be received for the targeted SD+generation.
+		/// False indicates that more may appear, and inconsistency must be concluded.
+		/// </summary>
 		public readonly bool Completed;
+
+		public static readonly MessagePack CompleteBlank = new MessagePack(new Dictionary<Guid, ClientMessage[]>(), true);
 
 		public MessagePack(Dictionary<Guid, ClientMessage[]> msg, bool complete)
 		{
@@ -163,7 +170,7 @@ namespace Shard
 				throw new ArgumentNullException("msg");
 		}
 		public static bool operator !=(MessagePack a, MessagePack b) => !(a == b);
-		public static bool operator==(MessagePack a, MessagePack b) => a.Completed == b.Completed && Helper.AreEqual(a.Messages, b.Messages);
+		public static bool operator ==(MessagePack a, MessagePack b) => a.Completed == b.Completed && Helper.AreEqual(a.Messages, b.Messages);
 
 		public override bool Equals(object obj)
 		{
@@ -181,11 +188,21 @@ namespace Shard
 			hashCode = hashCode * -1521134295 + Completed.GetHashCode();
 			return hashCode;
 		}
+
+		public IEnumerable<ClientMessage> EnumerateMessages()
+		{
+			foreach (var a in Messages.Values)
+				foreach (var m in a)
+					yield return m;
+		}
 	}
 
 	public struct ExtMessagePack
 	{
 		public readonly MessagePack MessagePack;
+		/// <summary>
+		/// Indicates that these messages have been dropped from the consensus and must be present in the prcessed SDS
+		/// </summary>
 		public readonly bool HasBeenDiscarded;
 
 		public ExtMessagePack(MessagePack pack)
@@ -198,6 +215,8 @@ namespace Shard
 		{
 			HasBeenDiscarded = v;
 		}
+
+		public static readonly ExtMessagePack CompleteBlank = new ExtMessagePack(MessagePack.CompleteBlank);
 	}
 
 

@@ -49,7 +49,7 @@ namespace Shard
 
 			public SerialSDS Finish()
 			{
-				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon(),false,null);
+				SDS sds = new SDS(0, pool.ToArray(), InconsistencyCoverage.NewCommon());
 				return new SerialSDS(sds,sector);
 			}
 		}
@@ -292,7 +292,7 @@ namespace Shard
 
 						var n = Clock.Now + TimeSpan.FromSeconds(10);
 						t.startTime = n.ToShortDateString()+" "+n.ToLongTimeString();
-						t.msStep = 1000;	//make sure we compute slowly
+						t.msGenerationBudget = 3000;	//make sure we compute slowly
 						BaseDB.Timing = t;
 						break;
 					}
@@ -374,7 +374,7 @@ namespace Shard
 			intermediate0.localChangeSet = new EntityChangeSet();
 
 			SDSStack.Entry root = new SDSStack.Entry(
-												new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic, false,null),
+												new SDS(0, intermediate0.entities.ToArray(), intermediate0.ic),
 												intermediate0);
 			//Assert.IsTrue(root.IsFullyConsistent);
 
@@ -386,7 +386,7 @@ namespace Shard
 				//Assert.IsNotNull(stack.NewestSDS.FinalEntities, i.ToString());
 				var temp = stack.AllocateGeneration(i + 1);
 				ctx.SetGeneration(i + 1);
-				var comp = new SDSComputation(new DateTime(), null, TimeSpan.FromMilliseconds(10),ctx);
+				var comp = new SDSComputation(new DateTime(), ExtMessagePack.CompleteBlank, TimeSpan.FromMilliseconds(10),ctx);
 				//ComputationTests.AssertNoErrors(comp, "comp");
 				//Assert.IsTrue(comp.Intermediate.inputConsistent);
 

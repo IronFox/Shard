@@ -232,7 +232,8 @@ namespace Shard
 									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
 									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
 
-									Consensus.Interface.Dispatch(msg);
+									Simulation.Consensus.Dispatch(msg, new Address(this.endPoint));
+									OnMessage?.Invoke(from, to, data);
 								}
 								break;
 
@@ -330,6 +331,23 @@ namespace Shard
 				ms.Write(data, 0, data.Length);
 				Send(new OutPackage((uint)ChannelID.SendMessage, ms.ToArray()));
 			}
+		}
+
+		public static void OnMessageCommit(Address addr, ClientMessageID id)
+		{
+			lock(registry)
+				foreach (var r in registry)
+					if (new Address(r.endPoint) == addr)
+					{
+						r.Confirm(id);
+					}
+		}
+
+		private void Confirm(ClientMessageID id)
+		{
+			if (closed)
+				return;
+			Send(new OutPackage((uint)ChannelID.MessageDelivered, id.MessageID.ToByteArray()));
 		}
 
 		public bool Connected
