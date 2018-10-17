@@ -305,6 +305,8 @@ namespace Shard.Tests
 		public void FullInteractionLinkTest()
 		{
 			Random random = new Random();
+			var timing = new BaseDB.TimingContainer();
+			BaseDB.FallbackTimingFetch = () => timing;
 
 			SimulationRun run = new SimulationRun(
 				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
@@ -317,10 +319,8 @@ namespace Shard.Tests
 						new SineLogic()),
 				}
 			);
-			run.iface = new Consensus.Interface(new Tuple<Consensus.Configuration, int, ShardID>(
-				new Consensus.Configuration(new Address[] { new Address(random.Next(1024, 16000)) }),
-				0,ShardID.Zero
-				), run.Notify);
+
+			run.InstallConsensusCluster(3, random.Next(1024, 16000),true);
 
 			bool keepRunning = true;
 			//parallel evolution:
@@ -412,6 +412,9 @@ namespace Shard.Tests
 			task.Wait();
 		}
 
+		/// <summary>
+		/// Checks whether registration and message delivery to the listener work
+		/// </summary>
 		[TestMethod()]
 		public void InteractionLinkTest()
 		{

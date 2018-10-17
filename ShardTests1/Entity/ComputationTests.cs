@@ -1,11 +1,12 @@
 ﻿using Base;
-using Consensus;
+//using Consensus;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ShardTests1;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VectorMath;
 
@@ -184,9 +185,22 @@ namespace Shard.Tests
 			private SDSComputation tlgComp;
 			private int tlgGen;
 			public SDSStack.Entry tlgEntry;
-			public Consensus.Interface iface = null;
+			private Consensus.Interface[] consensus;
 
-//			public Action<Address,ClientMessage> 
+			//			public Action<Address,ClientMessage> 
+
+			private class DummyNotify : Consensus.INotifiable
+			{
+				public void OnGenerationEnd(int generation)
+				{
+					
+				}
+
+				public void OnMessageCommit(Address clientAddress, ClientMessage message)
+				{
+					
+				}
+			}
 			private class MyNotify : Consensus.INotifiable
 			{
 				private SimulationRun simulationRun;
@@ -207,7 +221,7 @@ namespace Shard.Tests
 				}
 			}
 
-			public readonly INotifiable Notify;
+			public readonly Consensus.INotifiable Notify;
 
 			public SDSComputation BeginAdvanceTLG(bool intermediateShouldBeConsistent)
 			{
@@ -216,7 +230,7 @@ namespace Shard.Tests
 				Assert.AreEqual(tlgEntry.Generation, i + 1);
 				Assert.IsNotNull(stack.FindGeneration(i + 1));
 				ctx.SetGeneration(i + 1);
-				tlgComp = new SDSComputation(new DateTime(), iface != null ? messages.GetMessages(i) : ExtMessagePack.CompleteBlank, TimeSpan.FromMilliseconds(10), ctx);
+				tlgComp = new SDSComputation(new DateTime(), consensus != null ? messages.GetMessages(i) : ExtMessagePack.CompleteBlank, TimeSpan.FromMilliseconds(10), ctx);
 				if (intermediateShouldBeConsistent)
 					AssertNoErrors(tlgComp, i.ToString());
 				if (intermediateShouldBeConsistent)
@@ -225,8 +239,8 @@ namespace Shard.Tests
 					Assert.IsTrue(tlgComp.Intermediate.inputConsistent);
 				}
 				Assert.AreEqual(tlgComp.Generation, i + 1);
-				if (iface != null)
-					iface.TrimOut(stack.NewestConsistentSDSGeneration);
+				if (consensus != null)
+					consensus[0].TrimOut(stack.NewestConsistentSDSGeneration);
 				messages.TrimGenerations(stack.NewestConsistentSDSGeneration);
 
 				return tlgComp;
@@ -258,6 +272,27 @@ namespace Shard.Tests
 				AssertNoErrors(comp, "Recompute (" + generation + ")");
 				var sds = comp.Complete();
 				return stack.Insert(sds, trim);
+			}
+
+			internal void InstallConsensusCluster(int size, int basePort, bool awaitFormation)
+			{
+				var addr = new Address[size];
+				for (int i = 0; i < size; i++)
+					addr[i] = new Address(basePort + i);
+
+				var consensusCfg = new Consensus.Configuration(addr);
+				var dummyNotify = new DummyNotify();
+				consensus = new Consensus.Interface[size];
+				for (int i = 0; i < size; i++)
+					consensus[i] = new Consensus.Interface(consensusCfg, i, new ShardID(Int3.Zero, -i), i > 0 ? dummyNotify : Notify);
+				
+				if (awaitFormation)
+				{
+					while (!consensus.All(i => i.IsFullyConnected) || !consensus.Any(i => i.IsLeader))
+					{
+						Thread.Sleep(100);
+					}
+				}
 			}
 		}
 

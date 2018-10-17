@@ -13,8 +13,8 @@ using VectorMath;
 
 namespace Shard
 {
-    public static class BaseDB
-    {
+	public static class BaseDB
+	{
 		private static string url;
 		public static Address Host { get; private set; }
 		public static MyCouchServerClient server;
@@ -191,13 +191,13 @@ namespace Shard
 			return false;
 		}
 
-
+		public static Func<TimingContainer> FallbackTimingFetch { get; set; }
 
 		public static TimingContainer Timing
 		{
 			get
 			{
-				return timingPoller?.Latest;
+				return timingPoller != null ? timingPoller.Latest : (FallbackTimingFetch?.Invoke());
 			}
 			set
 			{

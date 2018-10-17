@@ -232,7 +232,7 @@ namespace Shard
 									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
 									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
 
-									Simulation.Consensus.Dispatch(msg, new Address(this.endPoint));
+									Simulation.Consensus?.Dispatch(msg, new Address(this.endPoint));
 									OnMessage?.Invoke(from, to, data);
 								}
 								break;

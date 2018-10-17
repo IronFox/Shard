@@ -25,13 +25,16 @@ namespace Consensus
 
 		public readonly INotifiable Notify;
 
-		public Interface(Tuple<Configuration,int, ShardID> cfg, INotifiable notify) : base(cfg.Item1, cfg.Item2)
+		public Interface(Configuration cfg, int myIndex, ShardID myID, INotifiable notify) : base(cfg, myIndex)
 		{
-			MyID = cfg.Item3;
+			MyID = myID;
 			Notify = notify;
 			gecThread = new Thread(new ThreadStart(GECThreadMain));
 			gecThread.Start();
 		}
+
+		public Interface(Tuple<Configuration,int, ShardID> cfg, INotifiable notify) : this(cfg.Item1, cfg.Item2, cfg.Item3,notify)
+		{}
 
 		public Interface(ShardID myID, int peerPort, bool updateAddress, INotifiable notify) :this(ConstructConfig(myID), notify)
 		{
