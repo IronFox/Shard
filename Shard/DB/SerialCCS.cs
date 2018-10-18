@@ -22,7 +22,7 @@ namespace Shard
 		{
 			Data = Helper.SerializeToArray(data);
 			NumericID = id.IntArray;
-			_id = id.ToString();
+			_id = id.ShardID.ToString();
 		}
 
 		[JsonIgnore]

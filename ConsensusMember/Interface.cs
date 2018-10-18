@@ -175,7 +175,6 @@ namespace Consensus
 			timing.TrimOut(generationOrOlder);
 		}
 
-
 		private static DateTime GetDeadline(int generation)
 		{
 			var c = TimingInfo.Current;
@@ -200,6 +199,11 @@ namespace Consensus
 				var parent = node as Interface;
 				parent.timing.Include(EndedGeneration, parent.Configuration.Size, Delay);
 			}
+
+			public override string ToString()
+			{
+				return "TimeReport g" + EndedGeneration + ", d=" + Delay;
+			}
 		}
 
 		[Serializable]
@@ -212,10 +216,13 @@ namespace Consensus
 				EndedGeneration = generation;
 				TimeStamp = Clock.Now;
 			}
+
+			public override string ToString() => "GEC g" + EndedGeneration+", dispatched "+TimeStamp;
+
 			public void Commit(Node node)
 			{
 				var parent = node as Interface;
-				if (EndedGeneration <= parent.generation)
+				if (EndedGeneration < parent.generation)
 					return;
 				parent.generation = EndedGeneration + 1;
 				parent.Notify.OnGenerationEnd(EndedGeneration);
@@ -231,12 +238,17 @@ namespace Consensus
 		private int generation = 0;
 		private void GECThreadMain()
 		{
+			int last = -1;
 			while (true)
 			{
 				var current = generation;
 				Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
 				Log.Message("Progressing ");
-				Commit(new GEC(current));
+				if (last != current)
+				{
+					Commit(new GEC(current));
+					last = current;
+				}
 			}
 		}
 

@@ -193,12 +193,13 @@ namespace Shard.Tests
 			{
 				public void OnGenerationEnd(int generation)
 				{
-					
+					bool brk = true;
 				}
 
 				public void OnMessageCommit(Address clientAddress, ClientMessage message)
 				{
-					
+					bool brk = true;
+
 				}
 			}
 			private class MyNotify : Consensus.INotifiable
@@ -217,6 +218,8 @@ namespace Shard.Tests
 
 				public void OnMessageCommit(Address clientAddress, ClientMessage message)
 				{
+					if (!clientAddress.IsEmpty)
+						InteractionLink.OnMessageCommit(clientAddress, message.ID);
 					simulationRun.messages.Add(message);
 				}
 			}
@@ -246,8 +249,22 @@ namespace Shard.Tests
 				return tlgComp;
 			}
 
-			public SDSStack.Entry AdvanceTLG(bool shouldBeConsistent, bool intermediateShouldBeConsistent, bool trim = true)
+			public SDSStack.Entry AdvanceTLG(bool shouldBeConsistent, bool intermediateShouldBeConsistent, bool trim = true, bool awaitConsensusInterfaceProgression = true)
 			{
+				if (consensus != null && awaitConsensusInterfaceProgression)
+				{
+					AwaitConsensus();
+					var begin = DateTime.Now;
+					while (messages.CurrentGeneration <= stack.NewestRegisteredSDSGeneration)
+					{
+						if (DateTime.Now - begin > TimeSpan.FromSeconds(2))
+						{
+							bool brk = true;
+							begin = DateTime.Now;
+						}
+						Thread.Sleep(100);
+					}
+				}
 				BeginAdvanceTLG(intermediateShouldBeConsistent);
 				return CompleteAdvanceTLG(shouldBeConsistent, trim);
 			}
@@ -262,7 +279,11 @@ namespace Shard.Tests
 					Assert.IsTrue(sds.Item1.IC.OneCount == 0);
 				}
 				Assert.AreEqual(sds.Item1.Generation, tlgGen + 1);
-				return stack.Insert(sds, trim);
+				var rs = stack.Insert(sds, trim);
+
+				if (trim)
+					this.messages.TrimGenerations(stack.NewestConsistentSDSGeneration - 1);
+				return rs;
 			}
 
 			public SDSStack.Entry RecomputeGeneration(int generation, bool trim = true)
@@ -287,12 +308,21 @@ namespace Shard.Tests
 					consensus[i] = new Consensus.Interface(consensusCfg, i, new ShardID(Int3.Zero, -i), i > 0 ? dummyNotify : Notify);
 				
 				if (awaitFormation)
+					AwaitConsensus();
+			}
+
+			private void AwaitConsensus()
+			{
+				while (!consensus.All(i => i.IsFullyConnected) || consensus.Count(i => i.IsLeader) != 1 || consensus.Count(i => i.KnowsRemoteLeader) != consensus.Length - 1)
 				{
-					while (!consensus.All(i => i.IsFullyConnected) || !consensus.Any(i => i.IsLeader))
-					{
-						Thread.Sleep(100);
-					}
+					Thread.Sleep(100);
 				}
+			}
+
+			internal void RelayMessageToConsensus(ClientMessage msg, Address sender)
+			{
+				if (consensus != null)
+					consensus[0].Dispatch(msg, sender);
 			}
 		}
 

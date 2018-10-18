@@ -299,6 +299,8 @@ namespace Shard
 		/// <returns></returns>
 		public static async Task<T> TryForceReplace<T>(DataBase store, T item) where T : Entity
 		{
+			if (store == null)
+				return item;	//during tests, db is not loaded
 			var header = await store.Entities.PutAsync(item._id, item);
 			if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
 			{

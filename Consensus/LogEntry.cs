@@ -18,5 +18,10 @@ namespace Consensus
 		{
 			Operation.Commit(location);
 		}
+
+		public override string ToString()
+		{
+			return Operation + "@t=" + Term;
+		}
 	}
 }

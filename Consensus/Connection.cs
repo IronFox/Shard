@@ -26,7 +26,7 @@ namespace Consensus
 		/// </summary>
 		public int NextIndex { get; set; } = -1;
 		public int CommitIndex { get; set; } = 0;
-		public long AppendTimeout { get; set; } = -1;
+		public PreciseTime AppendTimeout { get; set; } = PreciseTime.None;
 
 	}
 
@@ -40,6 +40,10 @@ namespace Consensus
 		protected BinaryFormatter formatter = new BinaryFormatter();
 
 		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
+		protected System.Net.EndPoint endPoint;
+
+
+		public override string EndPoint => endPoint != null ? ((IPEndPoint)endPoint).Port.ToString() : "null";
 
 
 		public bool IsDisposed => closing;
@@ -51,21 +55,25 @@ namespace Consensus
 			}
 		}
 
-		public long LastIncoming { get; private set; }
+		public DateTime LastIncoming { get; private set; }
 
-		public bool IsAlive => IsConnected && (Node.GetNanoTime() - LastIncoming <= 2 * 1000 * 1000 * 1000L);
+		public bool IsAlive => IsConnected && (DateTime.Now - LastIncoming <= TimeSpan.FromSeconds(2));
 
-		public Connection(Node owner, Address addr, TcpClient client) : base(owner, null)
+
+
+		public Connection(Node owner, Func<Address> addr, TcpClient client) : this(owner, addr)
 		{
-			this.owner = owner;
-			Address = () => addr;
 			Assign(client,null);
-			LastIncoming = Node.GetNanoTime();
+			endPoint = client.Client.RemoteEndPoint;
 		}
+		public Connection(Node owner, Address addr, TcpClient client) : this(owner, () => addr, client)
+		{}
 		public Connection(Node owner, Func<Address> addr) : base(owner, addr)
 		{
 			this.owner = owner;
-			LastIncoming = Node.GetNanoTime();
+			LastIncoming = DateTime.Now;
+
+			serialLock = new DebugMutex("Consensus.Connection[" + this + "]");
 		}
 
 		public delegate void Event(ActiveConnection connection);
@@ -76,45 +84,12 @@ namespace Consensus
 
 
 		//		private SpinLock tcpLock = new SpinLock();
-		Mutex serialLock = new Mutex();
-		Thread serialLockedBy;
+		DebugMutex serialLock;
 		protected void TcpLocked(Action action)
 		{
 			if (closing)
 				return;
-			if (!serialLock.WaitOne(1000))
-			{
-				throw new InvalidOperationException("Unable to acquire lock in 1000ms");
-			}
-			try
-			{
-				serialLockedBy = Thread.CurrentThread;
-				action();
-			}
-			finally
-			{
-				serialLockedBy = null;
-				serialLock.ReleaseMutex();
-			}
-
-
-			//bool ack = false;
-			//tcpLock.Enter(ref ack);
-			//if (!ack)
-			//	throw new InvalidOperationException("Cannot lock spinlock");
-			//try
-			//{
-			//	ac();
-			//}
-			//catch (Exception ex)
-			//{
-			//	LogError(ex);
-			//	throw;
-			//}
-			//finally
-			//{
-			//	tcpLock.Exit();
-			//}
+			serialLock.DoLocked(action);
 		}
 
 		protected void Assign(TcpClient newClient, Action doLocked)
@@ -140,6 +115,26 @@ namespace Consensus
 				readThread.Join();
 		}
 
+		private readonly ConcurrentQueue<string> log = new ConcurrentQueue<string>();
+		internal void LogError(object error)
+		{
+			((Node)Parent).LogError(error,this);
+		}
+		internal void LogError(Exception ex)
+		{
+			((Node)Parent).LogError(ex, this);
+		}
+		internal void LogMinorEvent(object ev)
+		{
+			((Node)Parent).LogMinorEvent(ev, this);
+
+		}
+		internal void LogEvent(object ev)
+		{
+			((Node)Parent).LogEvent(ev, this);
+		}
+
+
 
 		private void ActiveThread()
 		{
@@ -156,22 +151,16 @@ namespace Consensus
 						{
 							NetworkStream stream = null;
 							IDispatchable item;
+							TcpLocked(() => stream = tcpClient.Connected ? tcpClient.GetStream() : null);
+							if (stream == null)
+								continue;
+							item = formatter.Deserialize(stream) as IDispatchable;
+							LastIncoming = DateTime.Now;
+
 							try
 							{
-								TcpLocked(() => stream = tcpClient.Connected ? tcpClient.GetStream() : null);
-								if (stream == null)
-									continue;
-								item = formatter.Deserialize(stream) as IDispatchable;
-							}
-							finally
-							{
-								//stream.Close();
-							}
-							try
-							{
-								//LogEvent("Deserialized inbound " + item);
+								LogMinorEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
-								LastIncoming = Node.GetNanoTime();
 							}
 							catch (Exception ex)
 							{
@@ -250,7 +239,7 @@ namespace Consensus
 					var c = tcpClient;
 					if (c != null && c.Connected)
 					{
-						//LogEvent("Dispatching " + p);
+						LogMinorEvent("Dispatching " + p);
 						try
 						{
 							var stream = c.GetStream();
@@ -282,7 +271,10 @@ namespace Consensus
 			TcpLocked(() => ConsensusState = new ConsensusState());
 		}
 
-
+		internal void SignalIncoming()
+		{
+			LastIncoming = DateTime.Now;
+		}
 	}
 
 
@@ -352,6 +344,7 @@ namespace Consensus
 						//tcpClient = null;
 					}
 					tcpClient = nextClient;
+					endPoint = tcpClient.Client.LocalEndPoint;
 					Begin();
 				});
 				return true;

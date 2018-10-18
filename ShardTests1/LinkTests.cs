@@ -306,6 +306,10 @@ namespace Shard.Tests
 		{
 			Random random = new Random();
 			var timing = new BaseDB.TimingContainer();
+			timing.msGenerationBudget = 210;
+			timing.msComputation = 20;
+			timing.msApplication = 20;
+			timing.recoverySteps = 2;
 			BaseDB.FallbackTimingFetch = () => timing;
 
 			SimulationRun run = new SimulationRun(
@@ -320,7 +324,8 @@ namespace Shard.Tests
 				}
 			);
 
-			run.InstallConsensusCluster(3, random.Next(1024, 16000),true);
+			var defaultPort = random.Next(1024, 32768);
+			run.InstallConsensusCluster(3, defaultPort+1,true);
 
 			bool keepRunning = true;
 			//parallel evolution:
@@ -334,7 +339,6 @@ namespace Shard.Tests
 				}
 			});
 
-			var defaultPort = random.Next(1024, 32768);
 			using (Listener listener = new Listener(null,defaultPort))
 			{
 				InteractionLink myLink = null;
@@ -353,11 +357,14 @@ namespace Shard.Tests
 						Assert.AreEqual(receiver, me);
 						onRegister.Set();
 					};
-					lnk.OnMessage = (from, to, message) =>
+					lnk.OnMessage = (msg, sender) =>
 					{
-						Assert.AreEqual(from, me);
-						lastTargetEntity = to;
-						lastData = message;
+						Assert.AreEqual(msg.ID.From, me);
+
+						run.RelayMessageToConsensus(msg,sender);
+
+						lastTargetEntity = msg.ID.To;
+						lastData = msg.Body;
 						onMessage.Set();
 					};
 					lnk.OnUnregisterReceiver = receiver =>
@@ -438,11 +445,11 @@ namespace Shard.Tests
 						Assert.AreEqual(receiver, me);
 						onRegister.Set();
 					};
-					lnk.OnMessage = (from, to, message) =>
+					lnk.OnMessage = (msg,sender) =>
 					{
-						Assert.AreEqual(from, me);
-						lastTargetEntity = to;
-						lastData = message;
+						Assert.AreEqual(msg.ID.From, me);
+						lastTargetEntity = msg.ID.To;
+						lastData = msg.Body;
 						onMessage.Set();
 					};
 					lnk.OnUnregisterReceiver = receiver =>

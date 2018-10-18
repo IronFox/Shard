@@ -148,9 +148,9 @@ namespace Shard
 			
 			public void OnMessageCommit(Address clientAddress, ClientMessage message)
 			{
-				Messages.Add(message);
 				if (!clientAddress.IsEmpty)
 					InteractionLink.OnMessageCommit(clientAddress, message.ID);
+				Messages.Add(message);
 			}
 
 			public void OnGenerationEnd(int generation)

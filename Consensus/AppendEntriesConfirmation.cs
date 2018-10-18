@@ -5,11 +5,12 @@ namespace Consensus
 	[Serializable]
 	internal class AppendEntriesConfirmation : IndexedPackage
 	{
-		public readonly bool Succeeded;
+		public readonly bool Succeeded, Yield;
 		public readonly int LastCommit;
 
-		public AppendEntriesConfirmation(Node source, bool success) : base(source)
+		public AppendEntriesConfirmation(Node source, bool success, bool yield) : base(source)
 		{
+			Yield = yield;
 			Succeeded = success;
 			LastCommit = source.CommitIndex;
 		}
@@ -18,6 +19,13 @@ namespace Consensus
 		{
 			if (instance.CurrentState == Node.State.Leader)
 			{
+				if (Yield)
+				{
+					instance.Yield();
+					return;
+				}
+
+
 				var info = c.ConsensusState;
 				if (Succeeded)
 				{
@@ -26,7 +34,7 @@ namespace Consensus
 					info.NextIndex = LastLogIndex + 1;
 					info.CommitIndex = LastCommit;
 					if (info.MatchIndex == instance.LogSize)
-						info.AppendTimeout = -1;
+						info.AppendTimeout = PreciseTime.None;
 					instance.ReCheckCommitment();
 				}
 				else
@@ -43,7 +51,7 @@ namespace Consensus
 
 		public override void OnBadTermIgnore(Node processor, Connection sender)
 		{
-			sender.Dispatch(new AppendEntriesConfirmation(processor, false));
+			sender.Dispatch(new AppendEntriesConfirmation(processor, false, true));
 		}
 
 	}

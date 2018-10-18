@@ -74,7 +74,7 @@ namespace Shard
 				data.ic.SetAllOne();
 			//bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
 			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, this.clientMessages.Messages, data.ic, entityLogicTimeout, ctx);
-			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0)
+			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0 && clientMessages.MessagePack.Completed)
 				throw new IntegrityViolation("Input is fully consistent, and there are no errors. IC should have remaining empty");
 
 			InconsistencyCoverage untrimmed = data.ic.Grow(false);

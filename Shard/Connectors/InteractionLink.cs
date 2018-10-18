@@ -232,8 +232,9 @@ namespace Shard
 									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
 									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
 
-									Simulation.Consensus?.Dispatch(msg, new Address(this.endPoint));
-									OnMessage?.Invoke(from, to, data);
+									var sender = new Address(this.endPoint);
+									Simulation.Consensus?.Dispatch(msg, sender);
+									OnMessage?.Invoke(msg,sender);
 								}
 								break;
 
@@ -358,7 +359,7 @@ namespace Shard
 			}
 		}
 
-		public Action<Guid,Guid,byte[]> OnMessage { get; set; }
+		public Action<ClientMessage, Address> OnMessage { get; set; }
 		public Action<Guid> OnUnregisterReceiver { get; set; }
 		public Action<Guid> OnRegisterReceiver { get; set; }
 

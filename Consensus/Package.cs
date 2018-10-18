@@ -11,7 +11,7 @@ namespace Consensus
 
 		public abstract void OnProcess(Node receiver, Connection sender);
 
-		public virtual void OnBadTermIgnore(Node processor, Connection sender) { }
+		public virtual void OnBadTermIgnore(Node processor, Connection sender) { sender.LogMinorEvent("Bad term(local="+Term+", target="+processor.CurrentTerm+"). "+this+" ignored."); }
 
 		public void OnArrive(Node receiver, Connection sender)
 		{

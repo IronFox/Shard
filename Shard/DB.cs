@@ -306,7 +306,8 @@ namespace Shard
 
 		private static async Task PutAsync<T>(Link lnk, DataBase store, T e, bool forceReplace) where T: BaseDB.Entity
 		{
-			//string doc = store.DocumentSerializer.Serialize(e);
+			if (store == null)
+				return;    //during tests, db is not loaded
 
 			if (forceReplace)
 			{

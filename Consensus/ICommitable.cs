@@ -1,4 +1,6 @@
-﻿namespace Consensus
+﻿using System;
+
+namespace Consensus
 {
 	public interface ICommitable
 	{

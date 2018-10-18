@@ -13,7 +13,7 @@ namespace Consensus
 		}
 
 		public readonly LogEntry[] Entries;
-		public readonly int PrevLogIndex;
+		public readonly int PrevLogLength;
 		public readonly int PrevLogTerm;
 		public readonly int LeaderCommit;
 
@@ -26,8 +26,8 @@ namespace Consensus
 			Entries = entries;
 			LeaderCommit = source.CommitIndex;
 			int cnt = entries != null ? entries.Length : 0;
-			PrevLogIndex = source.LogSize - cnt;
-			PrevLogTerm = source.GetLogTerm(PrevLogIndex);
+			PrevLogLength = source.LogSize - cnt;
+			PrevLogTerm = source.GetLogTerm(PrevLogLength);
 		}
 
 		public AppendEntries(Node source) : this(source, (LogEntry[])null)

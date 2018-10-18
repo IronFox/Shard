@@ -11,6 +11,9 @@ namespace Shard
 		{
 			private readonly ConcurrentBag<ClientMessage> bag = new ConcurrentBag<ClientMessage>();
 			public readonly int Generation;
+			private bool collected = false;
+
+			public bool WasCollected => collected;
 
 			public IncomingMessages(int generation)
 			{
@@ -32,11 +35,15 @@ namespace Shard
 				Dictionary<Guid, ClientMessage[]> dict = new Dictionary<Guid, ClientMessage[]>();
 				foreach (var p in temp)
 					dict.Add(p.Key, p.Value.ToArray());
+
+				collected = complete;
 				return new MessagePack(dict, complete);
 			}
 
 			internal void Add(ClientMessage msg)
 			{
+				if (collected)
+					throw new IntegrityViolation("Adding message to collected generation");
 				bag.Add(msg);
 			}
 		}
@@ -90,7 +97,12 @@ namespace Shard
 				if (p.Key <= generationOrOlder)
 					eraseGenerations.Add(p.Key);
 			foreach (var g in eraseGenerations)
-				generations.ForceRemove(g);
+			{
+				IncomingMessages m;
+				generations.ForceRemove(g,out m);
+				if (!m.WasCollected)
+					throw new IntegrityViolation("Dumping uncollected messages");
+			}
 		}
 
 
