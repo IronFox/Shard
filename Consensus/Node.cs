@@ -631,12 +631,20 @@ namespace Consensus
 			serialLock.AssertIsLockedByMe();
 			if (state == State.Leader)
 			{
+				foreach (var l in log)
+					if (l.Entry.CommitID == cID)
+					{
+						LogMinorEvent("Already in log: " + entry + ". Ignoring");
+						return;
+					}
+
 				LogMinorEvent("Issuing " + entry);
 				PrivateEntry p = new PrivateEntry(new LogEntry(cID, currentTerm, entry));
 				if (DebugState != null)
 					DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
 
-				lock (log)
+				//lock (log)
+
 					log.Add(p);
 				Broadcast(new AppendEntries(this, p.Entry));
 				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
