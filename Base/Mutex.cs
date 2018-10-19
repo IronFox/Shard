@@ -32,7 +32,7 @@ namespace Base
 		}
 		public void Lock()
 		{
-			int msTimeout = 1000000;
+			int msTimeout = 5000;
 			if (!mtx.WaitOne(msTimeout))
 				throw new DeadlockException("Thread "+NameOf(System.Threading.Thread.CurrentThread)+" failed to acquire "+this+" after "+ msTimeout+"ms. Currently helt by "+NameOf(lockingThread));
 			lockingThread = System.Threading.Thread.CurrentThread;

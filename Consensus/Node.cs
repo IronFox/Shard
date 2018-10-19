@@ -146,7 +146,7 @@ namespace Consensus
 		private readonly List<PrivateEntry> log = new List<PrivateEntry>();
 		private int numVotes = 0;
 		private readonly Random localRandom = new Random((int)PreciseTime.Now.Ticks);
-		private ConcurrentQueue<Tuple<CommitID, ICommitable>> dispatchQueue = new ConcurrentQueue<Tuple<CommitID, ICommitable>>();
+		//private ConcurrentQueue<Tuple<CommitID, ICommitable>> dispatchQueue = new ConcurrentQueue<Tuple<CommitID, ICommitable>>();
 
 
 		private static readonly PreciseTimeSpan HEART_BEAT_TIMEOUT_NS = PreciseTimeSpan.FromMilliseconds(50);
@@ -214,6 +214,7 @@ namespace Consensus
 						DebugState.SignalExecution(i, e.Entry.Term,this);
 					LogEvent("Executing " + e.Entry);
 					e.Execute(this);
+					committed.TryRemove(e.Entry.CommitID);
 				}
 				commitCount = newCommitCount;
 				if (IsLeader)
@@ -326,17 +327,19 @@ namespace Consensus
 				return;
 			serialLock.DoLocked(action);
 
-			if (!garbage.IsEmpty)
+			if (!serialLock.IsLockedByMe)
 			{
-				LogMinorEvent("Disposing garbage");
-				Connection c;
-				while (garbage.TryTake(out c))
+				if (!garbage.IsEmpty)
 				{
-					c.Dispose();
-					old.Add(c);
+					LogMinorEvent("Disposing garbage");
+					Connection c;
+					while (garbage.TryTake(out c))
+					{
+						c.Dispose();
+						old.Add(c);
+					}
 				}
 			}
-
 
 		}
 
@@ -379,6 +382,7 @@ namespace Consensus
 				{
 					if (state == State.Leader)
 						CheckTimeouts(false);
+					CheckCommittedTimeouts();
 
 					var dl = nextActionAt;
 					if (PreciseTime.Now < dl)
@@ -451,6 +455,35 @@ namespace Consensus
 		{
 			LogMinorEvent("Scheduling unresponsive connection for disposal: " + c);
 			garbage.Add(c);
+		}
+
+		private void CheckCommittedTimeouts()
+		{
+			if (leader == null)
+				return;
+			DoSerialized(() =>
+			{
+				foreach (var c in committed)
+				{
+					if (DateTime.Now - c.Value.lastAttempt > TimeSpan.FromSeconds(1))
+					{
+						bool found = false;
+						foreach (var l in log)
+							if (l.Entry.CommitID == c.Key)
+							{
+								found = true;
+								c.Value.lastAttempt = DateTime.Now;
+								break; ;
+							}
+						if (!found)
+						{
+							LogMinorEvent("Trying to recommit " + c.Value.comm);
+							c.Value.lastAttempt = DateTime.Now;
+							Commit(c.Key, c.Value.comm);
+						}
+					}
+				}
+			});
 		}
 
 		private void CheckTimeouts(bool forceSend)
@@ -584,8 +617,14 @@ namespace Consensus
 
 
 		private int commitSerial = 0;
-		
-		//private ConcurrentDictionary<Guid, Committed> committed = new ConcurrentDictionary<Guid, Committed>();
+
+
+		private class Committed
+		{
+			public ICommitable comm;
+			public DateTime lastAttempt;
+		}
+		private ConcurrentDictionary<CommitID, Committed> committed = new ConcurrentDictionary<CommitID, Committed>();
 
 		internal void Commit(CommitID cID, ICommitable entry)
 		{
@@ -613,7 +652,7 @@ namespace Consensus
 				else
 				{
 					LogEvent("Received message out of consensus. Logging " + entry);
-					dispatchQueue.Enqueue(Helper.Tuple(cID, entry));
+					//dispatchQueue.Enqueue(Helper.Tuple(cID, entry));
 				}
 			}
 		}
@@ -631,7 +670,9 @@ namespace Consensus
 				return;
 			DoSerialized(() =>
 			{
-				Commit(new CommitID(myIndex, commitSerial++), entry);
+				var cID = new CommitID(myIndex, commitSerial++);
+				Commit(cID, entry);
+				committed.GetOrAdd(cID, new Committed() { comm = entry, lastAttempt = DateTime.Now });
 			});
 		}
 
@@ -648,9 +689,9 @@ namespace Consensus
 				TruncateTo(Math.Max(p.LeaderCommit,commitCount));
 				//votedInTerm = -1;
 
-				Tuple<CommitID, ICommitable> e;
-				while (dispatchQueue.TryDequeue(out e))
-					sender.Dispatch(new CommitEntry(e.Item1, p.Term, e.Item2));
+				//Tuple<CommitID, ICommitable> e;
+				//while (dispatchQueue.TryDequeue(out e))
+				//	sender.Dispatch(new CommitEntry(e.Item1, p.Term, e.Item2));
 			}
 			else
 			{
