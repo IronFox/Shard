@@ -127,18 +127,35 @@ namespace Consensus.Tests
 
 			internal void Commit(ICommitable comm)
 			{
-				Commit(random.Next(members.Length),comm);
+				Schedule(random.Next(members.Length),comm);
 			}
 
-			internal void Commit(int memberIndex, ICommitable comm)
+			internal Consensus.CommitID Schedule(int memberIndex, ICommitable comm)
 			{
-				members[memberIndex].Commit(comm);
+				return members[memberIndex].Schedule(comm);
+			}
+
+			internal void RemoveFossiles(int memberIndex)
+			{
+				members[memberIndex].RemoveFossiles();
+			}
+			internal void RemoveFossiles(int memberIndex, CommitID threshold, bool includeThreshold)
+			{
+				members[memberIndex].RemoveFossiles(threshold, includeThreshold);
 			}
 
 			internal void ForeachMember(Action<Node> action)
 			{
 				for (int i = 0; i < members.Length; i++)
 					action(members[i]);
+			}
+
+			internal void AssertLogsAreEmpty()
+			{
+				foreach (var m in members)
+				{
+					Assert.IsTrue( m.CountStoredLogEntries<=1);	//last entry can't be removed
+				}
 			}
 		}
 
@@ -190,7 +207,7 @@ namespace Consensus.Tests
 				c.Attach<TestAttachment>();
 				for (int i = 0; i < 10; i++)
 				{
-					c.Commit(j, new TestCommitable(i));
+					c.Schedule(j, new TestCommitable(i));
 				}
 
 				Thread.Sleep(1000);
@@ -201,6 +218,35 @@ namespace Consensus.Tests
 
 
 		}
+
+		[TestMethod()]
+		public void FossileRemovalTest()
+		{
+			int basePort = new Random().Next(1024, 32768);
+			Cluster c = new Cluster(basePort, 3);
+			Assert.IsTrue(c.AwaitConsensus());
+
+			for (int j = 0; j < c.Size; j++)
+			{
+				c.Attach<TestAttachment>();
+				for (int i = 0; i < 10; i++)
+				{
+					c.Schedule(j, new TestCommitable(i));
+				}
+				c.RemoveFossiles(j);
+				
+
+				Thread.Sleep(1000);
+				c.ForeachMember(hub => ((TestAttachment)hub.Attachment).AssertIsComplete(hub, 10));
+			}
+
+			c.AssertLogsAreEmpty();
+
+			c.Dispose();
+
+
+		}
+
 
 		[TestMethod()]
 		public void HubTest()

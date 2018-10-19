@@ -226,7 +226,7 @@ namespace Consensus
 					return;
 				parent.generation = EndedGeneration + 1;
 				parent.Notify.OnGenerationEnd(EndedGeneration);
-				parent.Commit(new TimeWindowReport(EndedGeneration,Clock.Now - TimeStamp));
+				parent.Schedule(new TimeWindowReport(EndedGeneration,Clock.Now - TimeStamp));
 			}
 		}
 
@@ -246,7 +246,7 @@ namespace Consensus
 				Log.Message("Progressing ");
 				if (last != current)
 				{
-					Commit(new GEC(current));
+					Schedule(new GEC(current));
 					last = current;
 				}
 			}
@@ -273,7 +273,7 @@ namespace Consensus
 
 		public void Dispatch(ClientMessage msg, Address confirmTo)
 		{
-			Commit(new CommitMessage(msg, confirmTo));
+			Schedule(new CommitMessage(msg, confirmTo));
 		}
 	}
 }

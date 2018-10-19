@@ -16,7 +16,7 @@ namespace Consensus
 
 		public override void OnProcess(Node receiver, Connection sender)
 		{
-			receiver.Commit(c,e);
+			receiver.Schedule(c,e);
 		}
 	}
 }

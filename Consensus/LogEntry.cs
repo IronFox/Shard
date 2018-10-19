@@ -6,6 +6,7 @@ namespace Consensus
 	[Serializable]
 	public struct CommitID : IEquatable<CommitID>
 	{
+		public static readonly CommitID None = new CommitID(-1,-1);
 		public readonly int OriginNode;
 		public readonly int OriginSerialNumber;
 		public CommitID(int origin, int serial)

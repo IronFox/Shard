@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -143,7 +144,7 @@ namespace Consensus
 		private int currentTerm = 0;
 		private int commitCount = 0;//, lastApplied = 0;
 		private PreciseTime nextActionAt;
-		private readonly List<PrivateEntry> log = new List<PrivateEntry>();
+		private readonly OffsetList<PrivateEntry> log = new OffsetList<PrivateEntry>();
 		private int numVotes = 0;
 		private readonly Random localRandom = new Random((int)PreciseTime.Now.Ticks);
 		//private ConcurrentQueue<Tuple<CommitID, ICommitable>> dispatchQueue = new ConcurrentQueue<Tuple<CommitID, ICommitable>>();
@@ -316,7 +317,6 @@ namespace Consensus
 		}
 
 
-		//private SpinLock serialLock = new SpinLock();
 
 		private readonly DebugMutex serialLock;
 		private readonly ConcurrentBag<Connection> garbage = new ConcurrentBag<Connection>(), old = new ConcurrentBag<Connection>();
@@ -457,6 +457,14 @@ namespace Consensus
 			garbage.Add(c);
 		}
 
+		private int FindLogEntry(CommitID id)
+		{
+			for (int i = log.Offset; i < log.Count; i++)
+				if (log[i].Entry.CommitID == id)
+					return i;
+			return -1;
+		}
+
 		private void CheckCommittedTimeouts()
 		{
 			if (leader == null)
@@ -467,19 +475,14 @@ namespace Consensus
 				{
 					if (DateTime.Now - c.Value.lastAttempt > TimeSpan.FromSeconds(1))
 					{
-						bool found = false;
-						foreach (var l in log)
-							if (l.Entry.CommitID == c.Key)
-							{
-								found = true;
-								c.Value.lastAttempt = DateTime.Now;
-								break; ;
-							}
-						if (!found)
+						int at = FindLogEntry(c.Key);
+						if (at != -1)
+							c.Value.lastAttempt = DateTime.Now;
+						else
 						{
 							LogMinorEvent("Trying to recommit " + c.Value.comm);
 							c.Value.lastAttempt = DateTime.Now;
-							Commit(c.Key, c.Value.comm);
+							Schedule(c.Key, c.Value.comm);
 						}
 					}
 				}
@@ -615,6 +618,7 @@ namespace Consensus
 
 		internal static PreciseTime NextHeartbeat => PreciseTime.Now + PreciseTimeSpan.FromMilliseconds(100);
 
+		public int CountStoredLogEntries => log.ActualEntryCount;
 
 		private int commitSerial = 0;
 
@@ -626,7 +630,7 @@ namespace Consensus
 		}
 		private ConcurrentDictionary<CommitID, Committed> committed = new ConcurrentDictionary<CommitID, Committed>();
 
-		internal void Commit(CommitID cID, ICommitable entry)
+		internal void Schedule(CommitID cID, ICommitable entry)
 		{
 			serialLock.AssertIsLockedByMe();
 			if (state == State.Leader)
@@ -643,10 +647,9 @@ namespace Consensus
 				if (DebugState != null)
 					DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
 
-				//lock (log)
+				log.Add(p);	//add local
+				Broadcast(new AppendEntries(this, p.Entry));//transport remote
 
-					log.Add(p);
-				Broadcast(new AppendEntries(this, p.Entry));
 				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
 			}
 			else
@@ -672,17 +675,81 @@ namespace Consensus
 		/// If no leader is known, the message is queued for later delivery.
 		/// </summary>
 		/// <param name="entry">Object to commit. Null-objects are ignored. Type must be declared Serializable</param>
-		public void Commit(ICommitable entry)
+		public CommitID Schedule(ICommitable entry)
 		{
+			if (!Attribute.IsDefined(entry.GetType(), typeof(SerializableAttribute)))
+				throw new SerializationException("Entry " + entry + " is not marked serializable");
+			CommitID rs = CommitID.None;
 			if (entry == null)
-				return;
+				return rs;
 			DoSerialized(() =>
 			{
-				var cID = new CommitID(myIndex, commitSerial++);
-				Commit(cID, entry);
+				var cID = rs = new CommitID(myIndex, commitSerial++);
+				Schedule(cID, entry);
 				committed.GetOrAdd(cID, new Committed() { comm = entry, lastAttempt = DateTime.Now });
 			});
+			return rs;
 		}
+
+		/// <summary>
+		/// Schedules removal of all committed log entries older than the specified commit.
+		/// Nothing happens if the specified commit is not found at the time of execution.
+		/// </summary>
+		/// <param name="threshold">Commit to compare with</param>
+		/// <param name="includeThreshold"></param>
+		public CommitID RemoveFossiles(CommitID threshold, bool includeThreshold)
+		{
+			if (threshold == CommitID.None)
+				return CommitID.None;
+			return Schedule(new FossileShredder(threshold, includeThreshold));
+		}
+		
+		/// <summary>
+		/// Completely removes all currently logged/scheduled entries.
+		/// The fossile remover itself cannot be removed
+		/// </summary>
+		/// <returns></returns>
+		public CommitID RemoveFossiles()
+		{
+			CommitID rs = CommitID.None;
+			DoSerialized(() =>
+			{
+				var cID = rs = new CommitID(myIndex, commitSerial++);
+				var e = new FossileShredder(cID, false);
+				Schedule(cID, e);
+				committed.GetOrAdd(cID, new Committed() { comm = e, lastAttempt = DateTime.Now });
+			});
+			return rs;
+		}
+
+		[Serializable]
+		private class FossileShredder : ICommitable
+		{
+			private CommitID threshold;
+			private bool includeThreshold;
+
+			public FossileShredder(CommitID threshold, bool includeThreshold)
+			{
+				this.threshold = threshold;
+				this.includeThreshold = includeThreshold;
+			}
+
+			public void Commit(Node node)
+			{
+				node.DoSerialized(() =>
+				{
+					int cnt = node.FindLogEntry(threshold);
+					node.LogEvent("Attempting to clean log of length "+node.log.Count+". Threshold found at "+cnt);
+					if (includeThreshold)
+						cnt++;
+					if (cnt > 0)
+					{
+						node.log.RemoveFrontIncreaseOffset(cnt);
+					}
+				});
+			}
+		}
+
 
 		internal void SignalAppendEntries(AppendEntries p, Connection sender)
 		{
