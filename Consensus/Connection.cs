@@ -103,6 +103,7 @@ namespace Consensus
 		{
 			TcpLocked(() =>
 			{
+				LogEvent("Disposing");
 				closing = true;
 				if (tcpClient != null)
 				{

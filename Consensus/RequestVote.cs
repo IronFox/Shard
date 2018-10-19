@@ -34,5 +34,10 @@ namespace Consensus
 			var upToDate = IsUpToDate(receiver);
 			receiver.ProcessVoteRequest(sender, Term, upToDate);
 		}
+
+		public override void OnBadTermIgnore(Node processor, Connection sender)
+		{
+			sender.Dispatch(new VoteRejectedBadTerm(processor.CurrentTerm));
+		}
 	}
 }

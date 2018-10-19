@@ -15,6 +15,18 @@ namespace Consensus
 			LastCommit = source.CommitIndex;
 		}
 
+		public override string ToString()
+		{
+			string rs = "AppendConfirm{";
+			rs += "Succeeded=" + Succeeded;
+			rs += ",Yield=" + Yield;
+			rs += ",LastCommit=" + LastCommit;
+			rs += ",Term=" + Term;
+			rs += ",Last=" + LastLogIndex;
+			rs += "}";
+			return rs;
+		}
+
 		public override void OnProcess(Node instance, Connection c)
 		{
 			if (instance.CurrentState == Node.State.Leader)
@@ -51,7 +63,7 @@ namespace Consensus
 
 		public override void OnBadTermIgnore(Node processor, Connection sender)
 		{
-			sender.Dispatch(new AppendEntriesConfirmation(processor, false, true));
+			//sender.Dispatch(new AppendEntriesConfirmation(processor, false, true));
 		}
 
 	}

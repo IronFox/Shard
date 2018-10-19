@@ -6,15 +6,17 @@ namespace Consensus
 	internal class CommitEntry : Package
 	{
 		private ICommitable e;
+		private CommitID c;
 
-		public CommitEntry(int term, ICommitable e) : base(term)
+		public CommitEntry(CommitID c, int term, ICommitable e) : base(term)
 		{
 			this.e = e;
+			this.c = c;
 		}
 
 		public override void OnProcess(Node receiver, Connection sender)
 		{
-			receiver.Commit(e);
+			receiver.Commit(c,e);
 		}
 	}
 }

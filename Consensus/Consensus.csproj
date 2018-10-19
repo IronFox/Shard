@@ -60,6 +60,7 @@
     <Compile Include="RequestVote.cs" />
     <Compile Include="SharedDebugState.cs" />
     <Compile Include="VoteConfirm.cs" />
+    <Compile Include="VoteRejectedBadTerm.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.csproj">

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 
 namespace Consensus
 {
+
 	public class SharedDebugState
 	{
 		private struct Execution
@@ -25,7 +26,22 @@ namespace Consensus
 			}
 		}
 
-		private readonly ConcurrentDictionary<int, Execution> history = new ConcurrentDictionary<int, Execution>();		//base0Index -> term
+		private readonly ConcurrentDictionary<int, Execution> history = new ConcurrentDictionary<int, Execution>();     //base0Index -> term
+
+		private readonly List<Node> members = new List<Node>();
+
+		internal void Unregister(Node node)
+		{
+			lock (members)
+				members.Remove(node);
+		}
+
+		internal void Register(Node n)
+		{
+			lock (members)
+				if (!members.Contains(n))
+					members.Add(n);
+		}
 
 
 		internal void SignalExecution(int base0LogIndex, int term, Node actor)
@@ -48,8 +64,8 @@ namespace Consensus
 		internal void SignalLogRemoval(int base0LogIndex, int term)
 		{
 			Execution old;
-			if (history.TryGetValue(base0LogIndex, out old) && old.term == term)
-				throw new IntegrityViolation("Trying to remove entry #"+base0LogIndex+"/"+history.Count+", which has been committed in term "+term);
+			//if (history.TryGetValue(base0LogIndex, out old) && old.term == term)
+				//throw new IntegrityViolation("Trying to remove entry #"+base0LogIndex+"/"+history.Count+", which has been committed in term "+term);
 		}
 
 	

@@ -576,5 +576,10 @@ namespace Base
 			catch { }
 
 		}
+
+		public static Tuple<T0, T1> Tuple<T0,T1>(T0 a, T1 b)
+		{
+			return new Tuple<T0, T1>(a, b);
+		}
 	}
 }

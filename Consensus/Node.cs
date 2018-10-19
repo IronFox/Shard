@@ -19,8 +19,18 @@ namespace Consensus
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
 
-
-		public SharedDebugState DebugState { get; set; }
+		private SharedDebugState debugState;
+		public SharedDebugState DebugState
+		{
+			get { return debugState; }
+			set
+			{
+				if (debugState != null)
+					debugState.Unregister(this);
+				debugState = value;
+				debugState.Register(this);
+			}
+		}
 
 		/// <summary>
 		/// Custom attachment
@@ -54,7 +64,7 @@ namespace Consensus
 		internal void LogError(object error, Identity sender=null)
 		{
 			Console.Error.WriteLine((sender??this) + ": " + error);
-			LogMinorEvent("ERROR: " + error);
+			LogMinorEvent("ERROR: " + error,sender);
 		}
 		internal void LogError(Exception ex, Identity sender=null)
 		{
@@ -63,7 +73,15 @@ namespace Consensus
 		}
 		internal void LogMinorEvent(object ev, Identity sender=null)
 		{
-			eventLog.Enqueue("[" + Clock.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + "] " + (sender ?? this) + ": " + ev);
+			string id;
+			if (sender == null)
+			{
+				sender = this;
+				id = state + " " + ToString();
+			}
+			else
+				id = sender.ToString();
+			eventLog.Enqueue("[" + Clock.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + "] " + id + ": " + ev);
 			string dummy;
 			while (eventLog.Count > 500)
 				eventLog.TryDequeue(out dummy);
@@ -120,6 +138,7 @@ namespace Consensus
 
 		private Identity leader = null;
 		private Identity votedFor = null;
+		//private int votedInTerm = -1;
 		private State state = State.Follower;
 		private int currentTerm = 0;
 		private int commitCount = 0;//, lastApplied = 0;
@@ -127,7 +146,7 @@ namespace Consensus
 		private readonly List<PrivateEntry> log = new List<PrivateEntry>();
 		private int numVotes = 0;
 		private readonly Random localRandom = new Random((int)PreciseTime.Now.Ticks);
-		private ConcurrentQueue<ICommitable> dispatchQueue = new ConcurrentQueue<ICommitable>();
+		private ConcurrentQueue<Tuple<CommitID, ICommitable>> dispatchQueue = new ConcurrentQueue<Tuple<CommitID, ICommitable>>();
 
 
 		private static readonly PreciseTimeSpan HEART_BEAT_TIMEOUT_NS = PreciseTimeSpan.FromMilliseconds(50);
@@ -143,6 +162,14 @@ namespace Consensus
 		{
 			var delta = GetElectionTimeoutNS();
 			LogMinorEvent("Election timeout at "+(DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
+			return PreciseTime.Now + delta;
+		}
+		private PreciseTime GetCandidateFailedElectionTimeout()
+		{
+			PreciseTimeSpan delta;
+			lock (localRandom)
+				delta = PreciseTimeSpan.FromMilliseconds(localRandom.Next(350) + 150);
+//			LogMinorEvent("Election timeout at " + (DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
 			return PreciseTime.Now + delta;
 		}
 
@@ -299,12 +326,18 @@ namespace Consensus
 				return;
 			serialLock.DoLocked(action);
 
-			Connection c;
-			while (garbage.TryTake(out c))
+			if (!garbage.IsEmpty)
 			{
-				c.Dispose();
-				old.Add(c);
+				LogMinorEvent("Disposing garbage");
+				Connection c;
+				while (garbage.TryTake(out c))
+				{
+					c.Dispose();
+					old.Add(c);
+				}
 			}
+
+
 		}
 
 		internal void ForeachConnection(Action<Connection> action)
@@ -370,20 +403,35 @@ namespace Consensus
 							});
 							break;
 						case State.Candidate:
+							DoSerialized(() =>
+							{
+								if (PreciseTime.Now < nextActionAt)
+									return;
+								LogMinorEvent("Timeout " + PreciseTime.Now + "/" + nextActionAt + " reached. Reverting to follower (for now)");
+								votedFor = null;
+								//votedInTerm = -1;
+								state = State.Follower;
+								leader = null;
+								nextActionAt = GetCandidateFailedElectionTimeout();
+							});
+							break;
 						case State.Follower:
 							DoSerialized(() =>
 							{
+								if (PreciseTime.Now < nextActionAt)
+									return;
 								//elect new leader
 								ClearRemoteInfo();
 								numVotes = 1;
 								currentTerm++;
 								votedFor = this;
+								//votedInTerm = currentTerm;
 								state = State.Candidate;
 								leader = null;
 
 								if (PreciseTime.Now < dl)
 									throw new IntegrityViolation("Timing issue");
-								LogMinorEvent("Timeout "+PreciseTime.Now+"/"+ dl + " reached. Starting new election at log term "+GetLogTerm(LogSize));
+								LogMinorEvent("Timeout "+PreciseTime.Now+"/"+ nextActionAt + " reached. Starting new election at log term "+GetLogTerm(LogSize));
 
 								nextActionAt = GetElectionTimeout();
 
@@ -535,6 +583,41 @@ namespace Consensus
 		internal static PreciseTime NextHeartbeat => PreciseTime.Now + PreciseTimeSpan.FromMilliseconds(100);
 
 
+		private int commitSerial = 0;
+		
+		//private ConcurrentDictionary<Guid, Committed> committed = new ConcurrentDictionary<Guid, Committed>();
+
+		internal void Commit(CommitID cID, ICommitable entry)
+		{
+			serialLock.AssertIsLockedByMe();
+			if (state == State.Leader)
+			{
+				LogMinorEvent("Issuing " + entry);
+				PrivateEntry p = new PrivateEntry(new LogEntry(cID, currentTerm, entry));
+				if (DebugState != null)
+					DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
+
+				lock (log)
+					log.Add(p);
+				Broadcast(new AppendEntries(this, p.Entry));
+				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
+			}
+			else
+			{
+				var cp = leader as Connection;
+				if (cp != null)
+				{
+					LogMinorEvent("Dispatching " + entry + " to " + leader);
+					cp.Dispatch(new CommitEntry(cID,currentTerm, entry));
+				}
+				else
+				{
+					LogEvent("Received message out of consensus. Logging " + entry);
+					dispatchQueue.Enqueue(Helper.Tuple(cID, entry));
+				}
+			}
+		}
+
 		/// <summary>
 		/// Registers an object to be committed to the consensus.
 		/// If a leader is currently known, the object is sent to the leader for logging.
@@ -548,32 +631,7 @@ namespace Consensus
 				return;
 			DoSerialized(() =>
 			{
-				if (state == State.Leader)
-				{
-					LogMinorEvent("Issuing " + entry);
-					PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
-					if (DebugState != null)
-						DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
-
-					lock (log)
-						log.Add(p);
-					Broadcast(new AppendEntries(this, p.Entry));
-					ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
-				}
-				else
-				{
-					var cp = leader as Connection;
-					if (cp != null)
-					{
-						LogMinorEvent("Dispatching " + entry + " to " + leader);
-						cp.Dispatch(new CommitEntry(currentTerm, entry));
-					}
-					else
-					{
-						LogEvent("Received message out of consensus. Logging " + entry);
-						dispatchQueue.Enqueue(entry);
-					}
-				}
+				Commit(new CommitID(myIndex, commitSerial++), entry);
 			});
 		}
 
@@ -587,10 +645,12 @@ namespace Consensus
 				state = State.Follower;
 				leader = sender;
 				votedFor = null;
+				TruncateTo(Math.Max(p.LeaderCommit,commitCount));
+				//votedInTerm = -1;
 
-				ICommitable e;
+				Tuple<CommitID, ICommitable> e;
 				while (dispatchQueue.TryDequeue(out e))
-					sender.Dispatch(new CommitEntry(p.Term, e));
+					sender.Dispatch(new CommitEntry(e.Item1, p.Term, e.Item2));
 			}
 			else
 			{
@@ -603,8 +663,8 @@ namespace Consensus
 				}
 			}
 
-
-			if (GetLogTerm(p.PrevLogLength) == -1)    //don't have (yet)
+			var t = GetLogTerm(p.PrevLogLength);
+			if (t == -1 || t != p.PrevLogTerm)    //don't have (yet)
 			{
 				LogEvent("Rejecting append entries because don't have prev log index " + p.PrevLogLength + ", term " + p.Term+", lcom "+CommitIndex);
 				sender.Dispatch(new AppendEntriesConfirmation(this, false,false));
@@ -662,14 +722,22 @@ namespace Consensus
 		{
 			serialLock.AssertIsLockedByMe();
 
-			if ((votedFor == null || votedFor == sender || term > currentTerm) && upToDate)
+			if ((/*votedFor == null ||*/ votedFor == sender || term > currentTerm) && upToDate)	//already voted: all good. 
 			{
-				state = State.Follower;
+				Yield();
+				//state = State.Follower;
 				//leader = null;	leave old leader in place
 				LogMinorEvent("Recognized vote request for term " + term + " from " + sender);
-				nextActionAt = GetElectionTimeout();
+				//nextActionAt = GetElectionTimeout();
 				votedFor = sender;
 				currentTerm = term;
+				//currentTerm = term;
+
+
+				//!!!!we voted: we cannot accept any other appendentries from our last leader!!!!
+
+
+
 				try
 				{
 					sender.Dispatch(new VoteConfirm(currentTerm));
@@ -735,7 +803,14 @@ namespace Consensus
 			state = State.Follower;
 			leader = null;
 			votedFor = null;
+			//votedInTerm = -1;
 			nextActionAt = GetElectionTimeout();
+		}
+
+		internal void SignalVoteRejectedBadTerm(int term, Connection sender)
+		{
+			LogMinorEvent("Vote rejected by " + sender + ". Remote term reported as " + term+", local is "+currentTerm);
+			currentTerm = Math.Max(currentTerm,term);	//try better next time
 		}
 	}
 }
