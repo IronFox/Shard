@@ -397,7 +397,7 @@ namespace Shard.Tests
 					Guid entityID = broadCastResponse.From;
 
 
-					for (int i = 0; i < 100; i++)
+					for (int i = 0; i < 10; i++)
 					{
 						float f = random.NextFloat(0, 100);
 						Console.WriteLine(i + ": " + f);

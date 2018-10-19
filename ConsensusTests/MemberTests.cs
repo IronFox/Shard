@@ -71,11 +71,14 @@ namespace Consensus.Tests
 				return false;
 			}
 
+			public bool ConsensusEstablished => members.Count(m => m.IsLeader) == 1 && members.Count(m => m.CurrentState == Node.State.Follower) == members.Length - 1;
+
+
 			public bool AwaitConsensus()
 			{
 				for (int i = 0; i < 100; i++)
 				{
-					if (members.Any(m => m.IsLeader))
+					if (ConsensusEstablished)
 						return true;
 					Thread.Sleep(100);
 				}

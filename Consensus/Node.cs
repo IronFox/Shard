@@ -407,18 +407,18 @@ namespace Consensus
 							});
 							break;
 						case State.Candidate:
-							DoSerialized(() =>
-							{
-								if (PreciseTime.Now < nextActionAt)
-									return;
-								LogMinorEvent("Timeout " + PreciseTime.Now + "/" + nextActionAt + " reached. Reverting to follower (for now)");
-								votedFor = null;
-								//votedInTerm = -1;
-								state = State.Follower;
-								leader = null;
-								nextActionAt = GetCandidateFailedElectionTimeout();
-							});
-							break;
+							//DoSerialized(() =>
+							//{
+							//	if (PreciseTime.Now < nextActionAt)
+							//		return;
+							//	LogMinorEvent("Timeout " + PreciseTime.Now + "/" + nextActionAt + " reached. Reverting to follower (for now)");
+							//	votedFor = null;
+							//	//votedInTerm = -1;
+							//	state = State.Follower;
+							//	leader = null;
+							//	nextActionAt = GetCandidateFailedElectionTimeout();
+							//});
+							//break;
 						case State.Follower:
 							DoSerialized(() =>
 							{
@@ -859,7 +859,12 @@ namespace Consensus
 		internal void SignalVoteRejectedBadTerm(int term, Connection sender)
 		{
 			LogMinorEvent("Vote rejected by " + sender + ". Remote term reported as " + term+", local is "+currentTerm);
-			currentTerm = Math.Max(currentTerm,term);	//try better next time
+			currentTerm = Math.Max(currentTerm,term);   //try better next time
+			if (state == State.Candidate)
+			{
+				nextActionAt = PreciseTime.Now;
+				votedFor = null;
+			}
 		}
 	}
 }

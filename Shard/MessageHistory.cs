@@ -100,8 +100,8 @@ namespace Shard
 			{
 				IncomingMessages m;
 				generations.ForceRemove(g,out m);
-				if (!m.WasCollected)
-					throw new IntegrityViolation("Dumping uncollected messages");
+				//if (!m.WasCollected)
+					//throw new IntegrityViolation("Dumping uncollected messages");
 			}
 		}
 
