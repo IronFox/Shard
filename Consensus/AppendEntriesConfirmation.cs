@@ -40,8 +40,8 @@ namespace Consensus
 				else
 				{
 					instance.LogEvent("Append entries rejected by remote " + info);
-					info.MatchIndex = LastLogIndex;
-					info.NextIndex = LastLogIndex + 1;
+					info.MatchIndex = LastCommit;
+					info.NextIndex = LastCommit + 1;
 					c.Dispatch(new AppendEntries(instance, info.NextIndex));
 					info.AppendTimeout = instance.GetAppendMessageTimeout();
 				}

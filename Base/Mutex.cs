@@ -13,6 +13,9 @@ namespace Base
 		private int recursion = 0;
 
 		public readonly string Name;
+
+		public bool IsLockedByMe => lockingThread == System.Threading.Thread.CurrentThread;
+
 		public DebugMutex(string name)
 		{
 			Name = name;
@@ -58,6 +61,12 @@ namespace Base
 			{
 				Release();
 			}
+		}
+
+		public void AssertIsLockedByMe()
+		{
+			if (!IsLockedByMe)
+				throw new IntegrityViolation("Local thread "+this+" is not locked by calling thread "+NameOf(System.Threading.Thread.CurrentThread));
 		}
 	}
 }

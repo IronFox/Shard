@@ -13,52 +13,14 @@ using System.Threading.Tasks;
 
 namespace Consensus
 {
-	
-	public class Identity : IEquatable<Identity>
-	{
-		public Func<Address> Address { get; set; }
-		public readonly Identity Parent;
-
-
-		public override string ToString()
-		{
-			string rs = EndPoint;
-			if (rs != "")
-				rs += " ";
-			if (Parent != null)
-				return rs+Parent + "<->" + Address();
-			return rs + Address().ToString();
-		}
-
-		public virtual string EndPoint => "";
-
-		public Identity(Identity parent, Func<Address> address)
-		{
-			Parent = parent;
-			Address = address;
-		}
-
-		public override bool Equals(object obj)
-		{
-			return Equals(obj as Identity);
-		}
-
-		public bool Equals(Identity other)
-		{
-			return other != null &&
-				   Address().Equals(other.Address());
-		}
-
-		public override int GetHashCode()
-		{
-			return -1984154133 + EqualityComparer<Address>.Default.GetHashCode(Address());
-		}
-	};
 
 	public class Node : Identity, IDisposable
-    {
+	{
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
+
+
+		public SharedDebugState DebugState { get; set; }
 
 		/// <summary>
 		/// Custom attachment
@@ -214,12 +176,15 @@ namespace Consensus
 
 		private void CommitTo(int newCommitCount)
 		{
+			serialLock.AssertIsLockedByMe();
 			if (commitCount < newCommitCount)
 			{
 				LogMinorEvent("Committing " + commitCount + ".." + newCommitCount + ", history length " + log.Count);
 				for (int i = commitCount; i < newCommitCount; i++)
 				{
 					PrivateEntry e = log[i];
+					if (DebugState != null)
+						DebugState.SignalExecution(i, e.Entry.Term,this);
 					LogEvent("Executing " + e.Entry);
 					e.Execute(this);
 				}
@@ -240,6 +205,8 @@ namespace Consensus
 				{
 					if (log[log.Count - 1].WasExecuted)
 						throw new InvalidOperationException("Removing entry " + (log.Count - 1) + " which has already been executed");
+					if (DebugState != null)
+						DebugState.SignalLogRemoval(log.Count - 1, log[log.Count - 1].Entry.Term);
 					log.RemoveAt(log.Count - 1);
 				}
 			}
@@ -378,7 +345,7 @@ namespace Consensus
 				try
 				{
 					if (state == State.Leader)
-						CheckTimeouts();
+						CheckTimeouts(false);
 
 					var dl = nextActionAt;
 					if (PreciseTime.Now < dl)
@@ -388,13 +355,19 @@ namespace Consensus
 							Thread.Sleep(TimeSpan.FromMilliseconds(localRandom.Next(10)));
 						continue;
 					}
+					dl = nextActionAt;
 					if (PreciseTime.Now < dl)
-						throw new IntegrityViolation("Timing issue");
+						continue;
 					switch (state)
 						{
 						case State.Leader:
-							Broadcast(new AppendEntries(this));
-							nextActionAt = NextHeartbeat;
+							DoSerialized(() =>
+							{
+								//CheckTimeouts(true);
+								Broadcast(new AppendEntries(this));
+								if (IsLeader)
+									nextActionAt = NextHeartbeat;
+							});
 							break;
 						case State.Candidate:
 						case State.Follower:
@@ -410,7 +383,7 @@ namespace Consensus
 
 								if (PreciseTime.Now < dl)
 									throw new IntegrityViolation("Timing issue");
-								LogMinorEvent("Timeout "+PreciseTime.Now+"/"+ nextActionAt + " reached. Starting new election");
+								LogMinorEvent("Timeout "+PreciseTime.Now+"/"+ dl + " reached. Starting new election at log term "+GetLogTerm(LogSize));
 
 								nextActionAt = GetElectionTimeout();
 
@@ -432,7 +405,7 @@ namespace Consensus
 			garbage.Add(c);
 		}
 
-		private void CheckTimeouts()
+		private void CheckTimeouts(bool forceSend)
 		{
 			DoSerialized(() =>
 			{
@@ -441,7 +414,7 @@ namespace Consensus
 				ForeachConnection(c =>
 				{
 					var info = c.ConsensusState;
-					if (info.AppendTimeout != PreciseTime.None && info.AppendTimeout < now)
+					if (forceSend || (info.AppendTimeout != PreciseTime.None && info.AppendTimeout < now))
 					{
 						LogEvent("Timeout reached. Re-sending " + info);
 						c.Dispatch(new AppendEntries(this, info.MatchIndex + 1));
@@ -573,37 +546,44 @@ namespace Consensus
 		{
 			if (entry == null)
 				return;
-			if (state == State.Leader)
+			DoSerialized(() =>
 			{
-				LogMinorEvent("Issuing " + entry);
-				PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
-				lock(log)
-					log.Add(p);
-				Broadcast(new AppendEntries(this, p.Entry));
-				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
-			}
-			else
-			{
-				var cp = leader as Connection;
-				if (cp != null)
+				if (state == State.Leader)
 				{
-					LogMinorEvent("Dispatching " + entry + " to " + leader);
-					cp.Dispatch(new CommitEntry(currentTerm, entry));
+					LogMinorEvent("Issuing " + entry);
+					PrivateEntry p = new PrivateEntry(new LogEntry(currentTerm, entry));
+					if (DebugState != null)
+						DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
+
+					lock (log)
+						log.Add(p);
+					Broadcast(new AppendEntries(this, p.Entry));
+					ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
 				}
 				else
 				{
-					LogEvent("Received message out of consensus. Logging " + entry);
-					dispatchQueue.Enqueue(entry);
+					var cp = leader as Connection;
+					if (cp != null)
+					{
+						LogMinorEvent("Dispatching " + entry + " to " + leader);
+						cp.Dispatch(new CommitEntry(currentTerm, entry));
+					}
+					else
+					{
+						LogEvent("Received message out of consensus. Logging " + entry);
+						dispatchQueue.Enqueue(entry);
+					}
 				}
-			}
+			});
 		}
 
 		internal void SignalAppendEntries(AppendEntries p, Connection sender)
 		{
+			serialLock.AssertIsLockedByMe();
 			LogEvent("Inbound append entries " + p);
-			if (leader == null || p.Term > currentTerm)
+			if ((leader == null && p.Term==currentTerm) || p.Term > currentTerm)
 			{
-				LogEvent("Recognized new leader " + sender);
+				LogEvent("Recognized new leader " + sender+"@t"+p.Term+"/"+currentTerm);
 				state = State.Follower;
 				leader = sender;
 				votedFor = null;
@@ -617,7 +597,7 @@ namespace Consensus
 				var ld = leader;
 				if (ld != sender)
 				{
-					LogEvent("Rejecting append entries because of leader mismatch of same term. Known=" + ld);
+					LogEvent("Rejecting append entries because of leader mismatch of same term. Known=" + (ld?.ToString() ??"null"));
 					sender.Dispatch(new AppendEntriesConfirmation(this, false,true));
 					return;
 				}
@@ -626,7 +606,7 @@ namespace Consensus
 
 			if (GetLogTerm(p.PrevLogLength) == -1)    //don't have (yet)
 			{
-				LogEvent("Rejecting append entries because don't have prev log index " + p.PrevLogLength + ", term " + p.Term);
+				LogEvent("Rejecting append entries because don't have prev log index " + p.PrevLogLength + ", term " + p.Term+", lcom "+CommitIndex);
 				sender.Dispatch(new AppendEntriesConfirmation(this, false,false));
 			}
 			else
@@ -680,10 +660,12 @@ namespace Consensus
 
 		internal void ProcessVoteRequest(Connection sender, int term, bool upToDate)
 		{
+			serialLock.AssertIsLockedByMe();
+
 			if ((votedFor == null || votedFor == sender || term > currentTerm) && upToDate)
 			{
 				state = State.Follower;
-				leader = null;// sender;
+				//leader = null;	leave old leader in place
 				LogMinorEvent("Recognized vote request for term " + term + " from " + sender);
 				nextActionAt = GetElectionTimeout();
 				votedFor = sender;
@@ -713,6 +695,7 @@ namespace Consensus
 
 		internal void ProcessVoteConfirmation(Connection sender, int term)
 		{
+			serialLock.AssertIsLockedByMe();
 			LogMinorEvent("Processing vote confirmation for term " + term+" from "+sender);
 			if (state == State.Candidate && term == currentTerm)
 			{
@@ -730,6 +713,9 @@ namespace Consensus
 					Broadcast(new AppendEntries(this));
 					nextActionAt = PreciseTime.Now + HEART_BEAT_TIMEOUT_NS;
 
+					if (DebugState != null)
+						DebugState.AssertLeaderMatch(log.Select(p => p.Entry));
+
 					if (commitCount != LogSize)
 					{
 						Broadcast(new AppendEntries(this, commitCount + 1));
@@ -744,6 +730,7 @@ namespace Consensus
 
 		internal void Yield()
 		{
+			serialLock.AssertIsLockedByMe();
 			LogEvent("Yielding...");
 			state = State.Follower;
 			leader = null;

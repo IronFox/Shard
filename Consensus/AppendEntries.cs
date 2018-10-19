@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 using System.Collections.Generic;
 
 namespace Consensus
@@ -28,6 +29,16 @@ namespace Consensus
 			int cnt = entries != null ? entries.Length : 0;
 			PrevLogLength = source.LogSize - cnt;
 			PrevLogTerm = source.GetLogTerm(PrevLogLength);
+		}
+
+		public override string ToString()
+		{
+			int len = Helper.Length(Entries);
+			string b = "AppendEntries{[";
+			if (len > 0)
+				b += (PrevLogLength+1)+"..."+ (PrevLogLength + len+1);
+			b += "],commit=" + LeaderCommit + "}";
+			return b;
 		}
 
 		public AppendEntries(Node source) : this(source, (LogEntry[])null)

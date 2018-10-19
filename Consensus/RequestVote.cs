@@ -21,6 +21,7 @@ namespace Consensus
 		{
 			int logSize = target.LogSize;
 			int myTerm = target.GetLogTerm(logSize);
+			target.LogMinorEvent("Comparing source log term "+LastLogTerm+" with local log term "+myTerm+", source log size="+LastLogIndex+" vs local log size="+logSize);
 			if (myTerm < LastLogTerm)
 				return true;
 			if (myTerm > LastLogTerm)
@@ -30,7 +31,8 @@ namespace Consensus
 
 		public override void OnProcess(Node receiver, Connection sender)
 		{
-			receiver.ProcessVoteRequest(sender, Term, IsUpToDate(receiver));
+			var upToDate = IsUpToDate(receiver);
+			receiver.ProcessVoteRequest(sender, Term, upToDate);
 		}
 	}
 }

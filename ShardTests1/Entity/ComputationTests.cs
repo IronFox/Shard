@@ -304,8 +304,12 @@ namespace Shard.Tests
 				var consensusCfg = new Consensus.Configuration(addr);
 				var dummyNotify = new DummyNotify();
 				consensus = new Consensus.Interface[size];
+				Consensus.SharedDebugState state = new Consensus.SharedDebugState();
 				for (int i = 0; i < size; i++)
+				{
 					consensus[i] = new Consensus.Interface(consensusCfg, i, new ShardID(Int3.Zero, -i), i > 0 ? dummyNotify : Notify);
+					consensus[i].DebugState = state;
+				}
 				
 				if (awaitFormation)
 					AwaitConsensus();
