@@ -63,7 +63,7 @@ namespace Consensus
 
 		internal void SignalLogRemoval(int base0LogIndex, int term)
 		{
-			Execution old;
+			//Execution old;
 			//if (history.TryGetValue(base0LogIndex, out old) && old.term == term)
 				//throw new IntegrityViolation("Trying to remove entry #"+base0LogIndex+"/"+history.Count+", which has been committed in term "+term);
 		}

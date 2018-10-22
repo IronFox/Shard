@@ -235,6 +235,7 @@ namespace Consensus
 			//return;
 			try
 			{
+				bool doDispose = false;
 				TcpLocked(() =>
 				{
 					var c = tcpClient;
@@ -250,7 +251,7 @@ namespace Consensus
 						{
 							LogError(ex);
 							if (!(this is ActiveConnection))
-								Dispose();
+								doDispose = true;
 						}
 					}
 					else
@@ -258,6 +259,8 @@ namespace Consensus
 						LogMinorEvent("Cannot dispatch " + p);
 					}
 				});
+				if (doDispose)
+					Dispose();
 			}
 			catch (Exception ex)
 			{

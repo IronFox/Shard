@@ -28,6 +28,7 @@ namespace Consensus.Tests
 		private class Cluster : IDisposable
 		{
 			private readonly Node[] members;
+			private readonly object[] attachments;
 			private readonly Configuration cfg;
 
 			public int LeaderIndex
@@ -58,6 +59,7 @@ namespace Consensus.Tests
 				members = new Node[size];
 				for (int i = 0; i < size; i++)
 					members[i] = new Node(cfg, i);
+				attachments = new object[size];
 			}
 
 			public bool AwaitInterconnected()
@@ -71,7 +73,7 @@ namespace Consensus.Tests
 				return false;
 			}
 
-			public bool ConsensusEstablished => members.Count(m => m.IsLeader) == 1 && members.Count(m => m.CurrentState == Node.State.Follower) == members.Length - 1;
+			public bool ConsensusEstablished => members.Count(m => m.IsLeader) == 1 && members.Count(m => m.KnowsRemoteLeader) == members.Length - 1;
 
 
 			public bool AwaitConsensus()
@@ -122,7 +124,7 @@ namespace Consensus.Tests
 			internal void Attach<T>() where T: new()
 			{
 				foreach (var m in members)
-					m.Attachment = new T();
+					attachments[m.Index] = m.Attachment = new T();
 			}
 
 			internal void Commit(ICommitable comm)
@@ -135,13 +137,13 @@ namespace Consensus.Tests
 				return members[memberIndex].Schedule(comm);
 			}
 
-			internal void RemoveFossiles(int memberIndex)
+			internal void RemoveFossils(int memberIndex)
 			{
-				members[memberIndex].RemoveFossiles();
+				members[memberIndex].RemoveFossils();
 			}
-			internal void RemoveFossiles(int memberIndex, CommitID threshold, bool includeThreshold)
+			internal void RemoveFossils(int memberIndex, CommitID threshold, bool includeThreshold)
 			{
-				members[memberIndex].RemoveFossiles(threshold, includeThreshold);
+				members[memberIndex].RemoveFossils(threshold, includeThreshold);
 			}
 
 			internal void ForeachMember(Action<Node> action)
@@ -156,6 +158,20 @@ namespace Consensus.Tests
 				{
 					Assert.IsTrue( m.CountStoredLogEntries<=1);	//last entry can't be removed
 				}
+			}
+
+			internal void Suspend(int suspended)
+			{
+				Assert.IsNotNull(members[suspended]);
+				members[suspended].Dispose();
+				members[suspended] = null;
+			}
+
+			internal void Resume(int suspended)
+			{
+				Assert.IsNull(members[suspended]);
+				members[suspended] = new Node(cfg, suspended);
+				members[suspended].Attachment = attachments[suspended];
 			}
 		}
 
@@ -220,7 +236,7 @@ namespace Consensus.Tests
 		}
 
 		[TestMethod()]
-		public void FossileRemovalTest()
+		public void FossilRemovalTest()
 		{
 			int basePort = new Random().Next(1024, 32768);
 			Cluster c = new Cluster(basePort, 3);
@@ -233,7 +249,7 @@ namespace Consensus.Tests
 				{
 					c.Schedule(j, new TestCommitable(i));
 				}
-				c.RemoveFossiles(j);
+				c.RemoveFossils(j);
 				
 
 				Thread.Sleep(1000);
@@ -247,23 +263,50 @@ namespace Consensus.Tests
 
 		}
 
+		[TestMethod()]
+		public void NodeSkipTest()
+		{
+			using (var c = new Cluster(new Random().Next(1024, 32768), 3))
+			{
+				c.Attach<TestAttachment>();
+				Assert.IsTrue(c.AwaitConsensus());
+				var leader = c.LeaderIndex;
+				var suspended = (c.LeaderIndex + 1) % c.Size;
+				c.Suspend(suspended);
+				for (int i = 0; i < 10; i++)
+					c.Schedule(leader, new TestCommitable(i));
+				c.RemoveFossils(leader);
+				Thread.Sleep(1000);
+				c.ForeachMember(n => { if (n != null) ((TestAttachment)n.Attachment).AssertIsComplete(n, 10);});
+				c.Resume(suspended);
+				DateTime resumed = DateTime.Now;
+				Assert.IsTrue(c.AwaitConsensus());
+				DateTime consensus = DateTime.Now;
+				for (int i = 0; i < 10; i++)
+					c.Schedule(leader, new TestCommitable(i));
+				DateTime preSleep = DateTime.Now;
+				Thread.Sleep(1000);
+				DateTime endSleep = DateTime.Now;
+				c.ForeachMember(hub => ((TestAttachment)hub.Attachment).AssertIsComplete(hub, 10));
+
+			}
+		}
 
 		[TestMethod()]
-		public void HubTest()
+		public void NodeTest()
 		{
-			int basePort = new Random().Next(1024, 32768);
-			Cluster c = new Cluster(basePort, 3);
-
-			for (int j = 0; j < 3; j++)
+			using (var c = new Cluster(new Random().Next(1024, 32768), 3))
 			{
-				Assert.IsTrue(c.AwaitInterconnected());
-				Assert.IsTrue(c.AwaitConsensus());
-				int leader = c.AssertLeaderFollowerCorrectness();
-				var ad = c.GetAddressOf(leader);
-				Console.WriteLine("Closing leader "+leader);
-				c.Failover(leader);
+				for (int j = 0; j < 3; j++)
+				{
+					Assert.IsTrue(c.AwaitInterconnected());
+					Assert.IsTrue(c.AwaitConsensus());
+					int leader = c.AssertLeaderFollowerCorrectness();
+					var ad = c.GetAddressOf(leader);
+					Console.WriteLine("Closing leader " + leader);
+					c.Failover(leader);
+				}
 			}
-			c.Dispose();
 		}
 
 	}

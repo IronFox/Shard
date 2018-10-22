@@ -17,13 +17,18 @@ namespace Consensus
 		public readonly int PrevLogLength;
 		public readonly int PrevLogTerm;
 		public readonly int LeaderCommit;
+		public readonly int SkipTo = -1;
 
 
-		public AppendEntries(Node source, int firstLogIndex) : this(source, source.LogSubSet(firstLogIndex))
+		public AppendEntries(Node source, int firstLogIndex) : this(
+			source, 
+			source.LogSubSet(Math.Max(firstLogIndex, source.LogOffset+1)),
+			firstLogIndex < source.LogOffset+1 ? source.LogOffset : -1)
 		{ }
 
-		public AppendEntries(Node source, LogEntry[] entries) : base(source.CurrentTerm)
+		public AppendEntries(Node source, LogEntry[] entries, int skipTo) : base(source.CurrentTerm)
 		{
+			SkipTo = skipTo;
 			Entries = entries;
 			LeaderCommit = source.CommitIndex;
 			int cnt = entries != null ? entries.Length : 0;
@@ -41,13 +46,13 @@ namespace Consensus
 			return b;
 		}
 
-		public AppendEntries(Node source) : this(source, (LogEntry[])null)
+		public AppendEntries(Node source) : this(source, (LogEntry[])null,-1)
 		{ }
 
-		public AppendEntries(Node source, List<LogEntry> entries) : this(source, entries?.ToArray())
+		public AppendEntries(Node source, List<LogEntry> entries) : this(source, entries?.ToArray(), -1)
 		{}
 
-		public AppendEntries(Node source, LogEntry entry): this(source, entry != null ? new LogEntry[] { entry } : null)
+		public AppendEntries(Node source, LogEntry entry): this(source, entry != null ? new LogEntry[] { entry } : null, -1)
 		{}
 
 	}

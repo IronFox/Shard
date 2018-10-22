@@ -198,6 +198,8 @@ namespace Consensus
 					return 0;
 				if (idx > log.Count)
 					return -1;
+				if (idx <= log.Offset)
+					return 0;	//skipped
 				return log[idx - 1].Entry.Term;
 			}
 		}
@@ -211,11 +213,16 @@ namespace Consensus
 				for (int i = commitCount; i < newCommitCount; i++)
 				{
 					PrivateEntry e = log[i];
-					if (DebugState != null)
-						DebugState.SignalExecution(i, e.Entry.Term,this);
-					LogEvent("Executing " + e.Entry);
-					e.Execute(this);
-					committed.TryRemove(e.Entry.CommitID);
+					if (e == null)
+						LogMinorEvent("Skipping removed entry at #" + i);
+					else
+					{
+						if (DebugState != null)
+							DebugState.SignalExecution(i, e.Entry.Term, this);
+						LogMinorEvent("Executing " + e.Entry);
+						e.Execute(this);
+						committed.TryRemove(e.Entry.CommitID);
+					}
 				}
 				commitCount = newCommitCount;
 				if (IsLeader)
@@ -254,12 +261,12 @@ namespace Consensus
 				port = ((IPEndPoint)listener.LocalEndpoint).Port;
 				Address = () => new Address(port);
 			}
+			Join(config, myIndex);	//join first, so members are initialized
 			LogMinorEvent("Started to listening on port " + port);
 			listenThread = new Thread(new ThreadStart(ThreadListen));
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
-			Join(config,myIndex);
 		}
 
 		private TcpClient lastAcceptedClient;
@@ -296,7 +303,6 @@ namespace Consensus
 					LogError(ex);
 				}
 			}
-			bool brk = true;
 		}
 
 
@@ -620,6 +626,8 @@ namespace Consensus
 
 		public int CountStoredLogEntries => log.ActualEntryCount;
 
+		public int LogOffset => log.Offset;
+
 		private int commitSerial = 0;
 
 
@@ -697,25 +705,25 @@ namespace Consensus
 		/// </summary>
 		/// <param name="threshold">Commit to compare with</param>
 		/// <param name="includeThreshold"></param>
-		public CommitID RemoveFossiles(CommitID threshold, bool includeThreshold)
+		public CommitID RemoveFossils(CommitID threshold, bool includeThreshold)
 		{
 			if (threshold == CommitID.None)
 				return CommitID.None;
-			return Schedule(new FossileShredder(threshold, includeThreshold));
+			return Schedule(new FossilShredder(threshold, includeThreshold));
 		}
 		
 		/// <summary>
 		/// Completely removes all currently logged/scheduled entries.
-		/// The fossile remover itself cannot be removed
+		/// The fossil remover itself cannot be removed
 		/// </summary>
 		/// <returns></returns>
-		public CommitID RemoveFossiles()
+		public CommitID RemoveFossils()
 		{
 			CommitID rs = CommitID.None;
 			DoSerialized(() =>
 			{
 				var cID = rs = new CommitID(myIndex, commitSerial++);
-				var e = new FossileShredder(cID, false);
+				var e = new FossilShredder(cID, false);
 				Schedule(cID, e);
 				committed.GetOrAdd(cID, new Committed() { comm = e, lastAttempt = DateTime.Now });
 			});
@@ -723,12 +731,12 @@ namespace Consensus
 		}
 
 		[Serializable]
-		private class FossileShredder : ICommitable
+		private class FossilShredder : ICommitable
 		{
 			private CommitID threshold;
 			private bool includeThreshold;
 
-			public FossileShredder(CommitID threshold, bool includeThreshold)
+			public FossilShredder(CommitID threshold, bool includeThreshold)
 			{
 				this.threshold = threshold;
 				this.includeThreshold = includeThreshold;
@@ -744,7 +752,7 @@ namespace Consensus
 						cnt++;
 					if (cnt > 0)
 					{
-						node.log.RemoveFrontIncreaseOffset(cnt);
+						node.log.SetOffset(cnt);
 					}
 				});
 			}
@@ -779,6 +787,8 @@ namespace Consensus
 				}
 			}
 
+			if (p.SkipTo >= 0)
+				log.SetOffset(p.SkipTo,true);
 			var t = GetLogTerm(p.PrevLogLength);
 			if (t == -1 || t != p.PrevLogTerm)    //don't have (yet)
 			{
@@ -816,6 +826,8 @@ namespace Consensus
 				sender.Dispatch(new AppendEntriesConfirmation(this, true,false));
 			}
 			nextActionAt = GetElectionTimeout();
+			if (p.SkipTo > 0 && !log.IsWellFormed)
+				throw new InvalidOperationException("AppendEntries() left internal log in an invalid state");
 		}
 
 
@@ -932,6 +944,11 @@ namespace Consensus
 				nextActionAt = PreciseTime.Now;
 				votedFor = null;
 			}
+		}
+
+		internal LogEntry[] LogSubSet(object p)
+		{
+			throw new NotImplementedException();
 		}
 	}
 }

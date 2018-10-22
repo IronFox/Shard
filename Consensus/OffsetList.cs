@@ -78,15 +78,24 @@ namespace Consensus
 			return innerList.GetEnumerator();
 		}
 
-		public void RemoveFrontIncreaseOffset(int count)
+		public bool IsWellFormed => innerList.Count > 0;
+
+		/// <summary>
+		/// Removes elements from the front of the internal list, and simulataneously moves the internal offset up.
+		/// If the local offset already matches or exceeds the given number of elements, then no change occurs.
+		/// Unless the number of skiped elements exceeds the boundaries of the local list, this.Count remains unchanged.
+		/// </summary>
+		/// <param name="count">Number of elements to skip. Unless <paramref name="ignoreBoundaries"/> is set, must be less than this.Count</param>
+		/// <param name="ignoreBoundaries">Set true to allow offsets beyond the current maximum, thus potentially increasing Count</param>
+		public void SetOffset(int count, bool ignoreBoundaries=false)
 		{
 			int delta = count - offset;
 			if (delta <= 0)
 				return;
-			if (delta > innerList.Count)
-				delta = innerList.Count;
+			if (delta >= innerList.Count && !ignoreBoundaries)
+				throw new ArgumentOutOfRangeException("Trying to skip past the number of stored elements: skipTo="+count+", stored elements="+Count);
 			offset += delta;
-			innerList.RemoveRange(0, delta);
+			innerList.RemoveRange(0, Math.Min(innerList.Count,delta));
 		}
 	}
 }
