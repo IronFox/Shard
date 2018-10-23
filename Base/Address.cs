@@ -75,6 +75,12 @@ namespace Base
 			Port = remoteEndPoint.Port;
 		}
 
+		public Address(Address hostPortion, int port)
+		{
+			Host = hostPortion.Host;
+			Port = port;
+		}
+
 		public AddressWrapper[] Resolved
 		{
 			get

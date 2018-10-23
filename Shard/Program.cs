@@ -176,71 +176,7 @@ namespace Shard
 			//return;
 
 
-
-			int basePort = new Random().Next(1024, 32768);
-			Configuration cfg = new Configuration(new Address[] { new Address(basePort), new Address(basePort + 1), new Address(basePort + 2) });
-
-			Node[] members = new Node[]{
-				new Node(cfg,0),
-				new Node(cfg,1),
-				new Node(cfg,2) };
-
-			for (int j = 0; j < 3; j++)
-			{
-				for (int i = 0; i < 100; i++)
-				{
-					if (members.All(m => m.IsFullyConnected))
-						break;
-					Thread.Sleep(100);
-				}
-				if (!members.All(m => m.IsFullyConnected))
-					throw new Exception("Failed in iteration "+j);
-				Thread.Sleep(1000);
-
-				if (!members.Any(m => m.IsLeader))
-					throw new Exception("Leader not set in iteration "+j);
-
-				int leader = -1;
-				for (int i = 0; i < members.Length; i++)
-					if (members[i].IsLeader)
-					{
-						leader = i;
-						break;
-					}
-					else
-						if (members[i].CurrentState!= Node.State.Follower)
-							throw new Exception("Expected "+i+" to be a follower in iteration " + j);
-
-				Console.WriteLine("Disposing leader");
-
-				var ad = members[leader].Address;
-				members[leader].Dispose();
-				//Thread.Sleep(10000);
-				for (int i = 0; i < members.Length; i++)
-					if (i != leader)
-					{
-						if (members[i].IsDisposed)
-							throw new ObjectDisposedException("members[" + i +"], it "+j);
-						bool brk = true;
-						if (members[i].IsFullyConnected)
-						{
-							bool grk = true;
-						}
-						//Assert.IsFalse(members[i].IsFullyConnected, j + "[" + i + "]L" + leader);
-					}
-
-				members[leader] = new Node(cfg, leader);
-			}
-			foreach (var m in members)
-			{
-				Console.WriteLine("Closing " + m);
-				m.Dispose();
-			}
-			Console.WriteLine("Done");
-
-			return;
-
-
+			
 
 
 			if (args.Length < 2)

@@ -297,22 +297,25 @@ namespace Shard.Tests
 
 			internal void InstallConsensusCluster(int size, int basePort, bool awaitFormation)
 			{
-				var addr = new Address[size];
+				var members = new Consensus.Configuration.Member[size];
 				for (int i = 0; i < size; i++)
-					addr[i] = new Address(basePort + i);
+					members[i] = new Consensus.Configuration.Member(-i,true);
 
-				var consensusCfg = new Consensus.Configuration(addr);
+				var consensusCfg = new Consensus.Configuration("test",members);
 				var dummyNotify = new DummyNotify();
 				consensus = new Consensus.Interface[size];
 				Consensus.SharedDebugState state = new Consensus.SharedDebugState();
 				for (int i = 0; i < size; i++)
 				{
-					consensus[i] = new Consensus.Interface(consensusCfg, i, new ShardID(Int3.Zero, -i), i > 0 ? dummyNotify : Notify);
+					consensus[i] = new Consensus.Interface(consensusCfg, consensusCfg.Members[i], basePort+i, Int3.Zero, i > 0 ? dummyNotify : Notify);
 					consensus[i].DebugState = state;
 				}
-				
+
+				BaseDB.OverrideAddressRequestFunction = addr => new FullShardAddress(addr, "localhost", 0, basePort - addr.ReplicaLevel);
+
 				if (awaitFormation)
 					AwaitConsensus();
+
 			}
 
 			private void AwaitConsensus()

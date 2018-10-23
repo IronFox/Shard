@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VectorMath;
 
 namespace Consensus
 {
@@ -22,25 +23,32 @@ namespace Consensus
 		public ShardID MyID { get; private set; }
 
 		private Thread gecThread;
+		private int actualPort;
 
 		public readonly INotifiable Notify;
 
-		public Interface(Configuration cfg, int myIndex, ShardID myID, INotifiable notify) : base(cfg, myIndex)
+		public override Address GetAddress(int replicaIndex)
 		{
-			MyID = myID;
+			return BaseDB.TryGetAddress(new ShardID(MyID.XYZ, replicaIndex)).ConsensusAddress;
+		}
+
+		public Interface(Configuration cfg, Configuration.Member self, int selfPort, Int3 myCoords, INotifiable notify):base(self)
+		{
+			actualPort = Start(cfg, selfPort);
+			MyID = new ShardID(myCoords,self.Identifier);
 			Notify = notify;
 			gecThread = new Thread(new ThreadStart(GECThreadMain));
 			gecThread.Start();
 		}
 
-		public Interface(Tuple<Configuration,int, ShardID> cfg, INotifiable notify) : this(cfg.Item1, cfg.Item2, cfg.Item3,notify)
+		public Interface(Tuple<Configuration,Configuration.Member, Int3> cfg, int selfPort, INotifiable notify) : this(cfg.Item1, cfg.Item2, selfPort,cfg.Item3,notify)
 		{}
 
-		public Interface(ShardID myID, int peerPort, bool updateAddress, INotifiable notify) :this(ConstructConfig(myID), notify)
+		public Interface(ShardID myID, int peerPort, bool updateAddress, INotifiable notify) :this(ConstructConfig(myID), peerPort,notify)
 		{
 			if (updateAddress)
 			{
-				int consensusPort = base.Address().Port;
+				int consensusPort = actualPort;
 				Log.Message("Detecting address...");
 				//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
 				string localIP;
@@ -56,20 +64,27 @@ namespace Consensus
 			}
 		}
 
-		private static Tuple<Configuration, int, ShardID> ConstructConfig(ShardID myID)
+		private static Tuple<Configuration, Configuration.Member, Int3> ConstructConfig(ShardID myID)
 		{
-			Func<Address>[] addresses = new Func<Address>[3]; //0, -1, -2
-			int at = -myID.ReplicaLevel;
-			for (int i = 0; i < 3; i++)
-				if (i != at)
-					addresses[at] = () => Shard.BaseDB.TryGetConsensusAddress(new ShardID(myID.XYZ, i));
-			//else
-			//	addresses[at] = null;	//default
+			throw new NotImplementedException();
+		}
+		private static Tuple<Configuration, Configuration.Member, Int3> ConstructConfig(ShardID myID, int consensusCount, int replicaCount)
+		{
+			var addresses = new Configuration.Member[consensusCount + replicaCount];
+			for (int i = 0; i < consensusCount; i++)
+				addresses[i] =new Configuration.Member(i - consensusCount, i+1 == consensusCount);
+			for (int i = 0; i < replicaCount; i++)
+				addresses[i + consensusCount] = new Configuration.Member(i, i==0);
 
+			Configuration cfg = new Configuration("0",addresses);
 
-			Configuration cfg = new Configuration(addresses);
+			int at = myID.ReplicaLevel - addresses[0].Identifier;
+			if (at < 0 || at >= addresses.Length)
+				throw new ArgumentOutOfRangeException("myID.ReplicaLevel", "Not found in [-"+consensusCount+","+replicaCount+")");
+			if (addresses[at].Identifier != myID.ReplicaLevel)
+				throw new InvalidOperationException("Replica level not at expected location");
 
-			return new Tuple<Configuration, int, ShardID>(cfg, at, myID);
+			return new Tuple<Configuration, Configuration.Member, Int3>(cfg, addresses[at], myID.XYZ);
 		}
 		
 		

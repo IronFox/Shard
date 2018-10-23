@@ -25,6 +25,22 @@ namespace Consensus.Tests
 		}
 
 
+		private class ClusterNode : Node
+		{
+			private Func<int, Address> getAddressOf;
+			public readonly int Port;
+			public ClusterNode(Configuration cfg, Configuration.Member self, int port, Func<int, Address> getAddressOf):base(self)
+			{
+				this.getAddressOf = getAddressOf;
+				Port = Start(cfg,port);
+			}
+
+			public override Address GetAddress(int memberID)
+			{
+				return getAddressOf(memberID);
+			}
+		}
+
 		private class Cluster : IDisposable
 		{
 			private readonly Node[] members;
@@ -50,15 +66,24 @@ namespace Consensus.Tests
 					m.Dispose();
 			}
 
+			private int testOffset = 1024;
+			private int basePort;
+
+			public Address GetAddressOf(int idx)
+			{
+				return new Address(basePort + idx - testOffset);
+			}
+
 			public Cluster(int basePort, int size)
 			{
-				Address[] addresses = new Address[size];
+				this.basePort = basePort;
+				var members = new Configuration.Member[size];
 				for (int i = 0; i < size; i++)
-					addresses[i] = new Address(basePort + i);
-				cfg = new Configuration(addresses);
-				members = new Node[size];
+					members[i] = new Configuration.Member(testOffset+i,true);
+				cfg = new Configuration("null",members);
+				this.members = new Node[size];
 				for (int i = 0; i < size; i++)
-					members[i] = new Node(cfg, i);
+					this.members[i] = new ClusterNode(cfg, cfg.Members[i],basePort+i,GetAddressOf);
 				attachments = new object[size];
 			}
 
@@ -102,12 +127,7 @@ namespace Consensus.Tests
 				return leader;
 			}
 
-			internal Func<Address> GetAddressOf(int idx)
-			{
-				return members[idx].Address;
-			}
-
-			internal void Failover(int idx)
+			internal void Failover(int idx, bool preserveAttachment=true)
 			{
 				members[idx].Dispose();
 
@@ -118,13 +138,17 @@ namespace Consensus.Tests
 						Assert.IsFalse(members[i].IsDisposed);
 						Assert.IsFalse(members[i].IsFullyConnected, "[" + i + "]L" + idx);
 					}
-				members[idx] = new Node(cfg, idx);
+				members[idx] = new ClusterNode(cfg, cfg.Members[idx],basePort+idx,GetAddressOf);
+				if (preserveAttachment)
+					members[idx].Attachment = attachments[idx];
+				else
+					attachments[idx] = null;
 			}
 
 			internal void Attach<T>() where T: new()
 			{
-				foreach (var m in members)
-					attachments[m.Index] = m.Attachment = new T();
+				for (int i = 0; i < members.Length; i++)
+					attachments[i] = members[i].Attachment = new T();
 			}
 
 			internal void Commit(ICommitable comm)
@@ -170,7 +194,7 @@ namespace Consensus.Tests
 			internal void Resume(int suspended)
 			{
 				Assert.IsNull(members[suspended]);
-				members[suspended] = new Node(cfg, suspended);
+				members[suspended] = new ClusterNode(cfg, cfg.Members[suspended],basePort+suspended,GetAddressOf);
 				members[suspended].Attachment = attachments[suspended];
 			}
 		}

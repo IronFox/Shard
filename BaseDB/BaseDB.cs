@@ -374,8 +374,12 @@ namespace Shard
 		}
 
 
+		public static Func<ShardID, FullShardAddress> OverrideAddressRequestFunction { get; set; }
+
 		public static FullShardAddress TryGetAddress(ShardID id)
 		{
+			if (OverrideAddressRequestFunction != null)
+				return OverrideAddressRequestFunction(id);
 			var h = hostRequests.TryGet(HostsStore, id);
 			if (h == null)
 				return new FullShardAddress();

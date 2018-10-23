@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 namespace Consensus
 {
 
-	public class Node : Identity, IDisposable
+	public abstract class Node : Identity, IDisposable
 	{
 		//private readonly ConcurrentDictionary<Address, Connection> connections = new ConcurrentDictionary<Address, Connection>();
 		private Connection[] remoteMembers;
@@ -44,15 +44,17 @@ namespace Consensus
 		}
 
 		private TcpListener listener;
-		private Thread listenThread,consensusThread;
+		private Thread listenThread, consensusThread;
 		private volatile bool disposing = false;
 
 
 		private Configuration config;
 		protected Configuration Configuration => config;
-		private int myIndex;
-		public int Index => myIndex;
 
+		public readonly Configuration.Member MemberID;
+		public int MyLinearIndex { get; private set; }
+
+		
 		public enum State
 		{
 			Follower,
@@ -62,17 +64,17 @@ namespace Consensus
 
 
 		private readonly ConcurrentQueue<string> eventLog = new ConcurrentQueue<string>();
-		internal void LogError(object error, Identity sender=null)
+		internal void LogError(object error, Identity sender = null)
 		{
-			Console.Error.WriteLine((sender??this) + ": " + error);
-			LogMinorEvent("ERROR: " + error,sender);
+			Console.Error.WriteLine((sender ?? this) + ": " + error);
+			LogMinorEvent("ERROR: " + error, sender);
 		}
-		internal void LogError(Exception ex, Identity sender=null)
+		internal void LogError(Exception ex, Identity sender = null)
 		{
 			//LogEvent(ex.Message);
 			LogError(ex.Message + " [" + ex.StackTrace[0].ToString() + "]", sender);
 		}
-		internal void LogMinorEvent(object ev, Identity sender=null)
+		internal void LogMinorEvent(object ev, Identity sender = null)
 		{
 			string id;
 			if (sender == null)
@@ -87,14 +89,14 @@ namespace Consensus
 			while (eventLog.Count > 500)
 				eventLog.TryDequeue(out dummy);
 		}
-		internal void LogEvent(object ev, Identity sender=null)
+		internal void LogEvent(object ev, Identity sender = null)
 		{
 			//string str = ev.ToString();
 			//if (str.StartsWith("Unable to write data"))
 			//{
 			//	bool brk = true;
 			//}
-			LogMinorEvent(ev,sender);
+			LogMinorEvent(ev, sender);
 			Console.WriteLine((sender ?? this) + ": " + ev);
 		}
 
@@ -102,7 +104,7 @@ namespace Consensus
 		private class PrivateEntry
 		{
 			private readonly LogEntry entry;
-			
+
 			public PrivateEntry(LogEntry source)
 			{
 				entry = source;
@@ -162,7 +164,7 @@ namespace Consensus
 		private PreciseTime GetElectionTimeout()
 		{
 			var delta = GetElectionTimeoutNS();
-			LogMinorEvent("Election timeout at "+(DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
+			LogMinorEvent("Election timeout at " + (DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
 			return PreciseTime.Now + delta;
 		}
 		private PreciseTime GetCandidateFailedElectionTimeout()
@@ -170,7 +172,7 @@ namespace Consensus
 			PreciseTimeSpan delta;
 			lock (localRandom)
 				delta = PreciseTimeSpan.FromMilliseconds(localRandom.Next(350) + 150);
-//			LogMinorEvent("Election timeout at " + (DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
+			//			LogMinorEvent("Election timeout at " + (DateTime.Now + delta.TimeSpan).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
 			return PreciseTime.Now + delta;
 		}
 
@@ -199,7 +201,7 @@ namespace Consensus
 				if (idx > log.Count)
 					return -1;
 				if (idx <= log.Offset)
-					return 0;	//skipped
+					return 0;   //skipped
 				return log[idx - 1].Entry.Term;
 			}
 		}
@@ -248,25 +250,37 @@ namespace Consensus
 			}
 		}
 
+		private Address myAddress = new Address(0);
+		public override Address PublicAddress => myAddress;
 
-		public Node(Configuration config, int myIndex):base(null,config.Addresses[myIndex])
+		public abstract Address GetAddress(int memberID);
+
+		public Node(Configuration.Member self) : base(null)
 		{
-			serialLock = new DebugMutex("Consensus.Node[" + myIndex + "]");
+			MemberID = self;
+			serialLock = new DebugMutex("Consensus.Node[" + self + "]");
+		}
+
+		/// <summary>
+		/// </summary>
+		/// <param name="config">Consensus configuration to join</param>
+		/// <param name="getAddress">Address resolution function: Fetches the IP address for a given member identifier</param>
+		public int Start(Configuration config, int port)
+		{
+			if (!config.ContainsIdentifier(MemberID))
+				throw new ArgumentOutOfRangeException("Given consensus configuration " + config + " does not contain local node identifier " + MemberID);
 			IPAddress filter = IPAddress.Any;
-			int port = config.Addresses[myIndex]() != null ? config.Addresses[myIndex]().Port : 0;
 			listener = new TcpListener(filter,port);
 			listener.Start();
 			if (port == 0)
-			{
 				port = ((IPEndPoint)listener.LocalEndpoint).Port;
-				Address = () => new Address(port);
-			}
-			Join(config, myIndex);	//join first, so members are initialized
+			Join(config);	//join first, so members are initialized
 			LogMinorEvent("Started to listening on port " + port);
 			listenThread = new Thread(new ThreadStart(ThreadListen));
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
+			return port;
 		}
 
 		private TcpClient lastAcceptedClient;
@@ -282,16 +296,19 @@ namespace Consensus
 					var stream = client.GetStream();
 					stream.Read(id, 0, 4);
 					int remoteID = BitConverter.ToInt32(id, 0);
-					if (remoteID < 0 || remoteID >= myIndex)
+					int linear;
+					if (!config.ToIndex(remoteID, out linear))
 						throw new ArgumentOutOfRangeException("Invalid remote member ID " + remoteID);
+					if (linear >= MyLinearIndex)
+						throw new ArgumentOutOfRangeException("Remote ID should be passive");
 
-					var conn = new Connection(this, config.Addresses[remoteID], client);
+					var conn = new Connection(this, config.Members[linear], client);
 					DoSerialized(() =>
 					{
-						if (remoteMembers[remoteID] != null)
-							Dispose(remoteMembers[remoteID]);
-						remoteMembers[remoteID] = conn;
-						LogMinorEvent("Added incoming connection " + conn +" as idx="+remoteID+"/"+config.Addresses[remoteID]());
+						if (remoteMembers[linear] != null)
+							Dispose(remoteMembers[linear]);
+						remoteMembers[linear] = conn;
+						LogMinorEvent("Added incoming connection #"+linear+" " + conn +" as idx="+remoteID+"/"+GetAddress(remoteID));
 					});
 
 
@@ -384,6 +401,7 @@ namespace Consensus
 
 			while (!disposing)
 			{
+				myAddress = GetAddress(MemberID.Identifier);
 				try
 				{
 					if (state == State.Leader)
@@ -402,7 +420,7 @@ namespace Consensus
 					if (PreciseTime.Now < dl)
 						continue;
 					switch (state)
-						{
+					{
 						case State.Leader:
 							DoSerialized(() =>
 							{
@@ -413,40 +431,11 @@ namespace Consensus
 							});
 							break;
 						case State.Candidate:
-							//DoSerialized(() =>
-							//{
-							//	if (PreciseTime.Now < nextActionAt)
-							//		return;
-							//	LogMinorEvent("Timeout " + PreciseTime.Now + "/" + nextActionAt + " reached. Reverting to follower (for now)");
-							//	votedFor = null;
-							//	//votedInTerm = -1;
-							//	state = State.Follower;
-							//	leader = null;
-							//	nextActionAt = GetCandidateFailedElectionTimeout();
-							//});
-							//break;
 						case State.Follower:
-							DoSerialized(() =>
-							{
-								if (PreciseTime.Now < nextActionAt)
-									return;
-								//elect new leader
-								ClearRemoteInfo();
-								numVotes = 1;
-								currentTerm++;
-								votedFor = this;
-								//votedInTerm = currentTerm;
-								state = State.Candidate;
-								leader = null;
-
-								if (PreciseTime.Now < dl)
-									throw new IntegrityViolation("Timing issue");
-								LogMinorEvent("Timeout "+PreciseTime.Now+"/"+ nextActionAt + " reached. Starting new election at log term "+GetLogTerm(LogSize));
-
-								nextActionAt = GetElectionTimeout();
-
-								Broadcast(new RequestVote(this));
-							});
+							if (MemberID.CanBeLeader)
+								InitElection();
+							else
+								state = State.Follower;
 							break;
 					}
 				}
@@ -455,6 +444,30 @@ namespace Consensus
 			}
 
 	
+		}
+
+		private void InitElection()
+		{
+			DoSerialized(() =>
+			{
+				if (PreciseTime.Now < nextActionAt)
+					return;
+				//elect new leader
+				ClearRemoteInfo();
+				numVotes = 1;
+				currentTerm++;
+				votedFor = this;
+				//votedInTerm = currentTerm;
+				state = State.Candidate;
+				leader = null;
+
+				LogMinorEvent("Timeout " + PreciseTime.Now + "/" + nextActionAt + " reached. Starting new election at log term " + GetLogTerm(LogSize));
+
+				nextActionAt = GetElectionTimeout();
+
+				Broadcast(new RequestVote(this));
+			});
+
 		}
 
 		private void Dispose(Connection c)
@@ -520,50 +533,45 @@ namespace Consensus
 		}
 
 
-		private ActiveConnection ConnectTo(int idx)
+
+
+		internal void Join(Configuration cfg)
 		{
-			if (idx <= myIndex)
-				return null;	//passive
-			ActiveConnection rs = null;
+			List<Connection> doDispose = new List<Connection>();
+			int at;
+			if (!cfg.ToIndex(MemberID, out at))
+				throw new ArgumentOutOfRangeException("Given configuration does not contain local node");
+			MyLinearIndex = at;
+
 			DoSerialized(() =>
 			{
-				if (remoteMembers[idx] != null)
-					rs = (ActiveConnection)remoteMembers[idx];
-				else
-					remoteMembers[idx] = rs = new ActiveConnection(this, config.Addresses[idx], idx);
-			}
-			);
-			return rs;
-		}
-
-		public bool ConnectedTo(int idx)
-		{
-			bool rs = false;
-			DoSerialized(() => rs = remoteMembers[idx] != null && remoteMembers[idx].IsConnected);
-			return rs;
-		}
-
-		internal void Join(Configuration cfg, int myIndex)
-		{
-			DoSerialized(() =>
-			{
+				var newMembers = new Connection[cfg.Size];
 				if (remoteMembers != null)
 					foreach (var m in remoteMembers)
-						if (m != null)
-							m.Dispose();
-				remoteMembers = null;
-
-				if (myIndex < 0 || myIndex >= cfg.Size)
-					throw new ArgumentOutOfRangeException("myIndex");
-
-				remoteMembers = new Connection[cfg.Size];
+					{
+						if (m == null)
+							continue;
+						int linear;
+						if (cfg.ToIndex(m.RemoteIdentifier, out linear) && m.IsActive == linear > MyLinearIndex)
+						{
+							if (at == linear)
+								throw new InvalidOperationException("Found self among remotes");
+							newMembers[linear] = m;
+						}
+						else
+							doDispose.Add(m);
+					}
 				config = cfg;
-				this.myIndex = myIndex;
-				for (int i = myIndex + 1; i < cfg.Size; i++)
+				for (int i = MyLinearIndex + 1; i < cfg.Size; i++)
 				{
-					remoteMembers[i] = new ActiveConnection(this, cfg.Addresses[i],myIndex);
+					if (newMembers[i] == null)
+						newMembers[i] = new ActiveConnection(this, cfg.Members[i]);
 				}
+				remoteMembers = newMembers;
 			});
+
+			foreach (var d in doDispose)
+				d.Dispose();
 		}
 
 
@@ -618,7 +626,7 @@ namespace Consensus
 			}
 		}
 
-		public bool IsFullyConnected => ActiveConnectionCount == config.Addresses.Length - 1;
+		public bool IsFullyConnected => ActiveConnectionCount == config.Size - 1;
 
 		public bool IsDisposed => disposing;
 
@@ -627,6 +635,8 @@ namespace Consensus
 		public int CountStoredLogEntries => log.ActualEntryCount;
 
 		public int LogOffset => log.Offset;
+
+		public Configuration Config => config;
 
 		private int commitSerial = 0;
 
@@ -692,7 +702,7 @@ namespace Consensus
 				return rs;
 			DoSerialized(() =>
 			{
-				var cID = rs = new CommitID(myIndex, commitSerial++);
+				var cID = rs = new CommitID(MemberID.Identifier, commitSerial++);
 				Schedule(cID, entry);
 				committed.GetOrAdd(cID, new Committed() { comm = entry, lastAttempt = DateTime.Now });
 			});
@@ -722,7 +732,7 @@ namespace Consensus
 			CommitID rs = CommitID.None;
 			DoSerialized(() =>
 			{
-				var cID = rs = new CommitID(myIndex, commitSerial++);
+				var cID = rs = new CommitID(MemberID.Identifier, commitSerial++);
 				var e = new FossilShredder(cID, false);
 				Schedule(cID, e);
 				committed.GetOrAdd(cID, new Committed() { comm = e, lastAttempt = DateTime.Now });
@@ -838,7 +848,7 @@ namespace Consensus
 				int threshold = j;
 				int cnt = 1;    //self
 				ForeachConnection(c => {if (c.ConsensusState.MatchIndex >= threshold) cnt++; });
-				if (cnt > config.Addresses.Length / 2)
+				if (cnt >= config.Majority)
 				{
 					CommitTo(j);
 					return;
@@ -898,7 +908,7 @@ namespace Consensus
 				nextActionAt = GetElectionTimeout();
 				numVotes++;
 				LogMinorEvent("Num Votes now " + numVotes);
-				if (numVotes >= config.Addresses.Length / 2 + 1)
+				if (numVotes >= config.Majority)
 				{
 					LogEvent("Elected leader of term " + currentTerm);
 					ForeachConnection(c => c.SignalIncoming());	//prevent disconnection

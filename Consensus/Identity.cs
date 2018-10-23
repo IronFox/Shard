@@ -4,9 +4,9 @@ using System.Collections.Generic;
 
 namespace Consensus
 {
-	public class Identity : IEquatable<Identity>
+	public abstract class Identity : IEquatable<Identity>
 	{
-		public Func<Address> Address { get; set; }
+		public abstract Address PublicAddress { get; }
 		public readonly Identity Parent;
 
 
@@ -16,16 +16,15 @@ namespace Consensus
 			if (rs != "")
 				rs += " ";
 			if (Parent != null)
-				return rs + Parent + "<->" + Address();
-			return rs + Address().ToString();
+				return rs + Parent + "<->" + PublicAddress;
+			return rs + PublicAddress.ToString();
 		}
 
 		public virtual string EndPoint => "";
 
-		public Identity(Identity parent, Func<Address> address)
+		public Identity(Identity parent)
 		{
 			Parent = parent;
-			Address = address;
 		}
 
 		public override bool Equals(object obj)
@@ -36,12 +35,12 @@ namespace Consensus
 		public bool Equals(Identity other)
 		{
 			return other != null &&
-				   Address().Equals(other.Address());
+				   PublicAddress.Equals(other.PublicAddress);
 		}
 
 		public override int GetHashCode()
 		{
-			return -1984154133 + EqualityComparer<Address>.Default.GetHashCode(Address());
+			return -1984154133 + EqualityComparer<Address>.Default.GetHashCode(PublicAddress);
 		}
 	};
 

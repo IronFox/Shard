@@ -42,6 +42,8 @@ namespace Consensus
 		public ConsensusState ConsensusState { get; set; } = new ConsensusState();
 		protected System.Net.EndPoint endPoint;
 
+		public virtual bool IsActive => false;
+
 
 		public override string EndPoint => endPoint != null ? ((IPEndPoint)endPoint).Port.ToString() : "null";
 
@@ -59,18 +61,18 @@ namespace Consensus
 
 		public bool IsAlive => IsConnected && (DateTime.Now - LastIncoming <= TimeSpan.FromSeconds(2));
 
+		public override Address PublicAddress => owner.GetAddress(RemoteIdentifier.Identifier);
 
 
-		public Connection(Node owner, Func<Address> addr, TcpClient client) : this(owner, addr)
+		public Connection(Node owner, Configuration.Member remoteIdentifier, TcpClient client) : this(owner, remoteIdentifier)
 		{
 			Assign(client,null);
 			endPoint = client.Client.RemoteEndPoint;
 		}
-		public Connection(Node owner, Address addr, TcpClient client) : this(owner, () => addr, client)
-		{}
-		public Connection(Node owner, Func<Address> addr) : base(owner, addr)
+		public Connection(Node owner, Configuration.Member remoteIdentifier) : base(owner)
 		{
 			this.owner = owner;
+			this.RemoteIdentifier = remoteIdentifier;
 			LastIncoming = DateTime.Now;
 
 			serialLock = new DebugMutex("Consensus.Connection[" + this + "]");
@@ -117,6 +119,8 @@ namespace Consensus
 		}
 
 		private readonly ConcurrentQueue<string> log = new ConcurrentQueue<string>();
+		internal readonly Configuration.Member RemoteIdentifier;
+
 		internal void LogError(object error)
 		{
 			((Node)Parent).LogError(error,this);
@@ -162,6 +166,11 @@ namespace Consensus
 							{
 								LogMinorEvent("Deserialized inbound " + item);
 								item.OnArrive(owner, this);
+							}
+							catch (ThreadAbortException ex)
+							{
+								LogError("Thread aborted while implementing " + item + " : " + ex+". Ending thread");
+								return;
 							}
 							catch (Exception ex)
 							{
@@ -286,17 +295,16 @@ namespace Consensus
 
 	internal class ActiveConnection : Connection
 	{
-		public readonly int MemberIndex;
+		public override bool IsActive => true;
 
-		public ActiveConnection(Node owner, Func<Address> addr, int idx) : base(owner, addr)
+		public ActiveConnection(Node owner, Configuration.Member remoteMember) : base(owner, remoteMember)
 		{
-			MemberIndex = idx;
 			Connect();
 		}
 
 		private void Begin()
 		{
-			tcpClient.GetStream().Write(BitConverter.GetBytes(MemberIndex),0,4);
+			tcpClient.GetStream().Write(BitConverter.GetBytes(owner.MemberID.Identifier),0,4);
 		}
 
 		private ActiveConnection Connect()
@@ -324,7 +332,7 @@ namespace Consensus
 			{
 				try
 				{
-					var addr = Address();
+					var addr = PublicAddress;
 					if (addr.IsEmpty)
 					{
 						LogMinorEvent("Unable to connect right now. Host address not known");
