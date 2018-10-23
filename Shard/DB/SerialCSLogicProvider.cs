@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Shard
 {
-	public class SerialCSLogicProvider : BaseDB.Entity
+	public class SerialCSLogicProvider : DBType.Entity
 	{
 		public byte[] compiledAssembly;
 		public string[] dependencies;

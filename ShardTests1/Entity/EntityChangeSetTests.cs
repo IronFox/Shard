@@ -143,9 +143,9 @@ namespace Shard.Tests
 
 		public static SimulationContext RandomContext()
 		{
-			return RandomContext(ShardID.One);
+			return RandomContext(Int3.One);
 		}
-		public static SimulationContext RandomContext(ShardID ext)
+		public static SimulationContext RandomContext(Int3 ext)
 		{
 			float r0 = random.NextFloat(0.5f, 1f);
 			float m0 = random.NextFloat(0f, 1f);

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Shard
 {
-	public class SerialRCS : BaseDB.Entity, IEquatable<SerialRCS>
+	public class SerialRCS : DBType.Entity, IEquatable<SerialRCS>
 	{
 		public int[] NumericID;
 		public RCS.SerialData Data;

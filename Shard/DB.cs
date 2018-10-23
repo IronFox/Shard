@@ -148,8 +148,8 @@ namespace Shard
 
 
 
-		private static ContinuousPoller<SerialSDS> sdsPoller;
-		private static ContinuousPoller<SerialCCS> ccsPoller;
+		private static DBType.ContinuousPoller<SerialSDS> sdsPoller;
+		private static DBType.ContinuousPoller<SerialCCS> ccsPoller;
 
 
 		
@@ -157,7 +157,7 @@ namespace Shard
 
 		public static Tuple<SerialSDS,SerialCCS> Begin(Int3 myID)
 		{
-			sdsPoller = new ContinuousPoller<SerialSDS>(null, (collection)=>
+			sdsPoller = new DBType.ContinuousPoller<SerialSDS>(null, (collection)=>
 			{
 				SerialSDS latest = null;
 				foreach (var candidate in collection)
@@ -190,7 +190,7 @@ namespace Shard
 			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
 
 
-			ccsPoller = new ContinuousPoller<SerialCCS>(null, (collection) =>
+			ccsPoller = new DBType.ContinuousPoller<SerialCCS>(null, (collection) =>
 			{
 				SerialCCS latest = null;
 				foreach (var candidate in collection)
@@ -304,7 +304,7 @@ namespace Shard
 			}
 		}
 
-		private static async Task PutAsync<T>(Link lnk, DataBase store, T e, bool forceReplace) where T: BaseDB.Entity
+		private static async Task PutAsync<T>(Link lnk, DBType.DataBase store, T e, bool forceReplace) where T: DBType.Entity
 		{
 			if (store == null)
 				return;    //during tests, db is not loaded

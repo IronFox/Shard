@@ -1,4 +1,5 @@
 ﻿using Base;
+using DBType;
 using MyCouch;
 using MyCouch.Requests;
 using Newtonsoft.Json;
@@ -15,6 +16,8 @@ namespace Shard
 {
 	public static class BaseDB
 	{
+		public static readonly string TimingID = "timing";
+
 		private static string url;
 		public static Address Host { get; private set; }
 		public static MyCouchServerClient server;
@@ -39,11 +42,7 @@ namespace Shard
 		}
 
 
-		public class Entity
-		{
-			public string _id, _rev;
-			//public string EntityId, _rev;
-		}
+
 
 
 		private static bool haveCredentials = false;
@@ -51,118 +50,8 @@ namespace Shard
 		public static bool HasAdminAccess => server != null && haveCredentials;
 		public static Action<FullShardAddress> OnPutLocalAddress { get; set; } = null;
 
-		private class AllDocsValue
-		{
-			// ReSharper disable once UnusedAutoPropertyAccessor.Local
-			public string Rev { get; set; }
-
-			// ReSharper disable once UnusedAutoPropertyAccessor.Local
-			public bool Deleted { get; set; }
-		}
 
 
-		public class DataBase : MyCouchClient
-		{
-			public readonly string DBName;
-
-			public DataBase(string url, string dbName) : base(url, dbName)
-			{
-				DBName = dbName;
-			}
-
-			public override string ToString()
-			{
-				return DBName;
-			}
-
-			public async Task ClearAsync(bool compact)
-			{
-				Log.Message("Clearing out " + this + "...");
-				var request = new QueryViewRequest(SystemViewIdentity.AllDocs);
-				var response = await Views.QueryAsync<AllDocsValue>(request);
-				if (!response.IsSuccess)
-					throw new Exception("Failed to clear local store " + this + ": " + response.Reason);
-				var headers = new List<DocumentHeader>();
-				for (long i = 0; i < response.RowCount; i++)
-				{
-					if (!response.Rows[i].Value.Deleted)
-						headers.Add(new DocumentHeader(response.Rows[i].Id, response.Rows[i].Value.Rev));
-				}
-				if (headers.Count > 0)
-				{
-					var rs = await Documents.BulkAsync(new BulkRequest().Delete(headers.ToArray()));
-					if (!rs.IsSuccess)
-						throw new Exception("Unable to delete all documents in " + this + ": " + rs.Reason);
-					if (compact)
-					{
-						var rs2 = await Database.CompactAsync();
-						if (!rs2.IsSuccess)
-							throw new Exception("Unable to compact documents in " + this + ": " + rs2.Reason);
-					}
-				}
-				if (compact)
-					Log.Message(this + " is clear and compacted");
-				else
-					Log.Message(this + " is clear");
-			}
-		}
-
-
-		class RevisionChange
-		{
-			public string rev = null;
-		}
-
-		class Change
-		{
-			public string seq = "";
-			public string id = null;
-			public RevisionChange[] changes = null;
-		}
-
-
-		private static async Task<T> GetConflictResolvedAsync<T>(DataBase store, string id, Func<ICollection<T>, T> merger) where T : Entity
-		{
-			GetEntityRequest req = new GetEntityRequest(id);
-			req.Conflicts = true;
-			var data = await store.Entities.GetAsync<T>(req);
-			if (!data.IsSuccess)
-				return null;
-			if (data.Conflicts == null || data.Conflicts.Length == 0)
-				return data.Content;
-
-			List<T> conflicting = new List<T>();
-			List<DocumentHeader> toDelete = new List<DocumentHeader>();
-			conflicting.Add(data.Content);
-			foreach (var fetch in data.Conflicts)
-			{
-				var item = await store.Entities.GetAsync<T>(id, fetch);
-				if (item.IsSuccess)
-				{
-					conflicting.Add(item.Content);
-					toDelete.Add(new DocumentHeader(item.Id, item.Rev));
-				}
-				else
-					return null;    //assume connection lost or competing merge
-			}
-			T merged = merger(conflicting);
-			if (merged == null)
-			{
-				Log.Error("Error trying to fetch conflicting data from " + store + ":" + id + " with no merger set. Fixed. Result will be arbitrary");
-				merged = data.Content;
-			}
-			merged._id = id;
-			merged._rev = data.Rev;
-			var putResult = await store.Entities.PutAsync(merged);
-			if (putResult.IsSuccess)
-			{
-				var deleteRequest = new BulkRequest().Delete(toDelete.ToArray());
-				deleteRequest.AllOrNothing = true;
-				await store.Documents.BulkAsync(deleteRequest);//await, ignore result, let others clean it up if failed
-				return putResult.Content;
-			}
-			return null;    //assume connection lost or asynchronous update
-		}
 
 		public static async Task<bool> TryAsync(Func<Task<bool>> f, int numTries, int msBetweenRetries = 5000)
 		{
@@ -191,17 +80,34 @@ namespace Shard
 			return false;
 		}
 
-		public static Func<TimingContainer> FallbackTimingFetch { get; set; }
+
+
+		public static SDConfigContainer SD
+		{
+			get
+			{
+				return SDConfigPoller?.Latest;
+			}
+			set
+			{
+				var old = SD;
+				value._rev = old._rev;
+				value._id = old._id;
+				Put(ControlStore, value).Wait();
+			}
+		}
 
 		public static TimingContainer Timing
 		{
 			get
 			{
-				return timingPoller != null ? timingPoller.Latest : (FallbackTimingFetch?.Invoke());
+				return TimingPoller?.Latest;
 			}
 			set
 			{
-				value._id = timingPoller.ID;
+				var old = Timing;
+				value._rev = old._rev;
+				value._id = old._id;
 				Put(ControlStore, value).Wait();
 			}
 		}
@@ -244,7 +150,7 @@ namespace Shard
 			}, 3);
 		}
 
-		public static void PullConfig(int numTries = 3)
+		public static void BeginPullConfig(Int3 shardCoords,  int numTries = 3)
 		{
 			TryAsync(async () =>
 			{
@@ -256,8 +162,16 @@ namespace Shard
 				return Config != null;
 			}, numTries).Wait();
 
-			timingPoller = new ContinuousPoller<TimingContainer>(new TimingContainer(), (collection) => null);
-			timingPoller.Start(ControlStore, "timing");
+			{
+				var poller = new ContinuousPoller<TimingContainer>(new TimingContainer(), (collection) => null);
+				TimingPoller = poller;
+				poller.Start(ControlStore, TimingID);
+			}
+			{
+				var poller = new ContinuousPoller<SDConfigContainer>(new SDConfigContainer(), (collection) => null);
+				SDConfigPoller = poller;
+				poller.Start(ControlStore, "SD_"+shardCoords.Encoded);
+			}
 		}
 
 
@@ -337,7 +251,8 @@ namespace Shard
 
 
 
-		private static ContinuousPoller<TimingContainer> timingPoller;
+		public static IPollable<TimingContainer> TimingPoller { get; set; }
+		public static IPollable<SDConfigContainer> SDConfigPoller { get; set; }
 
 
 		/// <summary>
@@ -367,149 +282,6 @@ namespace Shard
 				Log.Error("Failed to upload config to server");
 
 		}
-
-
-
-		public class ContinuousPoller<T> : IDisposable where T : Entity
-		{
-			private DataBase store;
-
-			//TaskCompletionSource<T> anyValueAsync;
-
-			public Action<T> OnChange { get; set; }
-			public readonly Func<ICollection<T>, T> Merger;
-			SpinLock sl = new SpinLock();
-			CancellationTokenSource cancellation;
-
-			public ContinuousPoller(T initial, Func<ICollection<T>, T> merger)
-			{
-				Latest = initial;
-				Merger = merger;
-			}
-
-
-			public T Latest { get; private set; }
-
-			public string ID { get; private set; }
-
-			//public async Task<T> GetLatestAsync()
-			//{
-			//	if (lastQueriedValue != null)
-			//		return lastQueriedValue;
-			//	return await anyValueAsync.Task;
-			//}
-
-
-			public void Start(DataBase store, string id)
-			{
-				//this.onChange = onChange;
-				this.store = store;
-				this.ID = id;
-
-				PollAsync().Wait();
-
-				var getChangesRequest = new GetChangesRequest
-				{
-					Feed = ChangesFeed.Continuous,
-					Heartbeat = 3000 //Optional: LET COUCHDB SEND A I AM ALIVE BLANK ROW EACH ms
-				};
-
-				var serial = store.Entities.Serializer;
-				cancellation = new CancellationTokenSource();
-				store.Changes.GetAsync(
-					getChangesRequest,
-					data =>
-					{
-						if (disposedValue)
-							return;
-						var d = serial.Deserialize<Change>(data);
-						if (d != null && d.id == id)
-						{
-							StringBuilder revs = new StringBuilder();
-							bool actualChange = false;
-							foreach (var ch in d.changes)
-							{
-								revs.Append(' ').Append(ch.rev);
-								if (Latest == null || ch.rev != Latest._rev)
-									actualChange = true;
-							}
-							if (actualChange)
-							{
-								Log.Minor("Update detected on " + store.DBName + "['" + id + "']:" + revs + ". Polling");
-								PollAsync().Wait();
-							}
-						}
-					},
-					cancellation.Token);
-
-			}
-
-			private async Task PollAsync()
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					try
-					{
-						var header = await store.Documents.HeadAsync(ID);
-						if (!header.IsSuccess)
-							return;
-						if (Latest == null || header.Rev != Latest._rev)
-						{
-							var data = await GetConflictResolvedAsync(store, ID, Merger);
-							if (data == null)
-								return; //try again later
-							sl.DoLocked(() =>
-							{
-								Log.Minor("Got new data on " + store.DBName + "['" + ID + "']: rev " + header.Rev);
-								//if (lastQueriedValue == null)
-								//	anyValueAsync.SetResult(data);
-								Latest = data;
-								OnChange?.Invoke(data);
-							});
-						}
-						return;
-					}
-					catch (TaskCanceledException)
-					{ }
-				}
-			}
-
-			#region IDisposable Support
-			private bool disposedValue = false; // To detect redundant calls
-
-			protected virtual void Dispose(bool disposing)
-			{
-				if (!disposedValue)
-				{
-					if (disposing)
-					{
-						cancellation.Cancel();
-					}
-
-					// TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
-					// TODO: set large fields to null.
-
-					disposedValue = true;
-				}
-			}
-
-			// TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-			// ~ContinuousPoller() {
-			//   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-			//   Dispose(false);
-			// }
-
-			// This code added to correctly implement the disposable pattern.
-			public void Dispose()
-			{
-				// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-				Dispose(true);
-				// TODO: uncomment the following line if the finalizer is overridden above.
-				// GC.SuppressFinalize(this);
-			}
-			#endregion
-		}
-
 
 
 		public static string Connect(Address host, string username = null, string password = null)
@@ -651,10 +423,17 @@ namespace Shard
 
 		public class ConfigContainer : Entity
 		{
-			public ShardID extent = new ShardID(Int3.One, 1);
+			public Int3 extent = Int3.One;
 			public float r = 0.5f, m = -1;
 			public string ntp = "uhr.uni-trier.de";
 		}
+
+		public class SDConfigContainer : Entity
+		{
+			public int replicaCount = 1,
+						gatewayCount = 2;
+		}
+
 
 		public class AddressEntry : Entity
 		{

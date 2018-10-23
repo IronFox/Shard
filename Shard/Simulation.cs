@@ -19,7 +19,7 @@ namespace Shard
 	public static class Simulation
 	{
 		public static ShardID ID { get; private set; }
-		private static ShardID ext = new ShardID(Int3.One, 1);
+
 		public static EntityRanges Ranges = new EntityRanges(1f / 8, -1, Box.OffsetSize(Vec3.Zero, Vec3.One,Bool3.True));
 
 		private static Neighborhood neighbors,
@@ -393,12 +393,17 @@ namespace Shard
 
 		public static EntityRanges ToRanges(BaseDB.ConfigContainer config)
 		{
-			return new EntityRanges(config.r, config.m, ExtToWorld(config.extent.XYZ));
+			return new EntityRanges(config.r, config.m, ExtToWorld(config.extent));
 		}
 
 		public static Box ShardIDToBox(ShardID addr, ShardID ext)
 		{
-			return Box.OffsetSize(new Vec3(ID.XYZ), new Vec3(1), ID.XYZ + 1 >= ext.XYZ);
+			return Box.OffsetSize(new Vec3(addr.XYZ), new Vec3(1), addr.XYZ + 1 >= ext.XYZ);
+		}
+
+		public static Box SDToBox(Int3 addr, Int3 ext)
+		{
+			return Box.OffsetSize(new Vec3(addr), new Vec3(1), addr + 1 >= ext);
 		}
 
 		public static void Configure(ShardID addr, BaseDB.ConfigContainer config, bool forceAllLinksPassive)
@@ -406,16 +411,16 @@ namespace Shard
 			CSLogicProvider.AsyncFactory = DB.GetLogicProviderAsync;
 
 			ID = addr;
-			ext = config.extent;
+			gridExt = config.extent;
 			Ranges = ToRanges(config);
-			MySpace = ShardIDToBox(addr, ext);
+			MySpace = SDToBox(addr.XYZ, config.extent);
 
 
 			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / Ranges.R);
 
-			if (ext.ReplicaLevel > 1)
-				siblings = Neighborhood.NewSiblingList(addr, ext.ReplicaLevel, forceAllLinksPassive);
-			neighbors = Neighborhood.NewNeighborList(addr, ext.XYZ, forceAllLinksPassive);
+			if (Extent.ReplicaLevel > 1)
+				siblings = Neighborhood.NewSiblingList(addr, Extent.ReplicaLevel, forceAllLinksPassive);
+			neighbors = Neighborhood.NewNeighborList(addr, Extent.XYZ, forceAllLinksPassive);
 		}
 
 		public static bool Owns(Vec3 position)
@@ -425,13 +430,20 @@ namespace Shard
 			return MySpace.Contains(position);
 		}
 
-		public static ShardID Extent
+		private static Int3 gridExt = Int3.One;
+
+
+		public static int ReplicaCount
 		{
 			get
 			{
-				return ext;
+				var cfg = BaseDB.SD;
+				if (cfg == null)
+					return 1;
+				return cfg.replicaCount;
 			}
 		}
+		public static ShardID Extent => new ShardID(gridExt, ReplicaCount);
 
 		public static Box ExtToWorld(Int3 extent)
 		{
@@ -445,7 +457,7 @@ namespace Shard
 		{
 			get
 			{
-				return ExtToWorld(ext.XYZ);
+				return ExtToWorld(Extent.XYZ);
 			}
 		}
 

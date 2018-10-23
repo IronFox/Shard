@@ -310,10 +310,10 @@ namespace Shard.Tests
 			timing.msComputation = 20;
 			timing.msApplication = 20;
 			timing.recoverySteps = 2;
-			BaseDB.FallbackTimingFetch = () => timing;
+			BaseDB.TimingPoller = new DBType.FunctionPollable<BaseDB.TimingContainer>(() => timing);
 
 			SimulationRun run = new SimulationRun(
-				new BaseDB.ConfigContainer() { extent = new ShardID(new Int3(1), 1), r = 1f / 8, m = 1f / 16 },
+				new BaseDB.ConfigContainer() { extent = Int3.One, r = 1f / 8, m = 1f / 16 },
 				ShardID.Zero,
 				new Entity[]
 				{

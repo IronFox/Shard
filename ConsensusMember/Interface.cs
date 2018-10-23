@@ -52,7 +52,7 @@ namespace Consensus
 				}
 				var address = new FullShardAddress(MyID, localIP, peerPort, consensusPort);
 				Log.Message("Publishing address: " + address);
-				BaseDB.PutNow(address);
+				Shard.BaseDB.PutNow(address);
 			}
 		}
 
@@ -62,7 +62,7 @@ namespace Consensus
 			int at = -myID.ReplicaLevel;
 			for (int i = 0; i < 3; i++)
 				if (i != at)
-					addresses[at] = () => BaseDB.TryGetConsensusAddress(new ShardID(myID.XYZ, i));
+					addresses[at] = () => Shard.BaseDB.TryGetConsensusAddress(new ShardID(myID.XYZ, i));
 			//else
 			//	addresses[at] = null;	//default
 
