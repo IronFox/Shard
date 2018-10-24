@@ -69,9 +69,9 @@ namespace Consensus
 		}
 
 	
-		internal void AssertLeaderMatch(IEnumerable<LogEntry> entries)
+		internal void AssertLeaderMatch(IEnumerable<LogEntry> entries, int offset)
 		{
-			int g = 0;
+			int g = offset;
 			foreach (var e in entries)
 			{
 				Execution exec;

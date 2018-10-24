@@ -44,6 +44,11 @@ namespace Consensus
 			return !(a == b);
 		}
 
+		public override string ToString()
+		{
+			return "#" + OriginSerialNumber + "@" + OriginNode;
+		}
+
 
 	}
 
@@ -63,7 +68,7 @@ namespace Consensus
 
 		internal void Execute(Node location)
 		{
-			Operation.Commit(location);
+			Operation.Commit(location,CommitID);
 		}
 
 		public override string ToString()

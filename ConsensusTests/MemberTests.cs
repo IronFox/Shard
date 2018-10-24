@@ -222,7 +222,7 @@ namespace Consensus.Tests
 			{
 				Index = index;
 			}
-			public void Commit(Node hub)
+			public void Commit(Node hub, CommitID commitID)
 			{
 				TestAttachment attach = (TestAttachment)hub.Attachment;
 				attach.Received.Enqueue(Index);

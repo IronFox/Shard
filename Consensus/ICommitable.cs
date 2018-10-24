@@ -4,6 +4,6 @@ namespace Consensus
 {
 	public interface ICommitable
 	{
-		void Commit(Node node);
+		void Commit(Node node, CommitID myID);
 	}
 }

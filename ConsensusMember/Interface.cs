@@ -134,6 +134,7 @@ namespace Consensus
 						{
 							generations.TryDequeue(out bag);
 							currentSeconds = bag.Max * Alpha + currentSeconds * (1.0 - Alpha);
+							Log.Message("Included g"+bag.Generation+". DTW now at "+currentSeconds);
 						}
 						minGeneration = generationOrOlder + 1;
 					}
@@ -209,7 +210,7 @@ namespace Consensus
 				Delay = delay;
 			}
 
-			public void Commit(Node node)
+			public void Commit(Node node, CommitID myID)
 			{
 				var parent = node as Interface;
 				parent.timing.Include(EndedGeneration, parent.Configuration.Size, Delay);
@@ -234,14 +235,30 @@ namespace Consensus
 
 			public override string ToString() => "GEC g" + EndedGeneration+", dispatched "+TimeStamp;
 
-			public void Commit(Node node)
+			public void Commit(Node node, CommitID myID)
 			{
 				var parent = node as Interface;
+				parent.gecCommits.Enqueue(new Tuple<CommitID, int>(myID, EndedGeneration));
+				CommitID flush = CommitID.None;
+				Tuple<CommitID, int> check;
+				while (parent.gecCommits.TryPeek(out check) && check.Item2 +2 < EndedGeneration)
+				{
+					parent.gecCommits.TryDequeue(out check);
+					if (check.Item2 + 2 < EndedGeneration)
+						flush = check.Item1;
+				}
+				if (flush != CommitID.None)
+				{
+					Log.Message("Collecting fossils from " + flush);
+					parent.RemoveFossils(flush, true);
+				}
+
 				if (EndedGeneration < parent.generation)
 					return;
 				parent.generation = EndedGeneration + 1;
 				parent.Notify.OnGenerationEnd(EndedGeneration);
 				parent.Schedule(new TimeWindowReport(EndedGeneration,Clock.Now - TimeStamp));
+
 			}
 		}
 
@@ -251,6 +268,7 @@ namespace Consensus
 		}
 
 		private int generation = 0;
+		private ConcurrentQueue<Tuple<CommitID, int>> gecCommits = new ConcurrentQueue<Tuple<CommitID, int>>();
 		private void GECThreadMain()
 		{
 			int last = -1;
@@ -279,7 +297,7 @@ namespace Consensus
 				this.confirmTo = confirmTo;
 			}
 
-			public void Commit(Node node)
+			public void Commit(Node node, CommitID myID)
 			{
 				var parent = node as Interface;
 				parent.Notify.OnMessageCommit(confirmTo, msg);

@@ -257,7 +257,7 @@ namespace Shard.Tests
 					var begin = DateTime.Now;
 					while (messages.CurrentGeneration <= stack.NewestRegisteredSDSGeneration)
 					{
-						if (DateTime.Now - begin > TimeSpan.FromSeconds(2))
+						if (DateTime.Now - begin > TimeSpan.FromSeconds(8))
 						{
 							bool brk = true;
 							begin = DateTime.Now;

@@ -481,7 +481,8 @@ namespace Consensus
 
 		private int FindLogEntry(CommitID id)
 		{
-			for (int i = log.Offset; i < log.Count; i++)
+			//for (int i = log.Offset; i < log.Count; i++)
+			for (int i = log.Count-1; i >= log.Offset; i--)	//better run backwards in case member has been rebooted and started with fresh commit ids
 				if (log[i].Entry.CommitID == id)
 					return i;
 			return -1;
@@ -755,7 +756,7 @@ namespace Consensus
 				this.includeThreshold = includeThreshold;
 			}
 
-			public void Commit(Node node)
+			public void Commit(Node node, CommitID myID)
 			{
 				node.DoSerialized(() =>
 				{
@@ -923,7 +924,7 @@ namespace Consensus
 					nextActionAt = PreciseTime.Now + HEART_BEAT_TIMEOUT_NS;
 
 					if (DebugState != null)
-						DebugState.AssertLeaderMatch(log.Select(p => p.Entry));
+						DebugState.AssertLeaderMatch(log.Select(p => p.Entry), log.Offset);
 
 					if (commitCount != LogSize)
 					{
