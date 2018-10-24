@@ -45,6 +45,7 @@ namespace Base
 	{
 		public readonly string Host;
 		public readonly int Port;
+		public static readonly Address None = new Address();
 
 		public Address(string hostname, int port)
 		{

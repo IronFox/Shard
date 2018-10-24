@@ -49,7 +49,8 @@ namespace Shard
 			if (siblings.AllResponsive && siblings.OldestGeneration >= gen)
 				DB.RemoveInboundRCSsAsync(neighbors.Select(sibling => sibling.InboundRCSStackID),gen).Wait();
 
-			Consensus.TrimOut(gen - 1);
+			if (Consensus != null)	//tests
+				Consensus.TrimOut(gen - 1);
 			Messages.TrimGenerations(gen - 1);
 		}
 
@@ -157,13 +158,19 @@ namespace Shard
 			{
 				Messages.EndGeneration(generation);
 			}
+
+			public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
+			{
+				Log.Error("Consensus address mismatch: Bound address: " + locallyBound + ", public registration: " + globallyRegistered);
+				Environment.Exit(-1);
+			}
 		}
 
 		public static void Run(ShardID myID)
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
-			Consensus = new Consensus.Interface(myID, listener.Port, true,new DefaultNotify());
+			Consensus = new Consensus.Interface(myID, listener.Port, 0,true,new DefaultNotify());
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);

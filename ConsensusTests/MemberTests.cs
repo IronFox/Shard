@@ -29,15 +29,20 @@ namespace Consensus.Tests
 		{
 			private Func<int, Address> getAddressOf;
 			public readonly int Port;
-			public ClusterNode(Configuration cfg, Configuration.Member self, int port, Func<int, Address> getAddressOf):base(self)
+			public ClusterNode(Configuration cfg, Configuration.Member self, Address selfAddress, Func<int, Address> getAddressOf):base(self)
 			{
 				this.getAddressOf = getAddressOf;
-				Port = Start(cfg,port);
+				Port = Start(cfg, selfAddress);
 			}
 
 			public override Address GetAddress(int memberID)
 			{
 				return getAddressOf(memberID);
+			}
+
+			public override void OnAddressMismatchDispose()
+			{
+				Assert.Fail("Internal test error. Locally bound address "+BoundAddress+" does not match globally registered address "+PublicAddress);
 			}
 		}
 
@@ -83,7 +88,7 @@ namespace Consensus.Tests
 				cfg = new Configuration("null",members);
 				this.members = new Node[size];
 				for (int i = 0; i < size; i++)
-					this.members[i] = new ClusterNode(cfg, cfg.Members[i],basePort+i,GetAddressOf);
+					this.members[i] = new ClusterNode(cfg, cfg.Members[i],new Address(basePort+i),GetAddressOf);
 				attachments = new object[size];
 			}
 
@@ -138,7 +143,7 @@ namespace Consensus.Tests
 						Assert.IsFalse(members[i].IsDisposed);
 						Assert.IsFalse(members[i].IsFullyConnected, "[" + i + "]L" + idx);
 					}
-				members[idx] = new ClusterNode(cfg, cfg.Members[idx],basePort+idx,GetAddressOf);
+				members[idx] = new ClusterNode(cfg, cfg.Members[idx],new Address(basePort+idx),GetAddressOf);
 				if (preserveAttachment)
 					members[idx].Attachment = attachments[idx];
 				else
@@ -194,7 +199,7 @@ namespace Consensus.Tests
 			internal void Resume(int suspended)
 			{
 				Assert.IsNull(members[suspended]);
-				members[suspended] = new ClusterNode(cfg, cfg.Members[suspended],basePort+suspended,GetAddressOf);
+				members[suspended] = new ClusterNode(cfg, cfg.Members[suspended],new Address(basePort+suspended),GetAddressOf);
 				members[suspended].Attachment = attachments[suspended];
 			}
 		}

@@ -7,7 +7,7 @@ namespace Consensus
 {
 
 	[Serializable]
-	public struct Configuration
+	public class Configuration
 	{
 		public struct Member
 		{
@@ -34,6 +34,8 @@ namespace Consensus
 
 		public Configuration(string revision, IEnumerable<Member> memberIdentifiers) : this(new string[] { revision }, memberIdentifiers)
 		{ }
+		public Configuration(IEnumerable<string> revisions, IEnumerable<Member> memberIdentifiers) : this(revisions.ToArray(),memberIdentifiers)
+		{}
 		public Configuration(string[] revisions, IEnumerable<Member> memberIdentifiers)
 		{
 			Members = memberIdentifiers.ToArray();

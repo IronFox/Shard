@@ -1,4 +1,5 @@
 ﻿using Base;
+using DBType;
 //using Consensus;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ShardTests1;
@@ -191,6 +192,11 @@ namespace Shard.Tests
 
 			private class DummyNotify : Consensus.INotifiable
 			{
+				public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
+				{
+					Assert.Fail("Configuration error. Mismatch between bound address "+locallyBound+" and public registration "+globallyRegistered);
+				}
+
 				public void OnGenerationEnd(int generation)
 				{
 					bool brk = true;
@@ -209,6 +215,11 @@ namespace Shard.Tests
 				public MyNotify(SimulationRun simulationRun)
 				{
 					this.simulationRun = simulationRun;
+				}
+
+				public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
+				{
+					Assert.Fail("Configuration error. Mismatch between bound address " + locallyBound + " and public registration " + globallyRegistered);
 				}
 
 				public void OnGenerationEnd(int generation)
@@ -297,21 +308,23 @@ namespace Shard.Tests
 
 			internal void InstallConsensusCluster(int size, int basePort, bool awaitFormation)
 			{
-				var members = new Consensus.Configuration.Member[size];
-				for (int i = 0; i < size; i++)
-					members[i] = new Consensus.Configuration.Member(-i,true);
-
-				var consensusCfg = new Consensus.Configuration("test",members);
+				BaseDB.OverrideAddressRequestFunction = addr => new FullShardAddress(addr, "localhost", 0, basePort + addr.ReplicaLevel);
+				BaseDB.SDConfigPoller = new ReplicaOnlySD(size);
 				var dummyNotify = new DummyNotify();
 				consensus = new Consensus.Interface[size];
 				Consensus.SharedDebugState state = new Consensus.SharedDebugState();
 				for (int i = 0; i < size; i++)
 				{
-					consensus[i] = new Consensus.Interface(consensusCfg, consensusCfg.Members[i], basePort+i, Int3.Zero, i > 0 ? dummyNotify : Notify);
-					consensus[i].DebugState = state;
+					consensus[i] =
+						new Consensus.Interface(
+							new Consensus.Configuration.Member(i, true),
+							new Address(basePort + i),
+							Int3.Zero, i > 0 ? dummyNotify : Notify)
+						{
+							DebugState = state
+						};
 				}
 
-				BaseDB.OverrideAddressRequestFunction = addr => new FullShardAddress(addr, "localhost", 0, basePort - addr.ReplicaLevel);
 
 				if (awaitFormation)
 					AwaitConsensus();
@@ -633,6 +646,18 @@ namespace Shard.Tests
 		}
 
 
+	}
+
+	internal class ReplicaOnlySD : IPollable<BaseDB.SDConfigContainer>
+	{
+		public int Size { get; set; }
+
+		public ReplicaOnlySD(int size)
+		{
+			Size = size;
+		}
+
+		public BaseDB.SDConfigContainer Latest => new BaseDB.SDConfigContainer() { gatewayCount = 0, replicaCount = Size };
 	}
 
 	[Serializable]

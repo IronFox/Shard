@@ -17,6 +17,7 @@ namespace Consensus
 	{
 		void OnMessageCommit(Address clientAddress, ClientMessage message);
 		void OnGenerationEnd(int generation);
+		void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered);
 	}
 	public class Interface : Node
 	{
@@ -32,36 +33,81 @@ namespace Consensus
 			return BaseDB.TryGetAddress(new ShardID(MyID.XYZ, replicaIndex)).ConsensusAddress;
 		}
 
-		public Interface(Configuration cfg, Configuration.Member self, int selfPort, Int3 myCoords, INotifiable notify):base(self)
+
+		public static Configuration BuildConfig(Configuration current)
 		{
-			actualPort = Start(cfg, selfPort);
+			BaseDB.SDConfigContainer cfg = BaseDB.SD;
+			while (cfg == null)
+			{
+				Thread.Sleep(100);
+				cfg = BaseDB.SD;
+			}
+			if (current == null)
+				return new Configuration(cfg._rev, EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
+			if (current.Revision == cfg._rev)
+				return current;
+			return new Configuration(CombineRevs(cfg._rev,current.Revisions), EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
+		}
+
+		private static IEnumerable<string> CombineRevs(string rev, string[] revisions)
+		{
+			yield return rev;
+			foreach (var s in revisions)
+				yield return s;
+		}
+
+		private static IEnumerable<Configuration.Member> EnumerateMembers(int first, int last)
+		{
+			for (int i = first; i <= last; i++)
+				yield return Member(i);
+		}
+
+		private static Configuration.Member Member(int i)
+		{
+			return new Configuration.Member(i, i == -1 || i == 0);
+		}
+
+		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, INotifiable notify):base(self)
+		{
+			var cfg = BuildConfig(null);
+			actualPort = Start(cfg, selfAddress);
 			MyID = new ShardID(myCoords,self.Identifier);
 			Notify = notify;
 			gecThread = new Thread(new ThreadStart(GECThreadMain));
 			gecThread.Start();
 		}
 
-		public Interface(Tuple<Configuration,Configuration.Member, Int3> cfg, int selfPort, INotifiable notify) : this(cfg.Item1, cfg.Item2, selfPort,cfg.Item3,notify)
-		{}
 
-		public Interface(ShardID myID, int peerPort, bool updateAddress, INotifiable notify) :this(ConstructConfig(myID), peerPort,notify)
+		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, INotifiable notify) :this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, notify)
 		{
 			if (updateAddress)
 			{
-				int consensusPort = actualPort;
-				Log.Message("Detecting address...");
-				//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
-				string localIP;
-				using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
-				{
-					socket.Connect("8.8.8.8", 65530);
-					IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
-					localIP = endPoint.Address.ToString();
-				}
-				var address = new FullShardAddress(MyID, localIP, peerPort, consensusPort);
+				var address = new FullShardAddress(MyID, BoundAddress.Host, peerPort, BoundAddress.Port);
 				Log.Message("Publishing address: " + address);
-				Shard.BaseDB.PutNow(address);
+				BaseDB.PutNow(address);
 			}
+		}
+
+		private static object ipLock = new object();
+		private static string localIP = null;
+		private static Address GetMyAddress(int consensusPort)
+		{
+			lock (ipLock)
+			{
+				if (localIP == null)
+				{
+					Log.Message("Detecting address...");
+					//https://stackoverflow.com/questions/6803073/get-local-ip-address - Mr.Wang from Next Door
+					using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+					{
+						socket.Connect("8.8.8.8", 65530);
+						IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
+						localIP = endPoint.Address.ToString();
+					}
+				}
+				return new Address(localIP, consensusPort);
+			}
+
 		}
 
 		private static Tuple<Configuration, Configuration.Member, Int3> ConstructConfig(ShardID myID)
@@ -307,6 +353,11 @@ namespace Consensus
 		public void Dispatch(ClientMessage msg, Address confirmTo)
 		{
 			Schedule(new CommitMessage(msg, confirmTo));
+		}
+
+		public override void OnAddressMismatchDispose()
+		{
+			Notify.OnAddressMismatchConsensusLoss(BoundAddress,PublicAddress);
 		}
 	}
 }

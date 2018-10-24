@@ -76,7 +76,7 @@ namespace Consensus
 		}
 		internal void LogMinorEvent(object ev, Identity sender = null)
 		{
-			return;
+		//	return;
 			string id;
 			if (sender == null)
 			{
@@ -257,6 +257,12 @@ namespace Consensus
 		public override Address PublicAddress => myAddress;
 
 		public abstract Address GetAddress(int memberID);
+		/// <summary>
+		/// Invoked prior to disposing the local node as a result of mismatch between bound and public address
+		/// </summary>
+		public abstract void OnAddressMismatchDispose();
+		public Address BoundAddress { get; private set; }
+
 
 		public Node(Configuration.Member self) : base(null)
 		{
@@ -268,15 +274,17 @@ namespace Consensus
 		/// </summary>
 		/// <param name="config">Consensus configuration to join</param>
 		/// <param name="getAddress">Address resolution function: Fetches the IP address for a given member identifier</param>
-		public int Start(Configuration config, int port)
+		public int Start(Configuration config, Address bindingAddress)
 		{
 			if (!config.ContainsIdentifier(MemberID))
 				throw new ArgumentOutOfRangeException("Given consensus configuration " + config + " does not contain local node identifier " + MemberID);
 			IPAddress filter = IPAddress.Any;
-			listener = new TcpListener(filter,port);
+			listener = new TcpListener(filter, bindingAddress.Port);
 			listener.Start();
+			int port = bindingAddress.Port;
 			if (port == 0)
 				port = ((IPEndPoint)listener.LocalEndpoint).Port;
+			BoundAddress = new Address(bindingAddress.Host, port);
 			Join(config);	//join first, so members are initialized
 			LogMinorEvent("Started to listening on port " + port);
 			listenThread = new Thread(new ThreadStart(ThreadListen));
@@ -376,7 +384,7 @@ namespace Consensus
 				Connection c = remoteMembers[i];
 				if (c == null)
 					continue;
-				if (IsLeader && !c.IsAlive && !(c is ActiveConnection))
+				if (IsLeader && !c.IsAlive && !c.IsActive)
 				{
 					LogEvent("Disconnecting unresponsive " + c);
 					Dispose(c);
@@ -405,6 +413,14 @@ namespace Consensus
 			while (!disposing)
 			{
 				myAddress = GetAddress(MemberID.Identifier);
+				if (myAddress != Address.None && myAddress != BoundAddress)
+				{
+					//GetAddress(MemberID.Identifier);
+					OnAddressMismatchDispose();
+					Dispose();
+					return;
+				}
+
 				try
 				{
 					if (state == State.Leader)
@@ -598,8 +614,10 @@ namespace Consensus
 			catch { }
 			listener.Stop();
 			listener.Server.Dispose();
-			listenThread.Join();
-			consensusThread.Join();
+			if (listenThread != Thread.CurrentThread)
+				listenThread.Join();
+			if (consensusThread != Thread.CurrentThread)
+				consensusThread.Join();
 		}
 
 		public bool IsLeader => state == State.Leader;
