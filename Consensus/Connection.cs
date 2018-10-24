@@ -28,6 +28,12 @@ namespace Consensus
 		public int CommitIndex { get; set; } = 0;
 		public PreciseTime AppendTimeout { get; set; } = PreciseTime.None;
 
+
+		public override string ToString()
+		{
+			return "Match " + MatchIndex + ", Next " + NextIndex + ", Commit " + CommitIndex;
+		}
+
 	}
 
 	internal class Connection : Identity, IDisposable

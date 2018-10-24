@@ -254,11 +254,11 @@ namespace Consensus
 		private void GECThreadMain()
 		{
 			int last = -1;
-			while (true)
+			while (!IsDisposed)
 			{
 				var current = generation;
 				Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
-				Log.Message("Progressing ");
+				//Log.Message("Progressing ");
 				if (last != current)
 				{
 					Schedule(new GEC(current));

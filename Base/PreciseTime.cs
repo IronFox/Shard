@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace Consensus
+namespace Base
 {
-	internal struct PreciseTime : IEquatable<PreciseTime>, IComparable<PreciseTime>
+	public struct PreciseTime : IEquatable<PreciseTime>, IComparable<PreciseTime>
 	{
 		public readonly long Ticks;
 		internal PreciseTime(long ticks) => Ticks = ticks;

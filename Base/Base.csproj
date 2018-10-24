@@ -56,6 +56,8 @@
     <Compile Include="IntegrityViolation.cs" />
     <Compile Include="Log.cs" />
     <Compile Include="Mutex.cs" />
+    <Compile Include="PreciseTime.cs" />
+    <Compile Include="PreciseTimeSpan.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ShardID.cs" />
   </ItemGroup>

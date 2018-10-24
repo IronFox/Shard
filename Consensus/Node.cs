@@ -76,6 +76,7 @@ namespace Consensus
 		}
 		internal void LogMinorEvent(object ev, Identity sender = null)
 		{
+			return;
 			string id;
 			if (sender == null)
 			{
@@ -88,6 +89,8 @@ namespace Consensus
 			string dummy;
 			while (eventLog.Count > 500)
 				eventLog.TryDequeue(out dummy);
+
+			//Console.WriteLine(id + ": " + ev);
 		}
 		internal void LogEvent(object ev, Identity sender = null)
 		{

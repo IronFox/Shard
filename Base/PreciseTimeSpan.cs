@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace Consensus
+namespace Base
 {
-	public class PreciseTimeSpan : IEquatable<PreciseTimeSpan>, IComparable<PreciseTimeSpan>
+	public struct PreciseTimeSpan : IEquatable<PreciseTimeSpan>, IComparable<PreciseTimeSpan>
 	{
 		public readonly long Ticks;
 
@@ -27,16 +27,8 @@ namespace Consensus
 			return (double)Ticks / Stopwatch.Frequency + " sec";
 		}
 
-		public override bool Equals(object obj)
-		{
-			return Equals(obj as PreciseTimeSpan);
-		}
 
-		public bool Equals(PreciseTimeSpan other)
-		{
-			return other != null &&
-				   Ticks == other.Ticks;
-		}
+
 
 		public override int GetHashCode()
 		{
@@ -56,6 +48,22 @@ namespace Consensus
 		public static PreciseTimeSpan FromSeconds(double s)
 		{
 			return new PreciseTimeSpan((long)(s * Stopwatch.Frequency));
+		}
+
+		public override bool Equals(object obj)
+		{
+			if (!(obj is PreciseTimeSpan))
+			{
+				return false;
+			}
+
+			var span = (PreciseTimeSpan)obj;
+			return Ticks == span.Ticks;
+		}
+
+		public bool Equals(PreciseTimeSpan other)
+		{
+			return this == other;
 		}
 	}
 }

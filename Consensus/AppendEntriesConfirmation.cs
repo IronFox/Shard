@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Base;
+using System;
 
 namespace Consensus
 {
@@ -51,7 +52,7 @@ namespace Consensus
 				}
 				else
 				{
-					instance.LogEvent("Append entries rejected by remote " + info);
+					instance.LogEvent("Append entries rejected by remote " + c);
 					info.MatchIndex = LastCommit;
 					info.NextIndex = LastCommit + 1;
 					c.Dispatch(new AppendEntries(instance, info.NextIndex));

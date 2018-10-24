@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using VectorMath;
 using static Shard.Tests.ComputationTests;
 using Base;
+using System.Diagnostics;
 
 namespace Shard.Tests
 {
@@ -339,6 +340,8 @@ namespace Shard.Tests
 				}
 			});
 
+			List<TimeSpan> deltas = new List<TimeSpan>();
+
 			using (Listener listener = new Listener(null,defaultPort))
 			{
 				InteractionLink myLink = null;
@@ -376,7 +379,6 @@ namespace Shard.Tests
 				};
 
 
-
 				using (TcpClient client = new TcpClient("localhost", defaultPort))
 				{
 					var stream = client.GetStream();
@@ -402,10 +404,15 @@ namespace Shard.Tests
 						float f = random.NextFloat(0, 100);
 						Console.WriteLine(i + ": " + f);
 						Message job = new Message(me, entityID, 0, BitConverter.GetBytes(f), 50);
+						var t0 = PreciseTime.Now;
 						SendMessage(stream, job);
 						ReadMessageDelivered(stream,job.MessageID);
 
 						Message response = ReadMessage(stream, out gen,1);
+
+						var delta = PreciseTime.Now - t0;
+						deltas.Add(delta.TimeSpan);
+
 						Assert.AreEqual(response.To, me);
 						Assert.AreEqual(response.From, entityID);
 						Assert.IsNotNull(response.Data);
@@ -417,6 +424,9 @@ namespace Shard.Tests
 			}
 			keepRunning = false;
 			task.Wait();
+
+			foreach (var t in deltas)
+				Debug.WriteLine(t);
 		}
 
 		/// <summary>
