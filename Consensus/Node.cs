@@ -555,8 +555,10 @@ namespace Consensus
 
 
 
-		internal void Join(Configuration cfg)
+		public void Join(Configuration cfg)
 		{
+			if (cfg == config)
+				return;
 			List<Connection> doDispose = new List<Connection>();
 			int at;
 			if (!cfg.ToIndex(MemberID, out at))
@@ -565,6 +567,9 @@ namespace Consensus
 
 			DoSerialized(() =>
 			{
+				if (cfg == config)
+					return;
+				LogEvent("Implementing consensus configuration " + cfg);
 				var newMembers = new Connection[cfg.Size];
 				if (remoteMembers != null)
 					foreach (var m in remoteMembers)

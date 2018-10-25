@@ -34,7 +34,7 @@ namespace Consensus
 		}
 
 
-		public static Configuration BuildConfig(Configuration current)
+		public static Configuration BuildConfig()
 		{
 			BaseDB.SDConfigContainer cfg = BaseDB.SD;
 			while (cfg == null)
@@ -42,11 +42,7 @@ namespace Consensus
 				Thread.Sleep(100);
 				cfg = BaseDB.SD;
 			}
-			if (current == null)
-				return new Configuration(cfg._rev, EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
-			if (current.Revision == cfg._rev)
-				return current;
-			return new Configuration(CombineRevs(cfg._rev,current.Revisions), EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
+			return new Configuration(EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
 		}
 
 		private static IEnumerable<string> CombineRevs(string rev, string[] revisions)
@@ -69,7 +65,9 @@ namespace Consensus
 
 		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, INotifiable notify):base(self)
 		{
-			var cfg = BuildConfig(null);
+			var cfg = BuildConfig();
+			if (!cfg.ContainsIdentifier(self))
+				throw new ArgumentOutOfRangeException("Given self address is not contained by current SD configuration");
 			actualPort = Start(cfg, selfAddress);
 			MyID = new ShardID(myCoords,self.Identifier);
 			Notify = notify;
@@ -110,29 +108,6 @@ namespace Consensus
 
 		}
 
-		private static Tuple<Configuration, Configuration.Member, Int3> ConstructConfig(ShardID myID)
-		{
-			throw new NotImplementedException();
-		}
-		private static Tuple<Configuration, Configuration.Member, Int3> ConstructConfig(ShardID myID, int consensusCount, int replicaCount)
-		{
-			var addresses = new Configuration.Member[consensusCount + replicaCount];
-			for (int i = 0; i < consensusCount; i++)
-				addresses[i] =new Configuration.Member(i - consensusCount, i+1 == consensusCount);
-			for (int i = 0; i < replicaCount; i++)
-				addresses[i + consensusCount] = new Configuration.Member(i, i==0);
-
-			Configuration cfg = new Configuration("0",addresses);
-
-			int at = myID.ReplicaLevel - addresses[0].Identifier;
-			if (at < 0 || at >= addresses.Length)
-				throw new ArgumentOutOfRangeException("myID.ReplicaLevel", "Not found in [-"+consensusCount+","+replicaCount+")");
-			if (addresses[at].Identifier != myID.ReplicaLevel)
-				throw new InvalidOperationException("Replica level not at expected location");
-
-			return new Tuple<Configuration, Configuration.Member, Int3>(cfg, addresses[at], myID.XYZ);
-		}
-		
 		
 		
 		
@@ -320,6 +295,16 @@ namespace Consensus
 			int last = -1;
 			while (!IsDisposed)
 			{
+				var cfg = BuildConfig();
+				if (cfg != Config)
+				{
+					Log.Message("Change in SD configuration detected: " + Config + "->" + cfg);
+					if (!cfg.ContainsIdentifier(MyID.ReplicaLevel))
+						throw new ArgumentOutOfRangeException("Given self address is no longer contained by current SD configuration");
+					base.Join(cfg);
+				}
+
+
 				var current = generation;
 				Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
 				//Log.Message("Progressing ");

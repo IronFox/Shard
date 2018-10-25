@@ -349,7 +349,7 @@ namespace Consensus
 					nextClient = new TcpClient(addr.Host,addr.Port);
 					break;
 				}
-				catch (Exception ex)
+				catch// (Exception ex)
 				{
 				}
 			}

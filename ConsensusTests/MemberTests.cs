@@ -85,7 +85,7 @@ namespace Consensus.Tests
 				var members = new Configuration.Member[size];
 				for (int i = 0; i < size; i++)
 					members[i] = new Configuration.Member(testOffset+i,true);
-				cfg = new Configuration("null",members);
+				cfg = new Configuration(members);
 				this.members = new Node[size];
 				for (int i = 0; i < size; i++)
 					this.members[i] = new ClusterNode(cfg, cfg.Members[i],new Address(basePort+i),GetAddressOf);
