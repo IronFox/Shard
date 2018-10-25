@@ -1,4 +1,5 @@
 ﻿using Base;
+using Consensus;
 using DBType;
 //using Consensus;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -207,6 +208,11 @@ namespace Shard.Tests
 					bool brk = true;
 
 				}
+
+				public void OnOutOfConfig(Configuration newConfig, Configuration.Member memberID)
+				{
+					Assert.Fail("Configuration error: Local member ID "+memberID+" not found in new configuration "+newConfig);
+				}
 			}
 			private class MyNotify : Consensus.INotifiable
 			{
@@ -220,6 +226,10 @@ namespace Shard.Tests
 				public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
 				{
 					Assert.Fail("Configuration error. Mismatch between bound address " + locallyBound + " and public registration " + globallyRegistered);
+				}
+				public void OnOutOfConfig(Configuration newConfig, Configuration.Member memberID)
+				{
+					Assert.Fail("Configuration error: Local member ID " + memberID + " not found in new configuration " + newConfig);
 				}
 
 				public void OnGenerationEnd(int generation)

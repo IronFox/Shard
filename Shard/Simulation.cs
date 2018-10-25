@@ -10,6 +10,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Linq;
 using Base;
+using Consensus;
 
 namespace Shard
 {
@@ -161,7 +162,13 @@ namespace Shard
 
 			public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
 			{
-				Log.Error("Consensus address mismatch: Bound address: " + locallyBound + ", public registration: " + globallyRegistered);
+				Log.Error("Terminal: Consensus address mismatch: Bound address: " + locallyBound + ", public registration: " + globallyRegistered);
+				Environment.Exit(-1);
+			}
+
+			public void OnOutOfConfig(Configuration newConfig, Configuration.Member memberID)
+			{
+				Log.Error("Terminal: Consensus member ID " + memberID+" not found in new configuration "+newConfig);
 				Environment.Exit(-1);
 			}
 		}

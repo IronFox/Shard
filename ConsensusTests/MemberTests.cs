@@ -45,9 +45,9 @@ namespace Consensus.Tests
 				Assert.Fail("Internal test error. Locally bound address "+BoundAddress+" does not match globally registered address "+PublicAddress);
 			}
 
-			public override void OnOutOfConfig()
+			public override void OnOutOfConfig(Configuration newConfig)
 			{
-				Assert.Fail("Node incorrectly fell out of config");
+				Assert.Fail("Node incorrectly fell out of config "+newConfig);
 			}
 		}
 

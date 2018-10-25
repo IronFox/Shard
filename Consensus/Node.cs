@@ -264,7 +264,7 @@ namespace Consensus
 		/// <summary>
 		/// Triggered prior to disposing the local node as a result of joining a new configuration that the local node is not a part of
 		/// </summary>
-		public abstract void OnOutOfConfig();
+		public abstract void OnOutOfConfig(Configuration newConfig);
 		public Address BoundAddress { get; private set; }
 
 
@@ -574,7 +574,7 @@ namespace Consensus
 				if (!cfg.ToIndex(MemberID, out at))
 				{
 					LogError("Local member ID "+MemberID+" is not part of new consensus configuration "+cfg+". Closing down node");
-					OnAddressMismatchDispose();
+					OnOutOfConfig(cfg);
 					Dispose();
 					throw new ArgumentException("Local member ID "+MemberID+" is not part of new consensus configuration "+cfg);
 				}

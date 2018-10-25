@@ -18,6 +18,7 @@ namespace Consensus
 		void OnMessageCommit(Address clientAddress, ClientMessage message);
 		void OnGenerationEnd(int generation);
 		void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered);
+		void OnOutOfConfig(Configuration newConfig, Configuration.Member memberID);
 	}
 	public class Interface : Node
 	{
@@ -343,6 +344,11 @@ namespace Consensus
 		public override void OnAddressMismatchDispose()
 		{
 			Notify.OnAddressMismatchConsensusLoss(BoundAddress,PublicAddress);
+		}
+
+		public override void OnOutOfConfig(Configuration newConfig)
+		{
+			Notify.OnOutOfConfig(newConfig, MemberID);
 		}
 	}
 }
