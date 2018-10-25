@@ -51,7 +51,7 @@ namespace Consensus
 		private Configuration config;
 		protected Configuration Configuration => config;
 
-		public readonly Configuration.Member MemberID;
+		public Configuration.Member MemberID { get; private set; }
 		public int MyLinearIndex { get; private set; }
 
 		
@@ -261,6 +261,10 @@ namespace Consensus
 		/// Invoked prior to disposing the local node as a result of mismatch between bound and public address
 		/// </summary>
 		public abstract void OnAddressMismatchDispose();
+		/// <summary>
+		/// Triggered prior to disposing the local node as a result of joining a new configuration that the local node is not a part of
+		/// </summary>
+		public abstract void OnOutOfConfig();
 		public Address BoundAddress { get; private set; }
 
 
@@ -560,16 +564,23 @@ namespace Consensus
 			if (cfg == config)
 				return;
 			List<Connection> doDispose = new List<Connection>();
-			int at;
-			if (!cfg.ToIndex(MemberID, out at))
-				throw new ArgumentOutOfRangeException("Given configuration does not contain local node");
-			MyLinearIndex = at;
 
 			DoSerialized(() =>
 			{
 				if (cfg == config)
 					return;
 				LogEvent("Implementing consensus configuration " + cfg);
+				int at;
+				if (!cfg.ToIndex(MemberID, out at))
+				{
+					LogError("Local member ID "+MemberID+" is not part of new consensus configuration "+cfg+". Closing down node");
+					OnAddressMismatchDispose();
+					Dispose();
+					throw new ArgumentException("Local member ID "+MemberID+" is not part of new consensus configuration "+cfg);
+				}
+				MemberID = cfg.Members[at];
+				MyLinearIndex = at;
+
 				var newMembers = new Connection[cfg.Size];
 				if (remoteMembers != null)
 					foreach (var m in remoteMembers)
@@ -577,7 +588,7 @@ namespace Consensus
 						if (m == null)
 							continue;
 						int linear;
-						if (cfg.ToIndex(m.RemoteIdentifier, out linear) && m.IsActive == linear > MyLinearIndex)
+						if (cfg.ToIndex(m.RemoteIdentifier, out linear) && m.IsActive == linear > MyLinearIndex && m.RemoteIdentifier == cfg.Members[linear])
 						{
 							if (at == linear)
 								throw new InvalidOperationException("Found self among remotes");
@@ -593,6 +604,19 @@ namespace Consensus
 						newMembers[i] = new ActiveConnection(this, cfg.Members[i]);
 				}
 				remoteMembers = newMembers;
+
+				if (IsLeader)
+				{
+					if (!MemberID.CanBeLeader)
+						Yield();
+				}
+				else
+				{
+					var l = leader as Connection;
+					int linear;
+					if (l != null && (!cfg.ToIndex(l.RemoteIdentifier, out linear) || !cfg.Members[linear].CanBeLeader))
+						Yield();
+				}
 			});
 
 			foreach (var d in doDispose)

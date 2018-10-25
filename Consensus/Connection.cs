@@ -125,7 +125,7 @@ namespace Consensus
 		}
 
 		private readonly ConcurrentQueue<string> log = new ConcurrentQueue<string>();
-		internal readonly Configuration.Member RemoteIdentifier;
+		public readonly Configuration.Member RemoteIdentifier;
 
 		internal void LogError(object error)
 		{

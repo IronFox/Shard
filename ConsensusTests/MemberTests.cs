@@ -44,13 +44,18 @@ namespace Consensus.Tests
 			{
 				Assert.Fail("Internal test error. Locally bound address "+BoundAddress+" does not match globally registered address "+PublicAddress);
 			}
+
+			public override void OnOutOfConfig()
+			{
+				Assert.Fail("Node incorrectly fell out of config");
+			}
 		}
 
 		private class Cluster : IDisposable
 		{
-			private readonly Node[] members;
+			private Node[] members;
 			private readonly object[] attachments;
-			private readonly Configuration cfg;
+			private Configuration cfg;
 
 			public int LeaderIndex
 			{
@@ -79,17 +84,50 @@ namespace Consensus.Tests
 				return new Address(basePort + idx - testOffset);
 			}
 
-			public Cluster(int basePort, int size)
+			public Cluster(int basePort, int size) : this(basePort,size,i => true)
+			{
+			}
+
+			public Cluster(int basePort, int size, Func<int, bool> leaderCandidate)
 			{
 				this.basePort = basePort;
 				var members = new Configuration.Member[size];
 				for (int i = 0; i < size; i++)
-					members[i] = new Configuration.Member(testOffset+i,true);
+					members[i] = new Configuration.Member(testOffset + i, leaderCandidate(i));
 				cfg = new Configuration(members);
 				this.members = new Node[size];
 				for (int i = 0; i < size; i++)
-					this.members[i] = new ClusterNode(cfg, cfg.Members[i],new Address(basePort+i),GetAddressOf);
+					this.members[i] = new ClusterNode(cfg, cfg.Members[i], new Address(basePort + i), GetAddressOf);
 				attachments = new object[size];
+			}
+
+			public void ChangeConfiguration(int size, Func<int, bool> leaderCandidate)
+			{
+				var cfgMembers = new Configuration.Member[size];
+				for (int i = 0; i < size; i++)
+					cfgMembers[i] = new Configuration.Member(testOffset + i, leaderCandidate(i));
+				var newCFG = new Configuration(cfgMembers);
+				if (size < members.Length)
+				{
+					for (int i = 0; i < size; i++)
+						members[i].Join(newCFG);
+					for (int i = size; i < this.members.Length; i++)
+						members[i].Dispose();
+					members = members.Subarray(0, size);
+				}
+				else
+				{
+					var newMembers = new Node[size];
+					for (int i = 0; i < members.Length; i++)
+					{
+						members[i].Join(newCFG);
+						newMembers[i] = members[i];
+					}
+					for (int i = members.Length; i < size; i++)
+						newMembers[i] = new ClusterNode(newCFG, newCFG.Members[i], new Address(basePort + i), GetAddressOf);
+					members = newMembers;
+				}
+				cfg = newCFG;
 			}
 
 			public bool AwaitInterconnected()
@@ -320,6 +358,23 @@ namespace Consensus.Tests
 
 			}
 		}
+
+		[TestMethod()]
+		public void NodeConfigTest()
+		{
+			using (var c = new Cluster(new Random().Next(1024, 32768), 3,i => i <= 1))
+			{
+				Assert.IsTrue(c.AwaitConsensus());
+				c.ChangeConfiguration(4,i => i <= 1);
+				Assert.IsTrue(c.AwaitConsensus());
+				c.ChangeConfiguration(5, i => i <= 1);
+				Assert.IsTrue(c.AwaitConsensus());
+				c.ChangeConfiguration(3, i => i <= 1);
+				Assert.IsTrue(c.AwaitConsensus());
+
+			}
+		}
+
 
 		[TestMethod()]
 		public void NodeTest()

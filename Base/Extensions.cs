@@ -28,6 +28,31 @@ namespace Base
 				throw ex.InnerException;
 			}
 		}
+		public static T[] Subarray<T>(this T[] array, int offset, int count)
+		{
+			if (array == null)
+				return null;
+			if (offset <= 0 && offset+count >= array.Length)
+				return array;
+			if (offset <= 0)
+			{
+				count += offset;
+				count = Math.Min(count, array.Length);
+				T[] rs = new T[count];
+				for (int i = 0; i < count; i++)
+					rs[i] = array[i];
+				return rs;
+			}
+			{
+				if (offset >= array.Length)
+					return new T[0];
+				count = Math.Min(count, array.Length - offset);
+				T[] rs = new T[count];
+				for (int i = 0; i < count; i++)
+					rs[i] = array[i + offset];
+				return rs;
+			}
+		}
 
 		public static T[] Subarray<T>(this T[] array, int offset)
 		{
