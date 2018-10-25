@@ -435,7 +435,7 @@ namespace Shard
 		public class SDConfigContainer : Entity
 		{
 			public int replicaCount = 1,
-						gatewayCount = 2;
+						witnessCount = 2;
 		}
 
 

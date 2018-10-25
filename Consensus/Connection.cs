@@ -355,7 +355,7 @@ namespace Consensus
 			}
 			if (!IsDisposed)
 			{
-				LogMinorEvent("Connection established");
+				LogEvent("Connection established");
 				TcpLocked(() =>
 				{
 					if (tcpClient != null)

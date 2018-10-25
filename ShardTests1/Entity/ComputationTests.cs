@@ -667,7 +667,7 @@ namespace Shard.Tests
 			Size = size;
 		}
 
-		public BaseDB.SDConfigContainer Latest => new BaseDB.SDConfigContainer() { gatewayCount = 0, replicaCount = Size };
+		public BaseDB.SDConfigContainer Latest => new BaseDB.SDConfigContainer() { witnessCount = 0, replicaCount = Size };
 	}
 
 	[Serializable]

@@ -27,23 +27,28 @@ namespace Consensus
 		private Thread gecThread;
 		private int actualPort;
 
+		public void AwaitClosure()
+		{
+			gecThread.Join();
+		}
+
 		public readonly INotifiable Notify;
 
 		public override Address GetAddress(int replicaIndex)
 		{
 			return BaseDB.TryGetAddress(new ShardID(MyID.XYZ, replicaIndex)).ConsensusAddress;
 		}
-
-
+		
 		public static Configuration BuildConfig()
 		{
 			BaseDB.SDConfigContainer cfg = BaseDB.SD;
 			while (cfg == null)
 			{
+				Log.Message("Requerying SD configuration...");
 				Thread.Sleep(100);
 				cfg = BaseDB.SD;
 			}
-			return new Configuration(EnumerateMembers(-cfg.gatewayCount, cfg.replicaCount - 1));
+			return new Configuration(EnumerateMembers(-cfg.witnessCount, cfg.replicaCount - 1));
 		}
 
 		private static IEnumerable<string> CombineRevs(string rev, string[] revisions)
@@ -69,6 +74,7 @@ namespace Consensus
 			var cfg = BuildConfig();
 			if (!cfg.ContainsIdentifier(self))
 				throw new ArgumentOutOfRangeException("Given self address is not contained by current SD configuration");
+			Log.Message("Starting consensus with configuration "+cfg);
 			actualPort = Start(cfg, selfAddress);
 			MyID = new ShardID(myCoords,self.Identifier);
 			Notify = notify;
@@ -104,7 +110,10 @@ namespace Consensus
 						localIP = endPoint.Address.ToString();
 					}
 				}
-				return new Address(localIP, consensusPort);
+				var rs= new Address(localIP, consensusPort);
+				Log.Message("Done. Address is "+rs);
+				return rs;
+
 			}
 
 		}

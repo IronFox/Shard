@@ -265,6 +265,7 @@ namespace Consensus
 		/// Triggered prior to disposing the local node as a result of joining a new configuration that the local node is not a part of
 		/// </summary>
 		public abstract void OnOutOfConfig(Configuration newConfig);
+		public virtual void OnDispose() { }
 		public Address BoundAddress { get; private set; }
 
 
@@ -647,6 +648,7 @@ namespace Consensus
 				listenThread.Join();
 			if (consensusThread != Thread.CurrentThread)
 				consensusThread.Join();
+			OnDispose();
 		}
 
 		public bool IsLeader => state == State.Leader;
