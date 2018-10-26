@@ -269,6 +269,9 @@ namespace Consensus
 			public void Commit(Node node, CommitID myID)
 			{
 				var parent = node as Interface;
+				if (EndedGeneration < parent.generation)
+					return;
+
 				parent.gecCommits.Enqueue(new Tuple<CommitID, int>(myID, EndedGeneration));
 				CommitID flush = CommitID.None;
 				Tuple<CommitID, int> check;
@@ -284,8 +287,6 @@ namespace Consensus
 					parent.RemoveFossils(flush, true);
 				}
 
-				if (EndedGeneration < parent.generation)
-					return;
 				parent.generation = EndedGeneration + 1;
 				parent.Notify.OnGenerationEnd(EndedGeneration);
 				parent.Schedule(new TimeWindowReport(EndedGeneration,Clock.Now - TimeStamp));
