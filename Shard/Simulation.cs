@@ -237,7 +237,7 @@ namespace Shard
 				int nextGen = currentGen + 1;
 				ctx.SetGeneration(nextGen);
 				stack.Append(new SDS(nextGen));
-				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
+				Debug.Assert(!stack.NewestRegisteredEntry.IsFinished);
 				stack.Insert(new SDSComputation(Clock.Now,Messages.GetMessages(currentGen), TimingInfo.Current.EntityEvaluationTimeWindow,ctx).Complete());
 				Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
