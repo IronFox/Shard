@@ -91,9 +91,12 @@ namespace Shard
 			set
 			{
 				var old = SD;
+				bool suspended = SDConfigPoller != null && SDConfigPoller.Suspend();
 				value._rev = old._rev;
 				value._id = old._id;
 				Put(ControlStore, value).Wait();
+				if (suspended)
+					SDConfigPoller?.Resume();
 			}
 		}
 
@@ -106,9 +109,11 @@ namespace Shard
 			set
 			{
 				var old = Timing;
+				TimingPoller?.Suspend();
 				value._rev = old._rev;
 				value._id = old._id;
 				Put(ControlStore, value).Wait();
+				TimingPoller?.Resume();
 			}
 		}
 
@@ -145,7 +150,10 @@ namespace Shard
 				OnPutLocalAddress(addr);
 			Try(() =>
 			{
+				bool suspended = hostRequests.Suspend(addr.ShardID);
 				Put(HostsStore, new AddressEntry(addr)).Wait();
+				if (suspended)
+					hostRequests.Resume(addr.ShardID);
 				return true;
 			}, 3);
 		}
@@ -361,6 +369,25 @@ namespace Shard
 				if (!requests.TryAdd(id, poller))
 					return;
 				poller.Start(store, id.ToString());
+			}
+
+			public bool Suspend(K id)
+			{
+				ContinuousPoller<D> poller;
+				if (requests.TryGetValue(id, out poller))
+				{
+					return poller.Suspend();
+				}
+				return false;
+			}
+
+			public void Resume(K id)
+			{
+				ContinuousPoller<D> poller;
+				if (requests.TryGetValue(id, out poller))
+				{
+					poller.Resume();
+				}
 			}
 
 			public D TryGet(DataBase store, K id)

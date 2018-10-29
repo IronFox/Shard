@@ -61,43 +61,9 @@ namespace DBType
 			//this.onChange = onChange;
 			this.store = store;
 			this.ID = id;
+			Log.Message("Starting "+this);
 
-			PollAsync().Wait();
-
-			var getChangesRequest = new GetChangesRequest
-			{
-				Feed = ChangesFeed.Continuous,
-				Heartbeat = 3000 //Optional: LET COUCHDB SEND A I AM ALIVE BLANK ROW EACH ms
-			};
-
-			var serial = store.Entities.Serializer;
-			cancellation = new CancellationTokenSource();
-			store.Changes.GetAsync(
-				getChangesRequest,
-				data =>
-				{
-					if (disposedValue)
-						return;
-					var d = serial.Deserialize<Change>(data);
-					if (d != null && d.id == id)
-					{
-						StringBuilder revs = new StringBuilder();
-						bool actualChange = false;
-						foreach (var ch in d.changes)
-						{
-							revs.Append(' ').Append(ch.rev);
-							if (Latest == null || ch.rev != Latest._rev)
-								actualChange = true;
-						}
-						if (actualChange)
-						{
-							Log.Minor("Update detected on " + store.DBName + "['" + id + "']:" + revs + ". Polling");
-							PollAsync().Wait();
-						}
-					}
-				},
-				cancellation.Token);
-
+			Resume();
 		}
 
 		private static async Task<T> GetConflictResolvedAsync(DataBase store, string id, Func<ICollection<T>, T> merger)
@@ -144,6 +110,11 @@ namespace DBType
 		}
 
 
+		public override string ToString()
+		{
+			return store.DBName + "['" + ID + "']";
+		}
+
 		private async Task PollAsync()
 		{
 			for (int i = 0; i < 3; i++)
@@ -160,7 +131,7 @@ namespace DBType
 							return; //try again later
 						sl.DoLocked(() =>
 						{
-							Log.Minor("Got new data on " + store.DBName + "['" + ID + "']: rev " + header.Rev);
+							Log.Minor("Got new data on "+this+": rev " + header.Rev);
 							//if (lastQueriedValue == null)
 							//	anyValueAsync.SetResult(data);
 							Latest = data;
@@ -206,6 +177,59 @@ namespace DBType
 			Dispose(true);
 			// TODO: uncomment the following line if the finalizer is overridden above.
 			// GC.SuppressFinalize(this);
+		}
+
+
+		public bool Suspend()
+		{
+			if (cancellation == null)
+				return false;
+			cancellation.Cancel();
+			cancellation = null;
+			Log.Message("Suspended " + this);
+			return true;
+		}
+
+		public void Resume()
+		{
+			if (cancellation != null)
+				return;
+			Log.Message("Resuming " + this);
+			PollAsync().Wait();
+
+			var getChangesRequest = new GetChangesRequest
+			{
+				Feed = ChangesFeed.Continuous
+				,Heartbeat = 3000 //Optional: LET COUCHDB SEND A I AM ALIVE BLANK ROW EACH ms
+			};
+
+			var serial = store.Entities.Serializer;
+			cancellation = new CancellationTokenSource();
+			store.Changes.GetAsync(
+				getChangesRequest,
+				data =>
+				{
+					if (disposedValue)
+						return;
+					var d = serial.Deserialize<Change>(data);
+					if (d != null && d.id == ID)
+					{
+						StringBuilder revs = new StringBuilder();
+						bool actualChange = false;
+						foreach (var ch in d.changes)
+						{
+							revs.Append(' ').Append(ch.rev);
+							if (Latest == null || ch.rev != Latest._rev)
+								actualChange = true;
+						}
+						if (actualChange)
+						{
+							Log.Minor("Update detected on " + this+ ":" + revs + ". Polling");
+							PollAsync().Wait();
+						}
+					}
+				},
+				cancellation.Token);
 		}
 		#endregion
 	}

@@ -5,6 +5,9 @@ namespace DBType
 	public interface IPollable<T> where T:Entity
 	{
 		T	Latest { get; }
+
+		bool Suspend();
+		void Resume();
 	}
 
 
@@ -18,5 +21,10 @@ namespace DBType
 		}
 
 		public T Latest => PollFunction();
+
+		public void Resume()
+		{}
+
+		public bool Suspend() => false;
 	}
 }

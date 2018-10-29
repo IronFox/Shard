@@ -668,6 +668,16 @@ namespace Shard.Tests
 		}
 
 		public BaseDB.SDConfigContainer Latest => new BaseDB.SDConfigContainer() { witnessCount = 0, replicaCount = Size };
+
+		public bool Suspend()
+		{
+			return false;
+		}
+
+		public void Resume()
+		{
+			
+		}
 	}
 
 	[Serializable]
