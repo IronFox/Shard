@@ -81,7 +81,12 @@ namespace Shard
 				ShardID addr = ShardID.Decode(args[at++]);
 
 
-				BaseDB.BeginPullConfig(addr.XYZ);
+				bool haveConfig = BaseDB.BeginPullConfig(addr.XYZ);
+				if (!haveConfig)
+				{
+					Log.Error("Failed to establish connection to database");
+					Environment.Exit(-1);
+				}
 
 				Log.Message("Setting up clock");
 				Clock.NTPHost = BaseDB.Config.ntp;
