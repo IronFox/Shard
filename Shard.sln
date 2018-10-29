@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Base", "Base\Base.csproj", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsensusAccess", "ConsensusMember\ConsensusAccess.csproj", "{D8B6EC1B-3E3E-4F03-B122-5D480F284E1D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShardDB", "ShardDB\ShardDB.csproj", "{092873E4-2808-4A0C-B36F-F7A6DC436509}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +103,14 @@ Global
 		{D8B6EC1B-3E3E-4F03-B122-5D480F284E1D}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D8B6EC1B-3E3E-4F03-B122-5D480F284E1D}.Release|x64.ActiveCfg = Release|Any CPU
 		{D8B6EC1B-3E3E-4F03-B122-5D480F284E1D}.Release|x64.Build.0 = Release|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Debug|x64.Build.0 = Debug|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Release|Any CPU.Build.0 = Release|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Release|x64.ActiveCfg = Release|Any CPU
+		{092873E4-2808-4A0C-B36F-F7A6DC436509}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

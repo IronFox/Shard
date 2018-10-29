@@ -71,7 +71,7 @@ namespace Shard.Tests
 			@"	using Shard;
 				using System;
 				[Serializable]
-				public abstract class Base : Shard.EntityLogic {
+				public abstract class CommonBase : Shard.EntityLogic {
 
 					protected abstract void InnerEvolve();
 
@@ -87,7 +87,7 @@ namespace Shard.Tests
 				using Shard;
 				using System;
 				[Serializable]
-				public class Test : Base {
+				public class Test : CommonBase {
 
 					protected override void InnerEvolve()
 					{

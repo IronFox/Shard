@@ -209,11 +209,13 @@ namespace Consensus
 			}
 		}
 
+		private DateTime lastCommit = DateTime.Now;
 		private void CommitTo(int newCommitCount)
 		{
 			serialLock.AssertIsLockedByMe();
 			if (commitCount < newCommitCount)
 			{
+				lastCommit = DateTime.Now;
 				LogMinorEvent("Committing " + commitCount + ".." + newCommitCount + ", history length " + log.Count);
 				for (int i = commitCount; i < newCommitCount; i++)
 				{
@@ -297,6 +299,34 @@ namespace Consensus
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
 			return port;
+		}
+
+
+		private ConfigurationChange cfgChange;
+		private DateTime cfgChangeAt;
+		/// <summary>
+		/// Attempts to commit changing the configuration if a consensus exists at this point.
+		/// Otherwise a join is performed.
+		/// If a consensus is lost before the desired configuration was reached, it is instantly applied.
+		/// 
+		/// </summary>
+		/// <param name="cfg"></param>
+		public void ChangeConfiguration(Configuration cfg)
+		{
+			DoSerialized(() =>
+			{
+				if (IsInConsensus)
+				{
+					cfgChange = new ConfigurationChange(cfg);
+					cfgChangeAt = DateTime.Now;
+					Schedule(cfgChange);
+				}
+				else
+				{
+					cfgChange = null;
+					Join(cfg);
+				}
+			});
 		}
 
 		private TcpClient lastAcceptedClient;
@@ -549,6 +579,13 @@ namespace Consensus
 						info.AppendTimeout = GetAppendMessageTimeout();
 					}
 				});
+
+
+				var age = DateTime.Now - lastCommit;
+				if (CommitIndex < log.Count && age > TimeSpan.FromSeconds(2))
+					Yield();
+
+
 			});
 		}
 
@@ -560,16 +597,20 @@ namespace Consensus
 
 
 
-		public void Join(Configuration cfg)
+		internal void Join(Configuration cfg)
 		{
-			if (cfg == config)
-				return;
 			List<Connection> doDispose = new List<Connection>();
 
 			DoSerialized(() =>
 			{
+				if (cfgChange != null && cfgChange.NewCFG == cfg)
+				{
+					LogMinorEvent("Recognized requested cfg");
+					cfgChange = null;
+				}
 				if (cfg == config)
 					return;
+ 
 				LogEvent("Implementing consensus configuration " + cfg);
 				int at;
 				if (!cfg.ToIndex(MemberID, out at))
@@ -653,6 +694,7 @@ namespace Consensus
 
 		public bool IsLeader => state == State.Leader;
 		public bool KnowsRemoteLeader => state == State.Follower && leader != null;
+		public bool IsInConsensus => leader != null;
 
 		public int ActiveConnectionCount
 		{
@@ -718,6 +760,8 @@ namespace Consensus
 				if (DebugState != null)
 					DebugState.SignalSignalAppendAttempt(log.Count, p.Entry.Term);
 
+				if (CommitIndex == log.Count)
+					lastCommit = DateTime.Now;
 				log.Add(p);	//add local
 				Broadcast(new AppendEntries(this, p.Entry));//transport remote
 
@@ -831,6 +875,7 @@ namespace Consensus
 				LogEvent("Recognized new leader " + sender+"@t"+p.Term+"/"+currentTerm);
 				state = State.Follower;
 				leader = sender;
+				cfgChangeAt = DateTime.Now;
 				votedFor = null;
 				TruncateTo(Math.Max(p.LeaderCommit,commitCount));
 				//votedInTerm = -1;
@@ -967,6 +1012,8 @@ namespace Consensus
 					ForeachConnection(c => c.SignalIncoming());	//prevent disconnection
 					votedFor = null;
 					state = State.Leader;
+					cfgChangeAt = DateTime.Now;
+					lastCommit = DateTime.Now;
 					leader = this;
 					ClearRemoteInfo();
 					Broadcast(new AppendEntries(this));
@@ -996,6 +1043,12 @@ namespace Consensus
 			votedFor = null;
 			//votedInTerm = -1;
 			nextActionAt = GetElectionTimeout();
+			if (cfgChange != null)
+			{
+				Join(cfgChange.NewCFG);
+				if (cfgChange != null)
+					throw new IntegrityViolation("Consensus: New CFG should have been unset by Join()");
+			}
 		}
 
 		internal void SignalVoteRejectedBadTerm(int term, Connection sender)

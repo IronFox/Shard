@@ -83,7 +83,7 @@ namespace Shard
 			try
 			{
 				Log.Minor("Storing serial RCS in DB: " + serialRCS.ID);
-				await PutAsync(null, RCSStore, serialRCS, false);
+				await PutAsync(RCSStore, serialRCS, false,null);
 				Log.Minor("Stored serial RCS in DB: " + serialRCS.ID);
 			}
 			catch (Exception ex)
@@ -155,7 +155,7 @@ namespace Shard
 		
 
 
-		public static Tuple<SerialSDS,SerialCCS> Begin(Int3 myID)
+		public static Tuple<SerialSDS,SerialCCS> Begin(Int3 myID, Action<SerialSDS> fetchSDS, Action<SerialCCS> fetchCCS)
 		{
 			sdsPoller = new DBType.ContinuousPoller<SerialSDS>(null, (collection)=>
 			{
@@ -187,7 +187,7 @@ namespace Shard
 				return latest;
 			});
 			sdsPoller.Start(SDSStore, myID.Encoded);
-			sdsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
+			sdsPoller.OnChange = serial => fetchSDS(serial);
 
 
 			ccsPoller = new DBType.ContinuousPoller<SerialCCS>(null, (collection) =>
@@ -216,7 +216,7 @@ namespace Shard
 				return latest;
 			});
 			ccsPoller.Start(CCSStore, myID.Encoded);
-			ccsPoller.OnChange = serial => Simulation.FetchIncoming(null, serial);
+			ccsPoller.OnChange = serial => fetchCCS(serial);
 
 			return new Tuple<SerialSDS, SerialCCS>(sdsPoller.Latest, ccsPoller.Latest);
 		}
@@ -250,24 +250,24 @@ namespace Shard
 		public static Action<SerialSDS> OnPutSDS { get; set; } = null;
 		public static Action<SerialCCS> OnPutCCS { get; set; } = null;
 
-		internal static void PutNow(SerialSDS serial, bool forceReplace)
+		public static void PutNow(SerialSDS serial, bool forceReplace)
 		{
 			if (OnPutSDS != null)
 				OnPutSDS(serial);
 			Try(() =>
 			{
-				PutAsync(null,SDSStore,serial, forceReplace).Wait();
+				PutAsync(SDSStore,serial, forceReplace,null).Wait();
 				return true;
 			}, 3);
 		}
 
-		internal static void PutNow(SerialCCS serial, bool forceReplace)
+		public static void PutNow(SerialCCS serial, bool forceReplace)
 		{
 			if (OnPutCCS != null)
 				OnPutCCS(serial);
 			Try(() =>
 			{
-				PutAsync(null, CCSStore, serial, forceReplace).Wait();
+				PutAsync(CCSStore, serial, forceReplace,null).Wait();
 				return true;
 			}, 3);
 		}
@@ -293,7 +293,7 @@ namespace Shard
 					}
 					serial._rev = latest._rev;
 				}
-				await PutAsync(null, SDSStore, serial, forceReplace);
+				await PutAsync(SDSStore, serial, forceReplace,null);
 				latestPut = serial;
 				Log.Minor("Stored serial SDS in DB: g" + serial.Generation);
 			}
@@ -304,7 +304,7 @@ namespace Shard
 			}
 		}
 
-		private static async Task PutAsync<T>(Link lnk, DBType.DataBase store, T e, bool forceReplace) where T: DBType.Entity
+		private static async Task PutAsync<T>(DBType.DataBase store, T e, bool forceReplace, Action<T> onConflict) where T: DBType.Entity
 		{
 			if (store == null)
 				return;    //during tests, db is not loaded
@@ -312,6 +312,7 @@ namespace Shard
 			if (forceReplace)
 			{
 				await Put(store, e,10);
+				return;
 			}
 			try
 			{
@@ -322,10 +323,11 @@ namespace Shard
 			}
 			catch (MyCouchResponseException)
 			{
-				if (lnk != null)
+				if (onConflict != null)
 				{
-					var e2 = store.Entities.GetAsync<T>(e._id); //if we get here, then the copy script has rejected our data => read data must be newer
-					Simulation.FetchIncoming(lnk, e2);
+					var e2 = await store.Entities.GetAsync<T>(e._id); //if we get here, then the copy script has rejected our data => read data must be newer
+					if (e2.Content != null)
+						onConflict(e2.Content);
 				}
 			}
 		}

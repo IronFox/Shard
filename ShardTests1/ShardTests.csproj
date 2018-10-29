@@ -135,6 +135,10 @@
       <Project>{8247ae53-9109-4d16-aaef-74b27f63df39}</Project>
       <Name>ShardBase</Name>
     </ProjectReference>
+    <ProjectReference Include="..\ShardDB\ShardDB.csproj">
+      <Project>{092873e4-2808-4a0c-b36f-f7a6dc436509}</Project>
+      <Name>ShardDB</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Shard\Shard.csproj">
       <Project>{EB6D3052-6609-4916-B364-AA263217FDAF}</Project>
       <Name>Shard</Name>

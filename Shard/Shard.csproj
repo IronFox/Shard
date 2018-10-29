@@ -180,20 +180,13 @@
     <Compile Include="ByteBuffer.cs" />
     <Compile Include="Connectors\InteractionLink.cs" />
     <Compile Include="Connectors\ObservationLink.cs" />
-    <Compile Include="DB\SerialCCS.cs" />
-    <Compile Include="DB\SerialCSLogicProvider.cs" />
     <Compile Include="Deque.cs" />
     <Compile Include="IntArray.cs" />
     <Compile Include="IntermediateSDS.cs" />
     <Compile Include="MessageHistory.cs" />
     <Compile Include="Neighborhood.cs" />
-    <Compile Include="RCS.cs" />
     <Compile Include="SDSComputation.cs" />
     <Compile Include="SDSStack.cs" />
-    <Compile Include="DB\SerialGenerationObject.cs" />
-    <Compile Include="DB\SerialRCS.cs" />
-    <Compile Include="SerialSDS.cs" />
-    <Compile Include="DB.cs" />
     <Compile Include="Listener.cs" />
     <Compile Include="Link.cs" />
     <Compile Include="Program.cs" />
@@ -230,6 +223,10 @@
     <ProjectReference Include="..\ShardBase\ShardBase.csproj">
       <Project>{8247ae53-9109-4d16-aaef-74b27f63df39}</Project>
       <Name>ShardBase</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ShardDB\ShardDB.csproj">
+      <Project>{092873e4-2808-4a0c-b36f-f7a6dc436509}</Project>
+      <Name>ShardDB</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

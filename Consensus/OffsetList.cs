@@ -58,6 +58,14 @@ namespace Consensus
 			return innerList.Contains(item);
 		}
 
+		public bool Contains(Func<T, bool> filter)
+		{
+			foreach (var p in innerList)
+				if (filter(p))
+					return true;
+			return false;
+		}
+
 		public void CopyTo(T[] array, int arrayIndex)
 		{
 			innerList.CopyTo(array, arrayIndex + offset);

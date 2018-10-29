@@ -33,6 +33,8 @@ namespace Shard
 
 		public Address ConsensusAddress => new Address(Host, ConsensusPort);
 
+		public bool IsEmpty => Host == null;
+
 		public override string ToString()
 		{
 			return ShardID + "->" + Host + ":"+PeerPort+"|"+ConsensusPort;

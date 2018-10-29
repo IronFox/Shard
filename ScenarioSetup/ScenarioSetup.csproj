@@ -4,17 +4,17 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{8100A8FC-5447-4381-9963-5E614E329EEF}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Consensus</RootNamespace>
-    <AssemblyName>Consensus</AssemblyName>
+    <ProjectGuid>{A8C4E3EA-FE39-493A-81FF-8D1DE87E7CBA}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ScenarioSetup</RootNamespace>
+    <AssemblyName>ScenarioSetup</AssemblyName>
     <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -24,6 +24,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -32,6 +33,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -42,30 +46,33 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AppendEntries.cs" />
-    <Compile Include="AppendEntriesConfirmation.cs" />
-    <Compile Include="CommitEntry.cs" />
-    <Compile Include="Configuration.cs" />
-    <Compile Include="ConfigurationChange.cs" />
-    <Compile Include="Connection.cs" />
-    <Compile Include="ICommitable.cs" />
-    <Compile Include="Identity.cs" />
-    <Compile Include="IDispatchable.cs" />
-    <Compile Include="IndexedPackage.cs" />
-    <Compile Include="LogEntry.cs" />
-    <Compile Include="Node.cs" />
-    <Compile Include="Package.cs" />
+    <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RequestVote.cs" />
-    <Compile Include="OffsetList.cs" />
-    <Compile Include="SharedDebugState.cs" />
-    <Compile Include="VoteConfirm.cs" />
-    <Compile Include="VoteRejectedBadTerm.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BaseDB\BaseDB.csproj">
+      <Project>{174a5b17-c113-45bd-85b6-009a1c5c3ef8}</Project>
+      <Name>BaseDB</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Base\Base.csproj">
       <Project>{a40aee2e-c572-4bce-ac29-1329a7c57783}</Project>
       <Name>Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Math\VectorMath.csproj">
+      <Project>{8B82845E-874B-4B7C-9EA6-85C968B73986}</Project>
+      <Name>VectorMath</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ShardBase\ShardBase.csproj">
+      <Project>{8247ae53-9109-4d16-aaef-74b27f63df39}</Project>
+      <Name>ShardBase</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ShardDB\ShardDB.csproj">
+      <Project>{092873e4-2808-4a0c-b36f-f7a6dc436509}</Project>
+      <Name>ShardDB</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

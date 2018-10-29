@@ -110,7 +110,7 @@ namespace Consensus.Tests
 				if (size < members.Length)
 				{
 					for (int i = 0; i < size; i++)
-						members[i].Join(newCFG);
+						members[i].ChangeConfiguration(newCFG);
 					for (int i = size; i < this.members.Length; i++)
 						members[i].Dispose();
 					members = members.Subarray(0, size);
@@ -120,7 +120,7 @@ namespace Consensus.Tests
 					var newMembers = new Node[size];
 					for (int i = 0; i < members.Length; i++)
 					{
-						members[i].Join(newCFG);
+						members[i].ChangeConfiguration(newCFG);
 						newMembers[i] = members[i];
 					}
 					for (int i = members.Length; i < size; i++)

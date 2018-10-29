@@ -150,17 +150,38 @@ namespace Shard
 			}, 3);
 		}
 
-		public static void BeginPullConfig(Int3 shardCoords,  int numTries = 3)
+		/// <summary>
+		/// Attempts to update the static Config variable from the database.
+		/// Not needed if BeginPullConfig() is called.
+		/// A connection to the database must have been initialized via Connect().
+		/// </summary>
+		/// <param name="numTries">Number of times to retry pulling</param>
+		/// <param name="msBetweenRetries">MS to wait between attempts</param>
+		/// <returns></returns>
+		public static bool TryPullGlobalConfig(int numTries, int msBetweenRetries = 5000)
 		{
-			TryAsync(async () =>
+			return TryAsync(async () =>
 			{
 				Log.Message("Fetching simulation configuration from " + Host + " ...");
 				var rc = await ControlStore.Entities.GetAsync<ConfigContainer>("config");
 				if (!rc.IsSuccess)
 					return false;
+				if (rc.Content == null)
+					return false;
 				Config = rc.Content;
-				return Config != null;
-			}, numTries).Wait();
+				return true;
+			}, numTries).Result;
+		}
+
+		/// <summary>
+		/// Attempts to pull the global configuration, and begins continuous polling of timing and local SD configuration.
+		/// A connection to the database must have been initialized via Connect().
+		/// </summary>
+		/// <param name="shardCoords"></param>
+		/// <param name="numTries"></param>
+		public static bool BeginPullConfig(Int3 shardCoords,  int numTries = 3)
+		{
+			bool rs = TryPullGlobalConfig(numTries);
 
 			{
 				var poller = new ContinuousPoller<TimingContainer>(new TimingContainer(), (collection) => null);
@@ -172,6 +193,7 @@ namespace Shard
 				SDConfigPoller = poller;
 				poller.Start(ControlStore, "SD_"+shardCoords.Encoded);
 			}
+			return rs;
 		}
 
 

@@ -312,7 +312,7 @@ namespace Consensus
 					Log.Message("Change in SD configuration detected: " + Config + "->" + cfg);
 					if (!cfg.ContainsIdentifier(MyID.ReplicaLevel))
 						throw new ArgumentOutOfRangeException("Given self address is no longer contained by current SD configuration");
-					base.Join(cfg);
+					base.ChangeConfiguration(cfg);
 				}
 
 

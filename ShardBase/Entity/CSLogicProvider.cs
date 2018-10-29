@@ -440,6 +440,7 @@ namespace Shard
 				options.ReferencedAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
 				options.ReferencedAssemblies.Add(typeof(VectorMath.Vec3).Assembly.Location);
 				options.ReferencedAssemblies.Add(typeof(EntityChange.Abstract).Assembly.Location);
+				options.ReferencedAssemblies.Add(typeof(Base.Box).Assembly.Location);
 				foreach (var a in assemblies)
 					options.ReferencedAssemblies.Add(a.Assembly.Location);
 

@@ -191,7 +191,7 @@ namespace Shard
 			SDS sds;
 			while (true)
 			{
-				var data = DB.Begin(myID.XYZ);
+				var data = DB.Begin(myID.XYZ, s => FetchIncoming(null, s), s => FetchIncoming(null, s));
 				if (data.Item2 != null)
 					Messages.Insert(data.Item2.Generation, data.Item2.Deserialize());
 				if (data.Item1 != null)

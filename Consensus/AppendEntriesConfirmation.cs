@@ -38,7 +38,6 @@ namespace Consensus
 					return;
 				}
 
-
 				var info = c.ConsensusState;
 				if (Succeeded)
 				{
