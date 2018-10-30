@@ -191,26 +191,22 @@ namespace Shard
 			observationListener = new ObservationLink.Listener(listener.Port - 1000);
 
 			Log.Message("Polling SDS state...");
+			DB.Begin(myID.XYZ, s => FetchIncoming(null, s), s => FetchIncoming(null, s));
+
 			SimulationContext ctx = new SimulationContext(false);
 
-			SDS sds;
 			while (true)
 			{
-				var data = DB.Begin(myID.XYZ, s => FetchIncoming(null, s), s => FetchIncoming(null, s));
-				if (data.Item2 != null)
-					Messages.Insert(data.Item2.Generation, data.Item2.Deserialize());
-				if (data.Item1 != null)
-				{
-					sds = data.Item1.Deserialize();
-					break;
-				}
 				CheckIncoming(TimingInfo.Current.TopLevelGeneration,ctx);
+				if (stack.HasEntries)
+					break;
 				Thread.Sleep(1000);
 				Console.Write('.');
 				Console.Out.Flush();
 			}
 			Consensus.ForwardMessageGeneration(sds.Generation + 1);
 			Messages.TrimGenerations(sds.Generation);
+			var sds = stack.NewestConsistentSDS;
 			Log.Message(" done. Waiting for logic assemblies to finish loading...");
 
 			foreach (var e in sds.FinalEntities)
