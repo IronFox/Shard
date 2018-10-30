@@ -302,6 +302,14 @@ namespace Shard
 			}
 		}
 
-
+		public int ToIndex(int generation)
+		{
+			lock (this)
+			{
+				if (sdsList.Count == 0)
+					return -1;
+				return generation - sdsList[0].Generation;
+			}
+		}
 	}
 }
