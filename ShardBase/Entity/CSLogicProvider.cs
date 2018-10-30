@@ -260,7 +260,7 @@ namespace Shard
 
 		public EntityLogic DeserializeLogic(byte[] serialData)
 		{
-			return (EntityLogic)Helper.Deserialize(serialData, EnumerateAssemblies(), FromScript);
+			return (EntityLogic)Helper.Deserialize(serialData, EnumerateAssemblies(), true);// FromScript);
 		}
 
 		private IEnumerable<Assembly> EnumerateAssemblies()
