@@ -138,7 +138,7 @@ namespace Shard
 				DB.PutAsync(new SerialSDS( rs, Simulation.ID.XYZ ), false).Wait();
 			}
 #endif
-			Log.Message("Completed g" + Generation+" with IC ones: "+ic.OneCount);
+			Log.Message("Completed g" + Generation+" with IC ones: "+ic.OneCount+" "+Math.Round( (float)ic.OneCount / ic.Size.Product*100)+"%");
 			return new Tuple<SDS, IntermediateSDS>( rs,data);
 		}
 	}
