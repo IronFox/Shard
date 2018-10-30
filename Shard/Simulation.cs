@@ -204,9 +204,9 @@ namespace Shard
 				Console.Write('.');
 				Console.Out.Flush();
 			}
-			Consensus.ForwardMessageGeneration(sds.Generation + 1);
-			Messages.TrimGenerations(sds.Generation);
 			var sds = stack.NewestConsistentSDS;
+			Consensus.ForwardMessageGeneration(sds.Generation);
+			Messages.TrimGenerations(sds.Generation-1);
 			Log.Message(" done. Waiting for logic assemblies to finish loading...");
 
 			foreach (var e in sds.FinalEntities)
