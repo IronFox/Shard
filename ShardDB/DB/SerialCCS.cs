@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Shard
 {
-	public class SerialCCS : DBType.Entity, IEquatable<SerialCCS>
+	public class SerialCCS : DBType.Entity
 	{
 		public int[] NumericID;
 		public byte[] Data;
@@ -22,7 +22,7 @@ namespace Shard
 		{
 			Data = Helper.SerializeToArray(data);
 			NumericID = id.IntArray;
-			_id = id.ShardID.ToString();
+			_id = id.ShardID.Encoded;
 		}
 
 		[JsonIgnore]
