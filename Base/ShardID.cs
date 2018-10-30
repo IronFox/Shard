@@ -15,6 +15,20 @@ namespace Base
 		public int Y { get { return XYZ.Y; } set { XYZ.Y = value; } }
 		public int Z { get { return XYZ.Z; } set { XYZ.Z = value; } }
 
+		[JsonIgnore]
+		public byte[] AsBytes
+		{
+			get
+			{
+				byte[] result = new byte[16];
+				Helper.ToBytes(X, result, 0);
+				Helper.ToBytes(Y, result, 4);
+				Helper.ToBytes(Z, result, 8);
+				Helper.ToBytes(ReplicaLevel, result, 12);
+				return result;
+			}
+		}
+
 		public static readonly ShardID Zero = new ShardID(0, 0, 0, 0);
 		public static readonly ShardID One = new ShardID(1, 1, 1, 1);
 
