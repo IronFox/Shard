@@ -11,7 +11,6 @@ namespace Witness
 	class Program
 	{
 		static Consensus.Interface iface;
-		static volatile bool quit = false;
 
 		static void Main(string[] args)
 		{
