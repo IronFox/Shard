@@ -182,7 +182,7 @@ namespace Shard
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
-			Consensus = new Consensus.Interface(myID, listener.Port, 0,true,new DefaultNotify());
+			Consensus = new Consensus.Interface(myID, listener.Port, 0, true, Interface.ThreadOperations.Everything, new DefaultNotify());
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);

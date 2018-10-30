@@ -23,13 +23,12 @@ namespace Witness
 			ShardID addr = ShardID.Decode(args[at++]);
 			BaseDB.BeginPullConfig(addr.XYZ);
 
-			iface = new Consensus.Interface(addr, -1, 0, true, new Notify(error =>
+			iface = new Consensus.Interface(addr, -1, 0, true,Consensus.Interface.ThreadOperations.CheckConfiguration, new Notify(error =>
 			{
 				Log.Error(error);
 				iface.Dispose();
 				Log.Message("Shutting down");
-				quit = true;
-			}));
+			},() => iface));
 			iface.Notify.OnConsensusChange(Consensus.Status.NotEstablished, null);
 
 			iface.AwaitClosure();

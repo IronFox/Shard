@@ -337,7 +337,7 @@ namespace Shard.Tests
 						new Consensus.Interface(
 							new Consensus.Configuration.Member(i, true),
 							new Address(basePort + i),
-							Int3.Zero, i > 0 ? dummyNotify : Notify)
+							Int3.Zero,Interface.ThreadOperations.Everything, i > 0 ? dummyNotify : Notify)
 						{
 							DebugState = state
 						};

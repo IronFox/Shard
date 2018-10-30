@@ -28,6 +28,8 @@ namespace Consensus
 		private Thread gecThread;
 		private int actualPort;
 
+		public readonly ThreadOperations ThreadOps;
+
 		public void AwaitClosure()
 		{
 			gecThread.Join();
@@ -70,17 +72,22 @@ namespace Consensus
 			return new Configuration.Member(i, i == -1 || i == 0);
 		}
 
-		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, INotifiable notify, Action<Address> onAddressBound=null):base(self)
+		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, ThreadOperations threadOps, INotifiable notify, Action<Address> onAddressBound=null):base(self)
 		{
+			Notify = notify;
+			ThreadOps = threadOps;
 			var cfg = BuildConfig();
 			if (!cfg.ContainsIdentifier(self))
 				throw new ArgumentOutOfRangeException("Given self address is not contained by current SD configuration");
 			Log.Message("Starting consensus with configuration "+cfg);
 			actualPort = Start(cfg, selfAddress, onAddressBound);
 			MyID = new ShardID(myCoords,self.Identifier);
-			Notify = notify;
-			gecThread = new Thread(new ThreadStart(GECThreadMain));
-			gecThread.Start();
+			if (threadOps != ThreadOperations.Nothing)
+			{
+				gecThread = new Thread(new ThreadStart(GECThreadMain));
+				gecThread.Start();
+			}
+
 		}
 
 		private static void PublishAddress(FullShardAddress address)
@@ -90,7 +97,19 @@ namespace Consensus
 
 		}
 
-		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, INotifiable notify) :this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, notify,
+		[Flags]
+		public enum ThreadOperations
+		{
+			Nothing = 0,
+			CheckConfiguration = 1,
+			ScheduleGECs = 2,
+
+			Everything = int.MaxValue
+		}
+
+
+		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, ThreadOperations threadOps, INotifiable notify) :
+			this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, threadOps, notify,
 				updateAddress ? addr => PublishAddress(new FullShardAddress(myID, addr.Host, peerPort, addr.Port)) : (Action<Address>)null
 			)
 		{}
@@ -308,23 +327,33 @@ namespace Consensus
 			int last = -1;
 			while (!IsDisposed)
 			{
-				var cfg = BuildConfig();
-				if (cfg != Config)
+				if (ThreadOps.HasFlag(ThreadOperations.CheckConfiguration))
 				{
-					Log.Message("Change in SD configuration detected: " + Config + "->" + cfg);
-					if (!cfg.ContainsIdentifier(MyID.ReplicaLevel))
-						throw new ArgumentOutOfRangeException("Given self address is no longer contained by current SD configuration");
-					base.ChangeConfiguration(cfg);
+					var cfg = BuildConfig();
+					if (cfg != Config)
+					{
+						Log.Message("Change in SD configuration detected: " + Config + "->" + cfg);
+						if (!cfg.ContainsIdentifier(MyID.ReplicaLevel))
+							throw new ArgumentOutOfRangeException("Given self address is no longer contained by current SD configuration");
+						base.ChangeConfiguration(cfg);
+					}
 				}
 
-
-				var current = generation;
-				Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
-				//Log.Message("Progressing ");
-				if (last != current)
+				if (ThreadOps.HasFlag(ThreadOperations.ScheduleGECs))
 				{
-					Schedule(new GEC(current));
-					last = current;
+
+					var current = generation;
+					Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
+					//Log.Message("Progressing ");
+					if (last != current)
+					{
+						Schedule(new GEC(current));
+						last = current;
+					}
+				}
+				else
+				{
+					Thread.Sleep(500);
 				}
 			}
 		}
