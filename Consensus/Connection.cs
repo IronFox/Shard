@@ -81,7 +81,7 @@ namespace Consensus
 			this.RemoteIdentifier = remoteIdentifier;
 			LastIncoming = DateTime.Now;
 
-			serialLock = new DebugMutex("Consensus.Connection[" + this + "]");
+			serialLock = new DebugMutex("Consensus.Connection[" + RemoteIdentifier + "]");
 		}
 
 		public delegate void Event(ActiveConnection connection);
@@ -156,6 +156,7 @@ namespace Consensus
 					string reason = "";
 					try
 					{
+						LogEvent("Connection established");
 						LogMinorEvent("Begin stream read");
 
 						while (IsConnected)
@@ -332,7 +333,7 @@ namespace Consensus
 
 		protected override bool Reconnect()
 		{
-			LogMinorEvent("Reconnecting...");
+			LogEvent("Reconnecting...");
 			TcpClient nextClient = null;
 			while (!IsDisposed && (nextClient == null || !nextClient.Connected))
 			{
@@ -345,7 +346,7 @@ namespace Consensus
 						Thread.Sleep(500);
 						continue;
 					}
-					LogMinorEvent("Attempting to re-establish connection to "+addr);
+					LogEvent("Attempting to re-establish connection to "+addr);
 					nextClient = new TcpClient(addr.Host,addr.Port);
 					break;
 				}
@@ -355,7 +356,6 @@ namespace Consensus
 			}
 			if (!IsDisposed)
 			{
-				LogEvent("Connection established");
 				TcpLocked(() =>
 				{
 					if (tcpClient != null)
