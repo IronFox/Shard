@@ -219,30 +219,41 @@ namespace Consensus
 		private void CommitTo(int newCommitCount)
 		{
 			serialLock.AssertIsLockedByMe();
-			if (commitCount < newCommitCount)
+			try
 			{
-				lastCommit = DateTime.Now;
-				LogMinorEvent("Committing " + commitCount + ".." + newCommitCount + ", history length " + log.Count);
-				for (int i = commitCount; i < newCommitCount; i++)
+				if (commitCount < newCommitCount)
 				{
-					PrivateEntry e = log[i];
-					if (e == null)
-						LogMinorEvent("Skipping removed entry at #" + i);
-					else
+					lastCommit = DateTime.Now;
+					LogMinorEvent("Committing " + commitCount + ".." + newCommitCount + ", history length " + log.Count);
+					for (int i = commitCount; i < newCommitCount; i++)
 					{
-						if (DebugState != null)
-							DebugState.SignalExecution(i, e.Entry.Term, this);
-						LogMinorEvent("Executing " + e.Entry);
-						e.Execute(this);
-						committed.TryRemove(e.Entry.CommitID);
+						PrivateEntry e = log[i];
+						if (e == null)
+							LogMinorEvent("Skipping removed entry at #" + i);
+						else
+						{
+							if (DebugState != null)
+								DebugState.SignalExecution(i, e.Entry.Term, this);
+							if (!e.WasExecuted)
+							{
+								commitCount = Math.Max(commitCount,i+1);
+								LogMinorEvent("Executing " + e.Entry);
+								e.Execute(this);
+								committed.TryRemove(e.Entry.CommitID);
+							}
+						}
+					}
+					//Debug.Assert(commitCount == newCommitCount);
+					if (IsLeader)
+					{
+						Broadcast(new AppendEntries(this));
+						nextActionAt = NextHeartbeat;
 					}
 				}
-				commitCount = newCommitCount;
-				if (IsLeader)
-				{
-					Broadcast(new AppendEntries(this));
-					nextActionAt = NextHeartbeat;
-				}
+			}
+			catch (Exception ex)
+			{
+
 			}
 		}
 
@@ -297,7 +308,6 @@ namespace Consensus
 		/// <param name="getAddress">Address resolution function: Fetches the IP address for a given member identifier</param>
 		public int Start(Configuration config, Address bindingAddress, Action<Address> onAddressBound)
 		{
-			OnConsensusChange(Status.NotEstablished, null);
 			if (!config.ContainsIdentifier(MemberID))
 				throw new ArgumentOutOfRangeException("Given consensus configuration " + config + " does not contain local node identifier " + MemberID);
 			IPAddress filter = IPAddress.Any;
@@ -314,6 +324,7 @@ namespace Consensus
 			listenThread.Start();
 			consensusThread = new Thread(new ThreadStart(ThreadConsensus));
 			consensusThread.Start();
+			OnConsensusChange(Status.NotEstablished, null);
 			return port;
 		}
 
@@ -538,6 +549,8 @@ namespace Consensus
 				nextActionAt = GetElectionTimeout();
 
 				Broadcast(new RequestVote(this));
+
+				CheckElectionMajority();
 			});
 
 		}
@@ -784,6 +797,9 @@ namespace Consensus
 				Broadcast(new AppendEntries(this, p.Entry));//transport remote
 
 				ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
+
+				ReCheckCommitment();
+
 			}
 			else
 			{
@@ -872,7 +888,7 @@ namespace Consensus
 				node.DoSerialized(() =>
 				{
 					int cnt = node.FindLogEntry(threshold);
-					node.LogEvent("Attempting to clean log of length "+node.log.Count+". Threshold found at "+cnt);
+					node.LogMinorEvent("Attempting to clean log of length "+node.log.Count+". Threshold found at "+cnt);
 					if (includeThreshold)
 						cnt++;
 					if (cnt > 0)
@@ -969,6 +985,7 @@ namespace Consensus
 				if (cnt >= config.Majority)
 				{
 					CommitTo(j);
+					Debug.Assert(commitCount >= j);
 					return;
 				}
 			}
@@ -1017,6 +1034,35 @@ namespace Consensus
 
 		}
 
+		private void CheckElectionMajority()
+		{
+			LogMinorEvent("Num Votes now " + numVotes);
+			if (numVotes >= config.Majority)
+			{
+				LogEvent("Elected leader of term " + currentTerm);
+				ForeachConnection(c => c.SignalIncoming()); //prevent disconnection
+				votedFor = null;
+				state = State.Leader;
+				cfgChangeAt = DateTime.Now;
+				lastCommit = DateTime.Now;
+				leader = this;
+				ClearRemoteInfo();
+				Broadcast(new AppendEntries(this));
+				nextActionAt = PreciseTime.Now + HEART_BEAT_TIMEOUT_NS;
+
+				if (DebugState != null)
+					DebugState.AssertLeaderMatch(log.Select(p => p.Entry), log.Offset);
+
+				if (commitCount != LogSize)
+				{
+					Broadcast(new AppendEntries(this, commitCount + 1));
+					ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
+				}
+
+				OnConsensusChange(Status.Leader, leader);
+			}
+		}
+
 		internal void ProcessVoteConfirmation(Connection sender, int term)
 		{
 			serialLock.AssertIsLockedByMe();
@@ -1025,32 +1071,7 @@ namespace Consensus
 			{
 				nextActionAt = GetElectionTimeout();
 				numVotes++;
-				LogMinorEvent("Num Votes now " + numVotes);
-				if (numVotes >= config.Majority)
-				{
-					LogEvent("Elected leader of term " + currentTerm);
-					ForeachConnection(c => c.SignalIncoming());	//prevent disconnection
-					votedFor = null;
-					state = State.Leader;
-					cfgChangeAt = DateTime.Now;
-					lastCommit = DateTime.Now;
-					leader = this;
-					ClearRemoteInfo();
-					Broadcast(new AppendEntries(this));
-					nextActionAt = PreciseTime.Now + HEART_BEAT_TIMEOUT_NS;
-
-					if (DebugState != null)
-						DebugState.AssertLeaderMatch(log.Select(p => p.Entry), log.Offset);
-
-					if (commitCount != LogSize)
-					{
-						Broadcast(new AppendEntries(this, commitCount + 1));
-						ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
-					}
-
-					OnConsensusChange(Status.Leader, leader);
-
-				}
+				CheckElectionMajority();
 			}
 			else
 				LogMinorEvent("Confirmation rejected: " + state + ", t" + term);
