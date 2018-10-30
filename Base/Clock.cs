@@ -218,6 +218,11 @@ namespace Base
 
 		public static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(1);
 
+		public static void SleepUntil(DateTime deadline, TimeSpan maxSleep)
+		{
+			DateTime t1 = Now + maxSleep;
+			SleepUntil(Helper.Min(deadline, t1));
+		}
 		public static void SleepUntil(DateTime deadline)
 		{
 
