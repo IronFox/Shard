@@ -36,6 +36,7 @@ namespace Shard
 			}
 		}
 
+		public bool HasEntries => sdsList.Count != 0;
 
 		private List<Entry> sdsList = new List<Entry>();
 
@@ -208,7 +209,7 @@ namespace Shard
 				{
 					while (entry.Generation > NewestRegisteredSDSGeneration + 1)
 					{
-						int gen2 = NewestRegisteredSDS.Generation + 1;
+						int gen2 = NewestRegisteredSDSGeneration + 1;
 						sdsList.Add(new Entry(gen2));
 					}
 					//Debug.Assert(sds.Generation == NewestSDS.Generation + 1);
@@ -252,7 +253,7 @@ namespace Shard
 		{
 			lock (this)
 			{
-				if (sdsList.Count > 0 && NewestRegisteredSDSGeneration + 1 != entry.Generation)
+				if (HasEntries && NewestRegisteredSDSGeneration + 1 != entry.Generation)
 					throw new IntegrityViolation("Newest generation in stack is " + NewestRegisteredSDSGeneration + ". Trying to append generation " + entry.Generation);
 				sdsList.Add(entry);
 			}
