@@ -28,6 +28,8 @@ namespace Shard
 			SendMessage,        //c2s: [Guid: me][Guid: toEntity][Guid: msgID][int: channel][uint: num bytes][bytes...], s2c: [Guid: fromEntity][Guid: toReceiver][int: generation][int: channel][uint: num bytes][bytes...]
 			MessageDelivered,   //s2c: [Guid: msgID]
 			MessageDeliveryFailed, //s2c: [Guid: msgID][uint: strLength][byte[strLength]: ascii string reason]
+			ShardLookup,			//c2s: [int[4]: request shardID] -> ShardLookupResponse
+			ShardLookupResponse,    //s2c: [int[4]: request shardID][int: hostLength][byte[]: host][ushort: port]
 		}
 
 
@@ -207,34 +209,53 @@ namespace Shard
 									OnRegisterReceiver?.Invoke(guid);
 								}
 								break;
-							case (uint)ChannelID.UnregisterReceiver:
-								guid = reader.NextGuid();
-								if (guids.Contains(guid))
+							case (uint)ChannelID.ShardLookup:
 								{
-									Message("De-Authenticating as " + guid);
-									guids.Remove(guid);
-									guidMap.TryRemove(guid);
-									OnUnregisterReceiver?.Invoke(guid);
+									ShardID id = reader.NextShardID();
+									var addr = BaseDB.TryGetAddress(id);
+									using (MemoryStream ms = new MemoryStream())
+									{
+										var str = Encoding.ASCII.GetBytes(addr.Host);
+										ms.Write(id.AsBytes,0,16);
+										ms.Write(BitConverter.GetBytes(str.Length), 0, 4);
+										ms.Write(str,0,str.Length);
+										ms.Write(BitConverter.GetBytes((ushort)addr.PeerPort),0,2);
+										Send(new OutPackage((uint)ChannelID.ShardLookupResponse, ms.ToArray()));
+									}
+								}
+								break;
+							case (uint)ChannelID.UnregisterReceiver:
+								{
+									guid = reader.NextGuid();
+									if (guids.Contains(guid))
+									{
+										Message("De-Authenticating as " + guid);
+										guids.Remove(guid);
+										guidMap.TryRemove(guid);
+										OnUnregisterReceiver?.Invoke(guid);
+									}
 								}
 								break;
 							case (uint)ChannelID.SendMessage:
-								Guid from = reader.NextGuid();
-								Guid to = reader.NextGuid();
-								Guid id = reader.NextGuid();
-								int msgChannel = reader.NextInt();
-								byte[] data = reader.NextBytes();
-
-								//int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
-								if (!guids.Contains(from))
-									Error("Not registered as " + from + ". Ignoring message");
-								else
 								{
-									//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
-									ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id,msgChannel, orderIndex), data);
+									Guid from = reader.NextGuid();
+									Guid to = reader.NextGuid();
+									Guid id = reader.NextGuid();
+									int msgChannel = reader.NextInt();
+									byte[] data = reader.NextBytes();
 
-									var sender = new Address(this.endPoint);
-									Simulation.Consensus?.Dispatch(msg, sender);
-									OnMessage?.Invoke(msg,sender);
+									//int targetGen = Simulation.EstimateNextSuitableMessageTargetGeneration();
+									if (!guids.Contains(from))
+										Error("Not registered as " + from + ". Ignoring message");
+									else
+									{
+										//int gen = Simulation.Stack.NewestFinishedSDSGeneration;
+										ClientMessage msg = new ClientMessage(new ClientMessageID(from, to, id, msgChannel, orderIndex), data);
+
+										var sender = new Address(this.endPoint);
+										Simulation.Consensus?.Dispatch(msg, sender);
+										OnMessage?.Invoke(msg, sender);
+									}
 								}
 								break;
 
