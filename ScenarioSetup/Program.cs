@@ -94,6 +94,7 @@ namespace ScenarioSetup
 			BaseDB.PutConfigAsync(cfg).Wait();
 			//Simulation.Configure(new ShardID(), cfg, true);
 			//if (DB.HasAdminAccess)
+			InconsistencyCoverage.CommonResolution = (int)Math.Ceiling(1f / cfg.r);
 			var clearTask = BaseDB.ClearSimulationDataAsync();
 
 			SDSFactory[,,] grid = new SDSFactory[cfg.extent.X, cfg.extent.Y, cfg.extent.Z];
