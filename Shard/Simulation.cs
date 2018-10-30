@@ -303,6 +303,7 @@ namespace Shard
 					stack.Insert(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
 					Debug.Assert(mainComputation == null);
+					Consensus.ForceCommitGECIfLeader(newestSDSGeneration);
 					mainComputation = new SDSComputation(timing.NextGenerationDeadline - timing.CSApplicationTimeWindow, Messages.GetMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
 				}
 				
