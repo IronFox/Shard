@@ -49,6 +49,10 @@ namespace Consensus.Tests
 			{
 				Assert.Fail("Node incorrectly fell out of config "+newConfig);
 			}
+
+			public override void OnConsensusChange(Status newState, Identity newLeader)
+			{
+			}
 		}
 
 		private class Cluster : IDisposable

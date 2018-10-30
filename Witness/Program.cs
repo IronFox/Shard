@@ -30,6 +30,7 @@ namespace Witness
 				Log.Message("Shutting down");
 				quit = true;
 			}));
+			iface.Notify.OnConsensusChange(Consensus.Status.NotEstablished, null);
 
 			iface.AwaitClosure();
 

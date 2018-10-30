@@ -14,6 +14,12 @@ using System.Threading.Tasks;
 
 namespace Consensus
 {
+	public enum Status
+	{
+		NotEstablished,
+		Follower,
+		Leader
+	}
 
 	public abstract class Node : Identity, IDisposable
 	{
@@ -258,6 +264,14 @@ namespace Consensus
 		private Address myAddress = new Address(0);
 		public override Address PublicAddress => myAddress;
 
+
+	
+
+		/// <summary>
+		/// Invoked if consensus changed
+		/// </summary>
+		public abstract void OnConsensusChange(Status newState, Identity newLeader);
+
 		public abstract Address GetAddress(int memberID);
 		/// <summary>
 		/// Invoked prior to disposing the local node as a result of mismatch between bound and public address
@@ -283,6 +297,7 @@ namespace Consensus
 		/// <param name="getAddress">Address resolution function: Fetches the IP address for a given member identifier</param>
 		public int Start(Configuration config, Address bindingAddress, Action<Address> onAddressBound)
 		{
+			OnConsensusChange(Status.NotEstablished, null);
 			if (!config.ContainsIdentifier(MemberID))
 				throw new ArgumentOutOfRangeException("Given consensus configuration " + config + " does not contain local node identifier " + MemberID);
 			IPAddress filter = IPAddress.Any;
@@ -494,8 +509,10 @@ namespace Consensus
 							break;
 					}
 				}
-				catch
-				{ }
+				catch (Exception ex)
+				{
+
+				}
 			}
 
 	
@@ -870,15 +887,17 @@ namespace Consensus
 		internal void SignalAppendEntries(AppendEntries p, Connection sender)
 		{
 			serialLock.AssertIsLockedByMe();
-			LogEvent("Inbound append entries " + p);
+			LogMinorEvent("Inbound append entries " + p);
 			if ((leader == null && p.Term==currentTerm) || p.Term > currentTerm)
 			{
 				LogEvent("Recognized new leader " + sender+"@t"+p.Term+"/"+currentTerm);
+				currentTerm = p.Term;
 				state = State.Follower;
 				leader = sender;
 				cfgChangeAt = DateTime.Now;
 				votedFor = null;
 				TruncateTo(Math.Max(p.LeaderCommit,commitCount));
+				OnConsensusChange(Status.Follower, leader);
 				//votedInTerm = -1;
 
 				//Tuple<CommitID, ICommitable> e;
@@ -1028,6 +1047,9 @@ namespace Consensus
 						Broadcast(new AppendEntries(this, commitCount + 1));
 						ForeachConnection(c => c.ConsensusState.AppendTimeout = GetAppendMessageTimeout());
 					}
+
+					OnConsensusChange(Status.Leader, leader);
+
 				}
 			}
 			else
@@ -1050,6 +1072,7 @@ namespace Consensus
 				if (cfgChange != null)
 					throw new IntegrityViolation("Consensus: New CFG should have been unset by Join()");
 			}
+			OnConsensusChange(Status.NotEstablished, null);
 		}
 
 		internal void SignalVoteRejectedBadTerm(int term, Connection sender)

@@ -171,6 +171,11 @@ namespace Shard
 				Log.Error("Terminal: Consensus member ID " + memberID+" not found in new configuration "+newConfig);
 				Environment.Exit(-1);
 			}
+
+			public void OnConsensusChange(Status newState, Identity newLeader)
+			{
+				
+			}
 		}
 
 		public static void Run(ShardID myID)

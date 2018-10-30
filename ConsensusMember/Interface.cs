@@ -19,6 +19,7 @@ namespace Consensus
 		void OnGenerationEnd(int generation);
 		void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered);
 		void OnOutOfConfig(Configuration newConfig, Configuration.Member memberID);
+		void OnConsensusChange(Consensus.Status newState, Consensus.Identity newLeader);
 	}
 	public class Interface : Node
 	{
@@ -360,6 +361,11 @@ namespace Consensus
 		public override void OnOutOfConfig(Configuration newConfig)
 		{
 			Notify.OnOutOfConfig(newConfig, MemberID);
+		}
+
+		public override void OnConsensusChange(Status newState, Identity newLeader)
+		{
+			Notify.OnConsensusChange(newState, newLeader);
 		}
 	}
 }
