@@ -23,6 +23,15 @@ namespace Base
 		{
 			return a > b ? a : b;
 		}
+
+		public static void ToBytes(int v, byte[] array, int offset)
+		{
+			array[offset+3] = (byte)(v >> 24);
+			array[offset+2] = (byte)(v >> 16);
+			array[offset + 1] = (byte)(v >> 8);
+			array[offset] = (byte)v;
+		}
+
 		public static float Max(float a, float b, float c)
 		{
 			return Math.Max(Math.Max(a, b), c);
