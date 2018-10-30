@@ -311,6 +311,8 @@ namespace Shard
 			TimeSpan budget,
 			EntityChange.ExecutionContext ctx)
 		{
+			if (ic.Size != InconsistencyCoverage.CommonResolution)
+				throw new IntegrityViolation("Trying to evolve with an IC of size "+ic.Size+". Should be "+InconsistencyCoverage.CommonResolution);
 			int numErrors = 0;
 
 			List<Task> tasks = new List<Task>();
