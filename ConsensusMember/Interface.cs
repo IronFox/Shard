@@ -3,6 +3,7 @@ using Shard;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -274,6 +275,18 @@ namespace Consensus
 			}
 		}
 
+		public void ForceCommitGECIfLeader(int currentGen)
+		{
+			if (IsLeader && currentGen >= generation)
+			{
+				Schedule(new GEC(currentGen));
+				if (Config.Size == 1)
+				{
+					Debug.Assert(generation == currentGen + 1);
+				}
+			}
+		}
+
 		[Serializable]
 		private class GEC : ICommitable
 		{
@@ -289,10 +302,13 @@ namespace Consensus
 
 			public void Commit(Node node, CommitID myID)
 			{
+				Log.Message("GEC["+EndedGeneration+"]");
 				var parent = node as Interface;
 				if (EndedGeneration < parent.generation)
+				{
+					Log.Message("GEC ignored: "+parent.generation);
 					return;
-
+				}
 				parent.gecCommits.Enqueue(new Tuple<CommitID, int>(myID, EndedGeneration));
 				CommitID flush = CommitID.None;
 				Tuple<CommitID, int> check;
@@ -304,11 +320,12 @@ namespace Consensus
 				}
 				if (flush != CommitID.None)
 				{
-					Log.Message("Collecting fossils from " + flush);
+					Log.Minor("Collecting fossils from " + flush);
 					parent.RemoveFossils(flush, true);
 				}
-
+				
 				parent.generation = EndedGeneration + 1;
+				Log.Message("OnGenerationEnd(" + EndedGeneration+")");
 				parent.Notify.OnGenerationEnd(EndedGeneration);
 				parent.Schedule(new TimeWindowReport(EndedGeneration,Clock.Now - TimeStamp));
 
@@ -317,6 +334,8 @@ namespace Consensus
 
 		public void ForwardMessageGeneration(int gen)
 		{
+			Log.Message("Set message generation to " + gen);
+			Notify.OnGenerationEnd(gen-1);
 			generation = gen;
 		}
 
@@ -341,9 +360,8 @@ namespace Consensus
 
 				if (ThreadOps.HasFlag(ThreadOperations.ScheduleGECs))
 				{
-
-					var current = generation;
-					Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation);
+					var current = TimingInfo.Current.TopLevelGeneration;
+					Clock.SleepUntil(GetDeadline(current) - timing.DeliveryEstimation,TimeSpan.FromSeconds(1));
 					//Log.Message("Progressing ");
 					if (last != current)
 					{
