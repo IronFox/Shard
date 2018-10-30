@@ -243,33 +243,43 @@ namespace Shard
 		/// <returns></returns>
 		public static async Task<T> TryForceReplace<T>(DataBase store, T item) where T : Entity
 		{
-			if (store == null)
-				return item;	//during tests, db is not loaded
-			var header = await store.Entities.PutAsync(item._id, item);
-			if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
+			try
 			{
-				var head = await store.Documents.HeadAsync(item._id);
-				if (head.IsSuccess)
-					item._rev = head.Rev;
-				return null;
+				if (store == null)
+					return item;    //during tests, db is not loaded
+				var serial = JsonConvert.SerializeObject(item);
+				var header = await store.Documents.PutAsync(item._id, serial);
+					//await store.Entities.PutAsync(item._id, item);
+				if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
+				{
+					var head = await store.Documents.HeadAsync(item._id);
+					if (head.IsSuccess)
+						item._rev = head.Rev;
+					return null;
+				}
+				var echoRequest = new GetEntityRequest(header.Id);
+				echoRequest.Conflicts = true;
+				var echo = await store.Documents.GetAsync(header.Id);
+				if (!echo.IsSuccess)
+					return null;
+				if (echo.Conflicts != null && echo.Conflicts.Length > 0)
+				{
+					//we do have conflicts and don't quite know whether the new version is our version
+					var deleteHeaders = new DocumentHeader[echo.Conflicts.Length];
+					for (int i = 0; i < echo.Conflicts.Length; i++)
+						deleteHeaders[i] = new DocumentHeader(header.Id, echo.Conflicts[i]);
+					BulkRequest breq = new BulkRequest().Delete(deleteHeaders); //delete all conflicts
+					await store.Documents.BulkAsync(breq);   //ignore result, but wait for it
+					item._rev = echo.Rev;   //replace again. we must win
+					return await TryForceReplace(store, item);
+				}
+				return JsonConvert.DeserializeObject<T>(echo.Content);    //all good
 			}
-			var echoRequest = new GetEntityRequest(header.Id);
-			echoRequest.Conflicts = true;
-			var echo = await store.Entities.GetAsync<T>(header.Id);
-			if (!echo.IsSuccess)
-				return null;
-			if (echo.Conflicts != null && echo.Conflicts.Length > 0)
+			catch (Exception ex)
 			{
-				//we do have conflicts and don't quite know whether the new version is our version
-				var deleteHeaders = new DocumentHeader[echo.Conflicts.Length];
-				for (int i = 0; i < echo.Conflicts.Length; i++)
-					deleteHeaders[i] = new DocumentHeader(header.Id, echo.Conflicts[i]);
-				BulkRequest breq = new BulkRequest().Delete(deleteHeaders); //delete all conflicts
-				await store.Documents.BulkAsync(breq);   //ignore result, but wait for it
-				item._rev = echo.Rev;   //replace again. we must win
-				return await TryForceReplace(store, item);
+
+				throw;
 			}
-			return echo.Content;    //all good
 		}
 
 
@@ -361,14 +371,17 @@ namespace Shard
 			}
 			public void BeginFetch(DataBase store, K id)
 			{
-				if (requests.ContainsKey(id))
-					return;
-				if (store == null)
-					return;
-				ContinuousPoller<D> poller = new ContinuousPoller<D>(null, m);
-				if (!requests.TryAdd(id, poller))
-					return;
-				poller.Start(store, id.ToString());
+				lock (this)
+				{
+					if (requests.ContainsKey(id))
+						return;
+					if (store == null)
+						return;
+					ContinuousPoller<D> poller = new ContinuousPoller<D>(null, m);
+					if (!requests.TryAdd(id, poller))
+						return;
+					poller.Start(store, id.ToString());
+				}
 			}
 
 			public bool Suspend(K id)
@@ -395,11 +408,15 @@ namespace Shard
 				ContinuousPoller<D> poller;
 				if (requests.TryGetValue(id, out poller))
 					return poller.Latest;
-
-				if (store == null)
-					return null;
-				BeginFetch(store, id);
-				return TryGet(store, id);
+				lock (this)
+				{
+					if (requests.TryGetValue(id, out poller))
+						return poller.Latest;
+					if (store == null)
+						return null;
+					BeginFetch(store, id);
+					return TryGet(store, id);
+				}
 			}
 
 			public void FilterRequests(Func<K, bool> filterFunction)

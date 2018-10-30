@@ -1,6 +1,7 @@
 ﻿using Base;
 using MyCouch;
 using MyCouch.Requests;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -66,25 +67,27 @@ namespace DBType
 			Resume();
 		}
 
-		private static async Task<T> GetConflictResolvedAsync(DataBase store, string id, Func<ICollection<T>, T> merger)
+		private static async Task<T> GetConflictResolvedAsync(DataBase store, string id, Func<ICollection<T>, T> merger, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			GetEntityRequest req = new GetEntityRequest(id);
+			var req = new GetDocumentRequest(id);
 			req.Conflicts = true;
-			var data = await store.Entities.GetAsync<T>(req);
+			var data = await store.Documents.GetAsync(req, cancellationToken);
+			//await store.Entities.GetAsync<T>(req, cancellationToken);
 			if (!data.IsSuccess)
 				return null;
+			var mainContent = JsonConvert.DeserializeObject<T>(data.Content);
 			if (data.Conflicts == null || data.Conflicts.Length == 0)
-				return data.Content;
+				return mainContent;
 
 			List<T> conflicting = new List<T>();
 			List<DocumentHeader> toDelete = new List<DocumentHeader>();
-			conflicting.Add(data.Content);
+			conflicting.Add(mainContent);
 			foreach (var fetch in data.Conflicts)
 			{
-				var item = await store.Entities.GetAsync<T>(id, fetch);
+				var item = await store.Documents.GetAsync(id, fetch,cancellationToken);
 				if (item.IsSuccess)
 				{
-					conflicting.Add(item.Content);
+					conflicting.Add(JsonConvert.DeserializeObject<T>(item.Content));
 					toDelete.Add(new DocumentHeader(item.Id, item.Rev));
 				}
 				else
@@ -94,7 +97,7 @@ namespace DBType
 			if (merged == null)
 			{
 				Log.Error("Error trying to fetch conflicting data from " + store + ":" + id + " with no merger set. Fixed. Result will be arbitrary");
-				merged = data.Content;
+				merged = mainContent;
 			}
 			merged._id = id;
 			merged._rev = data.Rev;
@@ -115,19 +118,19 @@ namespace DBType
 			return store.DBName + "['" + ID + "']";
 		}
 
-		private async Task PollAsync()
+		private async Task PollAsync(CancellationToken cancellationToken = default(CancellationToken))
 		{
 			for (int i = 0; i < 3; i++)
 			{
 				try
 				{
-					var header = await store.Documents.HeadAsync(ID);
-					if (!header.IsSuccess)
+					var header = await store.Documents.HeadAsync(ID,null, cancellationToken);
+					if (cancellationToken.IsCancellationRequested || !header.IsSuccess)
 						return;
 					if (Latest == null || header.Rev != Latest._rev)
 					{
-						var data = await GetConflictResolvedAsync(store, ID, Merger);
-						if (data == null)
+						var data = await GetConflictResolvedAsync(store, ID, Merger, cancellationToken);
+						if (cancellationToken.IsCancellationRequested || data == null)
 							return; //try again later
 						sl.DoLocked(() =>
 						{
@@ -141,7 +144,9 @@ namespace DBType
 					return;
 				}
 				catch (TaskCanceledException)
-				{ }
+				{
+					return;
+				}
 			}
 		}
 
@@ -185,17 +190,62 @@ namespace DBType
 			if (cancellation == null)
 				return false;
 			cancellation.Cancel();
+			try
+			{
+				pollThread.Join();
+			}
+			catch { }
 			cancellation = null;
 			Log.Message("Suspended " + this);
 			return true;
 		}
 
+		private Thread pollThread;
+		private void ThreadedPoll()
+		{
+			try
+			{
+				while (!cancellation.IsCancellationRequested)
+				{
+					var t = PollAsync(cancellation.Token);
+					if (cancellation.IsCancellationRequested)
+						return;
+					if (!t.Wait(500, cancellation.Token))
+					{
+						if (cancellation.IsCancellationRequested)
+							return;
+						Log.Error("Failed poll data on " + this + " after 500 ms");
+					}
+					Thread.Sleep(500);
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Error("Failed poll data on " + this + ": "+ex);
+			}
+		}
+
 		public void Resume()
 		{
-			if (cancellation != null)
+			if (cancellation != null && !cancellation.IsCancellationRequested)
 				return;
-			Log.Message("Resuming " + this);
+			try
+			{
+				if (pollThread != null)
+					pollThread.Join();
+			}
+			catch
+			{ }
+			cancellation = new CancellationTokenSource();
+			pollThread = new Thread(new ThreadStart(ThreadedPoll));
+			pollThread.Start();
+
+			/*
+
+
+			Log.Message("Pulling " + this);
 			PollAsync().Wait();
+			Log.Message("Resuming " + this);
 
 			var getChangesRequest = new GetChangesRequest
 			{
@@ -230,6 +280,7 @@ namespace DBType
 					}
 				},
 				cancellation.Token);
+			*/
 		}
 		#endregion
 	}
