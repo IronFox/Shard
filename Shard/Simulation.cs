@@ -572,13 +572,13 @@ namespace Shard
 						return;
 					}
 					var existing = stack.FindGeneration(raw.Generation);
-					if (existing.IsFullyConsistent)
+					if (existing != null && existing.IsFullyConsistent)
 					{
 						Log.Minor("SDS update from sibling or DB: Rejected. Generation already consistent: " + raw.Generation);
 						return;
 					}
 					SDS sds = raw.Deserialize();
-					if (existing.SDS.ICMessagesAndEntitiesAreEqual(sds))
+					if (existing != null && existing.SDS.ICMessagesAndEntitiesAreEqual(sds))
 					{
 						Log.Minor("SDS update from sibling or DB: Equal. Ignoring");
 						return;
