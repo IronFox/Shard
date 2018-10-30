@@ -191,11 +191,15 @@ namespace Shard.Tests
 
 			//			public Action<Address,ClientMessage> 
 
-			private class DummyNotify : Consensus.INotifiable
+			private class DummyNotify : INotifiable
 			{
 				public void OnAddressMismatchConsensusLoss(Address locallyBound, Address globallyRegistered)
 				{
 					Assert.Fail("Configuration error. Mismatch between bound address "+locallyBound+" and public registration "+globallyRegistered);
+				}
+
+				public void OnConsensusChange(Status newState, Identity newLeader)
+				{
 				}
 
 				public void OnGenerationEnd(int generation)
@@ -242,6 +246,10 @@ namespace Shard.Tests
 					if (!clientAddress.IsEmpty)
 						InteractionLink.OnMessageCommit(clientAddress, message.ID);
 					simulationRun.messages.Add(message);
+				}
+
+				public void OnConsensusChange(Status newState, Identity newLeader)
+				{
 				}
 			}
 
