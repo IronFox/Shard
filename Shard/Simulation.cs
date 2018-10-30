@@ -309,12 +309,13 @@ namespace Shard
 				if (timing.ShouldStartRecovery)
 				{
 					//see if we can recover something
-					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;	//must be > 0
-					if (oldestInconsistentSDSIndex < stack.Size)
+					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;    //must be > 0
+					int top = Math.Min(stack.Size, stack.ToIndex(timing.TopLevelGeneration));
+					if (oldestInconsistentSDSIndex < top)
 					{
 						int recoverAtIndex = oldestInconsistentSDSIndex;
 						int currentGen = stack[recoverAtIndex].Generation;
-						for (; recoverAtIndex < stack.Size; recoverAtIndex++)
+						for (; recoverAtIndex < top; recoverAtIndex++)
 						{
 							var current = stack[recoverAtIndex];
 							if (current.SignificantInboundChange)
@@ -325,9 +326,9 @@ namespace Shard
 							if (check.ShouldRecoverThis)
 								break;
 						}
-						if (recoverAtIndex < stack.Size)
+						if (recoverAtIndex < top)
 						{
-							Log.Message("Recovering #"+recoverAtIndex+"/"+stack.Size+", g" + stack[recoverAtIndex].Generation);
+							Log.Message("Recovering #"+recoverAtIndex+"/"+top+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
 							recoveryComputation = new SDSComputation(timing.NextRecoveryStepDeadline, Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
