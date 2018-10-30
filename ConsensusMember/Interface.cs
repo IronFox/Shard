@@ -69,29 +69,30 @@ namespace Consensus
 			return new Configuration.Member(i, i == -1 || i == 0);
 		}
 
-		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, INotifiable notify):base(self)
+		public Interface(Configuration.Member self, Address selfAddress, Int3 myCoords, INotifiable notify, Action<Address> onAddressBound=null):base(self)
 		{
 			var cfg = BuildConfig();
 			if (!cfg.ContainsIdentifier(self))
 				throw new ArgumentOutOfRangeException("Given self address is not contained by current SD configuration");
 			Log.Message("Starting consensus with configuration "+cfg);
-			actualPort = Start(cfg, selfAddress);
+			actualPort = Start(cfg, selfAddress, onAddressBound);
 			MyID = new ShardID(myCoords,self.Identifier);
 			Notify = notify;
 			gecThread = new Thread(new ThreadStart(GECThreadMain));
 			gecThread.Start();
 		}
 
-
-		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, INotifiable notify) :this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, notify)
+		private static void PublishAddress(FullShardAddress address)
 		{
-			if (updateAddress)
-			{
-				var address = new FullShardAddress(MyID, BoundAddress.Host, peerPort, BoundAddress.Port);
-				Log.Message("Publishing address: " + address);
-				BaseDB.PutNow(address);
-			}
+			Log.Message("Publishing address: " + address);
+			BaseDB.PutNow(address);
+
 		}
+
+		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, INotifiable notify) :this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, notify,
+				updateAddress ? addr => PublishAddress(new FullShardAddress(myID, addr.Host, peerPort, addr.Port)) : (Action<Address>)null
+			)
+		{}
 
 		private static object ipLock = new object();
 		private static string localIP = null;

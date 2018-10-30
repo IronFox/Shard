@@ -32,7 +32,7 @@ namespace Consensus.Tests
 			public ClusterNode(Configuration cfg, Configuration.Member self, Address selfAddress, Func<int, Address> getAddressOf):base(self)
 			{
 				this.getAddressOf = getAddressOf;
-				Port = Start(cfg, selfAddress);
+				Port = Start(cfg, selfAddress,null);
 			}
 
 			public override Address GetAddress(int memberID)

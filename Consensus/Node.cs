@@ -281,7 +281,7 @@ namespace Consensus
 		/// </summary>
 		/// <param name="config">Consensus configuration to join</param>
 		/// <param name="getAddress">Address resolution function: Fetches the IP address for a given member identifier</param>
-		public int Start(Configuration config, Address bindingAddress)
+		public int Start(Configuration config, Address bindingAddress, Action<Address> onAddressBound)
 		{
 			if (!config.ContainsIdentifier(MemberID))
 				throw new ArgumentOutOfRangeException("Given consensus configuration " + config + " does not contain local node identifier " + MemberID);
@@ -292,6 +292,7 @@ namespace Consensus
 			if (port == 0)
 				port = ((IPEndPoint)listener.LocalEndpoint).Port;
 			BoundAddress = new Address(bindingAddress.Host, port);
+			onAddressBound?.Invoke(BoundAddress);
 			Join(config);	//join first, so members are initialized
 			LogMinorEvent("Started to listening on port " + port);
 			listenThread = new Thread(new ThreadStart(ThreadListen));
