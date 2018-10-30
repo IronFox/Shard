@@ -217,7 +217,6 @@ namespace Shard
 			}
 			Log.Message(" done");
 
-			stack.Append(sds);
 
 			Log.Message("Start Date="+BaseDB.Timing.startTime);
 
