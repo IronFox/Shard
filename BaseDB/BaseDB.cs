@@ -247,7 +247,14 @@ namespace Shard
 			{
 				if (store == null)
 					return item;    //during tests, db is not loaded
-				var serial = JsonConvert.SerializeObject(item);
+				var serial = JsonConvert.SerializeObject(item,
+							Newtonsoft.Json.Formatting.None,
+							new JsonSerializerSettings
+							{
+								NullValueHandling = NullValueHandling.Ignore
+							});
+					//store.Entities.Serializer.Serialize(item);
+					//JsonConvert.SerializeObject(item);
 				var header = await store.Documents.PutAsync(item._id, serial);
 					//await store.Entities.PutAsync(item._id, item);
 				if (!header.IsSuccess /*&& header.StatusCode == System.Net.HttpStatusCode.Conflict*/)
