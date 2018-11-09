@@ -246,7 +246,7 @@ namespace Shard
 
 
 			SDSComputation mainComputation = null, recoveryComputation = null; //main computation plus one recovery computation max
-
+			int lastRecoveryIndex = -1;
 			while (true)
 			{
 				var timing = TimingInfo.Current;
@@ -304,10 +304,11 @@ namespace Shard
 					ctx.SetGeneration(nextGen);
 					Debug.Assert(mainComputation == null);
 					Consensus.ForceCommitGECIfLeader(newestSDSGeneration);
-					mainComputation = new SDSComputation(timing.NextGenerationDeadline - timing.CSApplicationTimeWindow, Messages.GetMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
+					mainComputation = new SDSComputation(timing.NextMainApplicationDeadline, Messages.GetMessages(newestSDSGeneration), timing.EntityEvaluationTimeWindow,ctx);
 				}
 				
-				if (timing.ShouldStartRecovery)
+
+				if (timing.ShouldStartRecovery(ref lastRecoveryIndex))
 				{
 					//see if we can recover something
 					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;    //must be > 0
@@ -332,7 +333,7 @@ namespace Shard
 							Log.Message("Recovering #"+recoverAtIndex+"/"+top+", g" + stack[recoverAtIndex].Generation);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
-							recoveryComputation = new SDSComputation(timing.NextRecoveryStepDeadline, Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
+							recoveryComputation = new SDSComputation(timing.GetRecoveryStepApplicationDeadline(lastRecoveryIndex), Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}

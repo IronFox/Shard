@@ -105,6 +105,7 @@
     <Compile Include="BoxTest.cs" />
     <Compile Include="LogicProviderTests.cs" />
     <Compile Include="DBTests.cs" />
+    <Compile Include="TimingTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

@@ -9,6 +9,15 @@ namespace Shard
 {
 	public struct TimingInfo
 	{
+		/* layout:
+		 * 
+		 * main:		|es         a   |
+		 * recovery:	|  esaesaesa esa|
+		 */
+
+
+
+
 		/// <summary>
 		/// Total steps (main+N*recovery) per generation
 		/// The first step is the main progression which evaluates before all recovery steps but applies after
@@ -44,6 +53,7 @@ namespace Shard
 		/// </summary>
 		public readonly DateTime Start;
 
+		public TimeSpan SynchronizationTimeWindow => RecoveryStepTimeWindow - CSApplicationTimeWindow - EntityEvaluationTimeWindow;
 
 		public TimingInfo(BaseDB.TimingContainer t)
 		{
@@ -70,7 +80,7 @@ namespace Shard
 		{
 			get
 			{
-				var rs = StartGeneration + Math.Max(0, (int)(SimulationTime.TotalSeconds / GenerationTimeWindow.TotalSeconds));
+				var rs = StartGeneration + Math.Max(0, SimulationTime.FloorDiv(GenerationTimeWindow));
 				if (MaxGeneration >= 0)
 					rs = Math.Min(rs, MaxGeneration);
 				return rs;
@@ -111,7 +121,7 @@ namespace Shard
 		{
 			get
 			{
-				return NextGenerationDeadline - LatestGenerationStart;
+				return NextGenerationDeadline - Clock.Now;
 			}
 		}
 
@@ -119,48 +129,103 @@ namespace Shard
 		{
 			get
 			{
-				return Start + GenerationTimeWindow.Times(TopLevelGeneration + 1);
-			}
-		}
-		public DateTime NextRecoveryStepDeadline
-		{
-			get
-			{
-				return LatestGenerationStart + RecoveryStepTimeWindow.Times(LatestRecoveryStepIndex + 1);
-			}
-		}
-		public DateTime NextRecoveryApplicationDeadline
-		{
-			get
-			{
-				return LatestGenerationStart + RecoveryStepTimeWindow.Times(LatestRecoveryStepIndex + 1) - CSApplicationTimeWindow;
+				return LatestGenerationStart + GenerationTimeWindow;
+					//Start + GenerationTimeWindow.Times(TopLevelGeneration + 1);
 			}
 		}
 		/// <summary>
 		/// Determines the generation step.
 		/// 0 indicates the main processing step, RecoverySteps> x >0 a recovery step.
-		/// Note that this index can exceed the configured number of recovery steps when entering the final application phase
-		/// or if the simulation has reached the maximum generation
 		/// </summary>
 		public int LatestRecoveryStepIndex
 		{
 			get
 			{
-				var recoveryElapsed = LatestGenerationElapsed - EntityEvaluationTimeWindow;
-				return (int)Math.Floor(recoveryElapsed.TotalSeconds / RecoveryStepTimeWindow.TotalSeconds) + 1;
+				return GetRecoveryStepIndex(LatestGenerationElapsed);
 			}
 		}
-		/// <summary>
-		/// Detects whether or not a recovery operation should be initiated right now if not found active
-		/// </summary>
-		public bool ShouldStartRecovery
+
+		public int LatestAbsoluteRecoveryStepIndex
 		{
 			get
 			{
-				var s = LatestRecoveryStepIndex;
-				return s > 0 && s <= RecoveryStepsPerGeneration;
+				int local;
+				return GetAbsoluteRecoveryStepIndex(SimulationTime, out local);
 			}
 		}
+
+		public int GetAbsoluteRecoveryStepIndex(TimeSpan elapsedSinceSimulationStart, out int local)
+		{
+			int gen = elapsedSinceSimulationStart.FloorDiv(GenerationTimeWindow);
+			local = GetRecoveryStepIndex(elapsedSinceSimulationStart - GenerationTimeWindow.Times(gen));
+			return local + gen * (RecoveryStepsPerGeneration + 1);
+		}
+
+		public TimeSpan GetRecoveryStepStart(int absoluteRecoveryStepIndex)
+		{
+			int local = absoluteRecoveryStepIndex % (RecoveryStepsPerGeneration + 1);
+			if (local == 0)
+				throw new ArgumentOutOfRangeException("Trying to query start of non-recovery step #" + absoluteRecoveryStepIndex);
+			var gen = absoluteRecoveryStepIndex / (RecoveryStepsPerGeneration + 1);
+			var offset = GenerationTimeWindow.Times(gen) + EntityEvaluationTimeWindow + SynchronizationTimeWindow;
+			if (local < RecoveryStepsPerGeneration)
+				return offset + RecoveryStepTimeWindow.Times(local - 1);
+			return offset + RecoveryStepTimeWindow.Times(local - 1) + CSApplicationTimeWindow;
+		}
+
+		public int GetRecoveryStepIndex(TimeSpan elapsedSinceGenerationStart)
+		{
+			var recoveryElapsed = elapsedSinceGenerationStart - EntityEvaluationTimeWindow - SynchronizationTimeWindow;
+			if (recoveryElapsed.Ticks < 0)
+				return 0;
+			int numFrames = (int)Math.Floor(recoveryElapsed.TotalSeconds / RecoveryStepTimeWindow.TotalSeconds);
+			if (numFrames + 1 < RecoveryStepsPerGeneration)
+				return numFrames + 1;
+			recoveryElapsed -= RecoveryStepTimeWindow.Times(RecoveryStepsPerGeneration - 1);
+			recoveryElapsed -= CSApplicationTimeWindow;
+			if (recoveryElapsed.Ticks < 0)
+				return 0;// RecoveryStepsPerGeneration-1;
+			return RecoveryStepsPerGeneration;
+		}
+
+		public TimeSpan ElapsedMainComputationTimeWindow => GenerationTimeWindow - CSApplicationTimeWindow - RecoveryStepTimeWindow;
+
+		public DateTime NextMainComputationDeadline => LatestGenerationStart + EntityEvaluationTimeWindow;
+		public DateTime NextMainApplicationDeadline => NextGenerationDeadline - RecoveryStepTimeWindow - CSApplicationTimeWindow;
+
+		public bool ShouldStartRecoveryAt(TimeSpan timeSinceSimulationStart, ref int lastRecoveryIndex)
+		{
+			int local;
+			int ridx = GetAbsoluteRecoveryStepIndex(timeSinceSimulationStart, out local);
+			if (ridx == lastRecoveryIndex)
+				return false;
+			lastRecoveryIndex = ridx;
+			return local > 0;
+		}
+		public bool ShouldStartRecovery(ref int lastRecoveryIndex)
+		{
+			return ShouldStartRecoveryAt(SimulationTime, ref lastRecoveryIndex);
+		}
+
+		public bool IsMainStep(int absoluteRecoveryStepIndex)
+		{
+			return (absoluteRecoveryStepIndex % (RecoveryStepsPerGeneration + 1)) == 0;
+		}
+
+		public DateTime GetRecoveryStepComputationDeadline(int absoluteRecoveryStepIndex)
+		{
+			if (IsMainStep(absoluteRecoveryStepIndex))
+				throw new ArgumentOutOfRangeException("Trying to query computation deadline of non-recovery step #"+ absoluteRecoveryStepIndex);
+			return Start + GetRecoveryStepStart(absoluteRecoveryStepIndex) + EntityEvaluationTimeWindow;
+		}
+
+		public DateTime GetRecoveryStepApplicationDeadline(int absoluteRecoveryStepIndex)
+		{
+			if (IsMainStep(absoluteRecoveryStepIndex))
+				throw new ArgumentOutOfRangeException("Trying to query application deadline of non-recovery step #" + absoluteRecoveryStepIndex);
+			return Start + GetRecoveryStepStart(absoluteRecoveryStepIndex) + RecoveryStepTimeWindow - CSApplicationTimeWindow;
+		}
+
 	}
 
 }

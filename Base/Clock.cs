@@ -194,6 +194,9 @@ namespace Base
 			return ntpTime + ConvertSWTicks(GetTimestamp() - ntpQueryStamp);
 		}
 
+
+		public static Func<DateTime> TimeOverrideFunction { get; set; }
+
 		/// <summary>
 		/// Queries the current time stamp using local and/or server-queried time data, as available
 		/// </summary>
@@ -201,6 +204,8 @@ namespace Base
 		{
 			get
 			{
+				if (TimeOverrideFunction != null)
+					return TimeOverrideFunction();
 				DateTime rs = new DateTime();
 				timeLock.DoLocked(() =>
 				{

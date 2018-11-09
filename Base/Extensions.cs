@@ -121,6 +121,10 @@ namespace Base
 
 
 
+		public static int ToTotalMilliseconds(this DateTime t)
+		{
+			return (int)(t.Ticks * 1000 / TimeSpan.TicksPerSecond);
+		}
 
 		public static int FloorDiv(this TimeSpan a, TimeSpan b)
 		{
