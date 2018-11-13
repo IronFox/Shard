@@ -46,7 +46,7 @@ namespace Shard
 			
 			if (!Simulation.Owns(newPosition))
 			{
-				Int3 targetShard = newPosition.FloorInt3;
+				Int3 targetShard = Int3.Min(newPosition.FloorInt3,Simulation.Extent.XYZ-1);
 				bool any = false,anyResponive=false;
 				foreach (var n in Simulation.Neighbors)
 					if (n.ID.XYZ == targetShard)
