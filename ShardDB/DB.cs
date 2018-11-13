@@ -316,7 +316,15 @@ namespace Shard
 			}
 			try
 			{
-				var header = await store.Entities.PutAsync(e._id, e);
+				var serial = JsonConvert.SerializeObject(e,
+				Newtonsoft.Json.Formatting.None,
+				new JsonSerializerSettings
+				{
+					NullValueHandling = NullValueHandling.Ignore
+				});
+
+				var header = await store.Documents.PutAsync(e._id, serial);
+					//store.Entities.PutAsync(e._id, e);
 				if (!header.IsSuccess)
 					throw new MyCouchResponseException(header);
 				e._rev = header.Rev;
