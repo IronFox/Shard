@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using Base;
 using Shard.EntityChange;
 using VectorMath;
@@ -57,7 +58,10 @@ namespace Shard
 						break;
 					}
 				if (!any)
+				{
+					Debug.Fail("This should not happen");
 					throw new ExecutionException(currentEntityPosition, task + " targets space beyond known neighbors. Rejecting motion");
+				}
 				if (!anyResponive && !AllowMotionToUnresponsiveNeighbor)
 					throw new ExecutionException(currentEntityPosition, task + " targets space of inactive neighbor shard. Rejecting");
 			}
