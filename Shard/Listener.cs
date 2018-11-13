@@ -27,7 +27,7 @@ namespace Shard
 			this.linkLookup = linkLookup;
 			server = new TcpListener(IPAddress.Any, port);
 			server.Start();
-			port = ((IPEndPoint)server.LocalEndpoint).Port;
+			this.port = ((IPEndPoint)server.LocalEndpoint).Port;
 			listenerThread = new Thread(new ThreadStart(Listen));
 			listenerThread.Start();
 		}
