@@ -191,9 +191,8 @@ namespace Shard
 		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
 		/// <param name="linearIndex">Linear index in the neighborhood</param>
 		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
-		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(BaseDB.TryGetPeerAddress(id),isActive,linearIndex,isSibling)
+		public Link(ShardID id, bool isActive, int linearIndex, bool isSibling) : this(BaseDB.TryGetPeerAddress(id),isActive,linearIndex,isSibling,id)
 		{
-			ID = id;
 		}
 		/// <summary>
 		/// Creates a new link to a sibling shard
@@ -202,8 +201,9 @@ namespace Shard
 		/// <param name="isActive">Actively establish the connection. If false, wait for inbound connection</param>
 		/// <param name="linearIndex">Linear index in the neighborhood</param>
 		/// <param name="isSibling">True if this is a link to a sibling shard (not a neighbor)</param>
-		public Link(Address remoteHost, bool isActive, int linearIndex, bool isSibling)
+		public Link(Address remoteHost, bool isActive, int linearIndex, bool isSibling, ShardID bindID)
 		{
+			ID = bindID;
 			IsSibling = isSibling;
 			LinearIndex = linearIndex;
 			UpdateAddress(remoteHost);
