@@ -110,8 +110,8 @@ namespace Shard
 			{
 				var old = Timing;
 				TimingPoller?.Suspend();
-				value._rev = old._rev;
-				value._id = old._id;
+				value._rev = old?._rev;
+				value._id = TimingID;
 				Put(ControlStore, value).Wait();
 				TimingPoller?.Resume();
 			}
