@@ -164,7 +164,7 @@ namespace Shard
 		public void UploadToDB(int generation, RCS rcs)
 		{
 			DB.PutAsync(new SerialRCS(GetOutboundRCSID(generation), rcs)).Wait();
-			OnPutRCS(rcs, generation);
+			OnPutRCS?.Invoke(rcs, generation);
 		}
 
 		public readonly bool IsSibling;
