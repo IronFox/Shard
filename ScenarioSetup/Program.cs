@@ -202,9 +202,14 @@ namespace ScenarioSetup
 		{
 			try
 			{
+
 				int at = 0;
 				var dbHost = new Address(args[at++]);
 				BaseDB.Connect(dbHost);//,"admin","1234");
+				Log.Message("Updating timing...");
+				BaseDB.Timing = new BaseDB.TimingContainer() { startTime = (DateTime.Now + TimeSpan.FromMinutes(5)).ToString() };
+				Log.Message("Setting up scenario...");
+
 				bool success = BaseDB.TryPullGlobalConfig(3);
 				CreateScenario();
 				Log.Message("Scenario set up. Shutting down");
