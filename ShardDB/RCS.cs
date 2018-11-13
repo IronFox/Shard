@@ -237,5 +237,11 @@ namespace Shard
 		{
 			return Helper.Hash(this).Add(base.GetHashCode()).Add(IC).GetHashCode();
 		}
+
+		public override string ToString()
+		{
+			return "RCS(" + IC.OneCount + " 1s)";
+
+		}
 	}
 }
