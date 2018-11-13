@@ -273,11 +273,11 @@ namespace Shard
 					recoveryComputation = null;
 				if (mainComputation != null && Complete(mainComputation, timing, timing.TopLevelGeneration != newestSDSGeneration && timing.TopLevelGeneration > mainComputation.Generation))
 				{
-					mainComputation = null;
 					newestSDSGeneration = stack.NewestFinishedSDSGeneration;
 					Debug.Assert(stack.NewestRegisteredEntry.IsFinished);
 					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
 					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
+					mainComputation = null;
 				}
 
 				if (recoveryComputation != null && mainComputation != null)
