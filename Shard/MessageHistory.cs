@@ -85,6 +85,7 @@ namespace Shard
 				}
 				for (int i = current.Generation + 1; i <= endedGeneration; i++)
 				{
+					Log.Message("Skipping empty message generation "+i);
 					var m = new IncomingMessages(i, MessagePack.CompleteBlank);
 					generations.TryAdd(i, m);
 					DB.PutNow(new SerialCCS(new SDS.ID(Simulation.ID.XYZ, i), m.Export(true)), true);
@@ -106,16 +107,21 @@ namespace Shard
 
 		public void TrimGenerations(int generationOrOlder)
 		{
-			LazyList<int> eraseGenerations;
-			foreach (var p in generations)
-				if (p.Key <= generationOrOlder)
-					eraseGenerations.Add(p.Key);
-			foreach (var g in eraseGenerations)
+			lock (this)
 			{
-				IncomingMessages m;
-				generations.ForceRemove(g,out m);
-				//if (!m.WasCollected)
+				LazyList<int> eraseGenerations;
+				foreach (var p in generations)
+					if (p.Key <= generationOrOlder)
+						eraseGenerations.Add(p.Key);
+				foreach (var g in eraseGenerations)
+				{
+					IncomingMessages m;
+					generations.ForceRemove(g, out m);
+					//if (!m.WasCollected)
 					//throw new IntegrityViolation("Dumping uncollected messages");
+				}
+				if (incomingMessages.Generation <= generationOrOlder)
+					incomingMessages = new IncomingMessages(generationOrOlder + 1);
 			}
 		}
 
