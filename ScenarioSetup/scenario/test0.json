@@ -7,7 +7,7 @@
 	"entities" :
 	[
 		{
-			"position" : [[0,0,0], [1,1,1]],
+			"position" : [[0,0,0], [2,1,1]],
 			"logic" : "randomMotion.v1",
 			"instances" : 200
 		}
