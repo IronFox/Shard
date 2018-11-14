@@ -332,10 +332,11 @@ namespace Shard
 						}
 						if (recoverAtIndex < top)
 						{
-							Log.Message("Recovering #"+recoverAtIndex+"/"+top+", g" + stack[recoverAtIndex].Generation);
+							var deadline = timing.GetRecoveryStepApplicationDeadline(lastRecoveryIndex);
+							Log.Message("Recovering #"+recoverAtIndex+"/"+top+", g" + stack[recoverAtIndex].Generation+", deadline="+deadline);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
-							recoveryComputation = new SDSComputation(timing.GetRecoveryStepApplicationDeadline(lastRecoveryIndex), Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
+							recoveryComputation = new SDSComputation(deadline, Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
 							//now wait for remote RCS...
 						}
 					}
