@@ -63,5 +63,15 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BaseDB\BaseDB.csproj">
+      <Project>{174a5b17-c113-45bd-85b6-009a1c5c3ef8}</Project>
+      <Name>BaseDB</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Base\Base.csproj">
+      <Project>{A40AEE2E-C572-4BCE-AC29-1329A7C57783}</Project>
+      <Name>Base</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

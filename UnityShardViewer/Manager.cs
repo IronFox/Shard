@@ -1,4 +1,5 @@
-﻿using Shard;
+﻿using Base;
+using Shard;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,20 +24,29 @@ namespace UnityShardViewer
 		/// <summary>
 		/// 
 		/// </summary>
-		public PeerAddress rootHost;
+		public Address rootHost;
 
 
-		Dictionary<PeerAddress, Sector> sectors = new Dictionary<PeerAddress, Sector>();
+		Dictionary<Address, Sector> sectors = new Dictionary<Address, Sector>();
 		Dictionary<ShardID, Sector> shardMap = new Dictionary<ShardID, Sector>();
+
+
 
 
 		public void Start()
 		{
-			AddSector(rootHost);
+			if (rootHost.IsSet)
+				AddSector(rootHost,null);
 			
 		}
 
-		public void AddSector(PeerAddress host, ShardID id)
+		public void ConnectTo(Address dbHost, ShardID id)
+		{
+			BaseDB.Connect(dbHost);
+			BaseDB.GetAddress(id,addr => AddSector(addr.ObserverAddress,addr.ShardID));
+		}
+
+		public void AddSector(Address host, ShardID id)
 		{
 			Sector existing;
 			if (shardMap.TryGetValue(id,out existing))
@@ -44,33 +54,40 @@ namespace UnityShardViewer
 				existing.Host = host;
 				return;
 			}
-			var sec = AddSector(host);
-			shardMap.Add(id, sec);
+			AddSector(host, sec=> shardMap.Add(id, sec));
 		}
 
-		public Sector AddSector(PeerAddress host)
+		public Action<string, Action<GameObject>> OnCreateObject { get; set; }
+
+		public void AddSector(Address host, Action<Sector> onCreate)
 		{
 			Sector rs;
 			if (sectors.TryGetValue(host, out rs))
-				return rs;
-			GameObject sec = new GameObject(host.ToString());
-			sec.transform.parent = transform;
-			Sector s = sec.AddComponent<Sector>();
-			s.CubePrototype = cubePrototype;
-			s.EntityPrototype = entityPrototype;
-			s.Host = host;
-			
-			sectors.Add(host, s);
-			s.onNewID = id =>
 			{
+				onCreate?.Invoke(rs);
+				return;
+			}
 
-			};
-			s.OnNewNeighbor = h =>
+
+			OnCreateObject(host.ToString(),sec =>
 			{
-				AddSector(h.Address,h.ShardID);
-			};
-			return s;
+				sec.transform.parent = transform;
+				Sector s = sec.AddComponent<Sector>();
+				s.CubePrototype = cubePrototype;
+				s.EntityPrototype = entityPrototype;
+				s.Host = host;
 
+				sectors.Add(host, s);
+				s.onNewID = id =>
+				{
+
+				};
+				s.OnNewNeighbor = (id, addr) =>
+				{
+					AddSector(addr, id);
+				};
+				onCreate?.Invoke(s);
+			});
 		}
 
 

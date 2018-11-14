@@ -1,7 +1,9 @@
-﻿using Shard;
+﻿using Base;
+using Shard;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 //using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
@@ -62,7 +64,7 @@ namespace UnityShardViewer
 					try
 					{
 						Debug.Log("Attempting to connect to " + lastHost);
-						client = new TcpClient(lastHost.Address, lastHost.Port);
+						client = new TcpClient(lastHost.Host, lastHost.Port);
 						var stream = new LZ4.LZ4Stream(client.GetStream(), LZ4.LZ4StreamMode.Decompress);
 						var f = new BinaryFormatter();
 						CSLogicProvider.AsyncFactory = ResolveProvider;
@@ -73,13 +75,13 @@ namespace UnityShardViewer
 						{
 							//Debug.Log("Sector: Deserializing next object");
 							var obj = f.UnsafeDeserialize(stream, null);
-							//Debug.Log("Sector: Deserialized object " + obj);
+							Debug.Log("Sector: Deserialized object " + obj);
 
 							if (obj is ShardID)
 							{
 								privateID = (ShardID)obj;
 								Debug.Log("Sector: ID updated to " + privateID);
-								OnNewNeighbor(new ShardPeerAddress(privateID, lastHost));
+								OnNewNeighbor(privateID, lastHost);
 							}
 							else if (obj is ObserverTimingInfo)
 							{
@@ -95,9 +97,9 @@ namespace UnityShardViewer
 									entry.SetResult(prov);
 								Debug.Log("Sector: Added new provider " + prov.AssemblyName);
 							}
-							else if (obj is ShardPeerAddress)
+							else if (obj is FullShardAddress)
 							{
-								var h = (ShardPeerAddress)obj;
+								var h = (FullShardAddress)obj;
 								newNeighbors.Add(h);
 							}
 							else if (obj is SDS)
@@ -127,18 +129,22 @@ namespace UnityShardViewer
 					catch (SocketException ex)
 					{
 						Debug.LogException(ex);
-						Debug.Log("Waiting, then retrying");
+					}
+					catch (IOException ex)
+					{
+						Debug.LogException(ex);
 					}
 					catch (Exception ex)
 					{
 						Debug.LogException(ex);
-						Debug.Log("Weird type: "+ex.GetType()+". Waiting, then retrying");
+						Debug.Log("Weird type: " + ex.GetType());
 					}
 					try
 					{
 						client.Close();
 					}
 					catch { };
+					Debug.Log("Waiting, then retrying");
 					Thread.Sleep(2000);
 				}
 			}
@@ -150,7 +156,7 @@ namespace UnityShardViewer
 		}
 
 
-		private PeerAddress lastHost;
+		private Address lastHost;
 
 		private TcpClient client;
 
@@ -175,7 +181,7 @@ namespace UnityShardViewer
 			//client = null;
 		}
 
-		public PeerAddress Host
+		public Address Host
 		{
 			get
 			{
@@ -282,13 +288,13 @@ namespace UnityShardViewer
 
 		public Action<ShardID> onNewID;
 
-		public Action<ShardPeerAddress> OnNewNeighbor { get; internal set; }
+		public Action<ShardID, Address> OnNewNeighbor { get; internal set; }
 
 		public const float Scale = 100;
 
 		private Dictionary<string, GameObject> availableEntityObjects = new Dictionary<string, GameObject>();
 
-		private ConcurrentBag<ShardPeerAddress> newNeighbors = new ConcurrentBag<ShardPeerAddress>();
+		private ConcurrentBag<FullShardAddress> newNeighbors = new ConcurrentBag<FullShardAddress>();
 
 
 		private System.Random random = new System.Random();
@@ -305,11 +311,11 @@ namespace UnityShardViewer
 		public void Update()
 		{
 			{
-				ShardPeerAddress t;
+				FullShardAddress t;
 				while (newNeighbors.TryTake(out t))
 				{
 					Debug.Log(name + ": received neighbor update: " + t);
-					OnNewNeighbor(new ShardPeerAddress(t.ShardID, new PeerAddress(t.Address.Address, t.Address.Port - 1000)));
+					OnNewNeighbor(t.ShardID, t.PeerAddress);
 				}
 			}
 			
