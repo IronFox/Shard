@@ -20,13 +20,13 @@ namespace Base
 		public static void Message(string msg)
 		{
 			msg = Time + ": " + msg;
-			System.Diagnostics.Debug.WriteLine(msg);
+			//System.Diagnostics.Debug.WriteLine(msg);
 			Console.WriteLine(msg);
 		}
 
 		public static void Debug(string msg)
 		{
-			System.Diagnostics.Debug.WriteLine(msg);
+			//System.Diagnostics.Debug.WriteLine(msg);
 		}
 
 		public static void Error(Exception ex)
