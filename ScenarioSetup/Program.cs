@@ -126,10 +126,10 @@ namespace ScenarioSetup
 
 
 
-		private static void CreateScenario()
+		private static void CreateScenario(string name)
 		{
 
-			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(File.ReadAllText("scenario/test0.json"));
+			ScenarioConfig scenario = JsonConvert.DeserializeObject<ScenarioConfig>(File.ReadAllText("scenario/"+name));
 
 
 			var providerMap = new Dictionary<string, Task<CSLogicProvider>>();
@@ -207,11 +207,11 @@ namespace ScenarioSetup
 				var dbHost = new Address(args[at++]);
 				BaseDB.Connect(dbHost);//,"admin","1234");
 				Log.Message("Updating timing...");
-				BaseDB.Timing = new BaseDB.TimingContainer() { startTime = (DateTime.Now + TimeSpan.FromMinutes(5)).ToString() };
+				BaseDB.Timing = new BaseDB.TimingContainer() { startTime = (DateTime.Now + TimeSpan.FromMinutes(5)).ToString()/*, msGenerationBudget = 30000*/ };
 				Log.Message("Setting up scenario...");
 
 				bool success = BaseDB.TryPullGlobalConfig(3);
-				CreateScenario();
+				CreateScenario(args[at++]);
 				Log.Message("Scenario set up. Shutting down");
 			}
 			catch (Exception ex)
