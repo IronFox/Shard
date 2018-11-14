@@ -49,10 +49,6 @@
     <Reference Include="UnityEngine">
       <HintPath>C:\Program Files\Unity\Editor\Data\Managed\UnityEngine.dll</HintPath>
     </Reference>
-    <Reference Include="VectorMath, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\Shard\ShardBase\bin\Debug\VectorMath.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EntityComponent.cs" />
@@ -71,6 +67,10 @@
     <ProjectReference Include="..\Base\Base.csproj">
       <Project>{A40AEE2E-C572-4BCE-AC29-1329A7C57783}</Project>
       <Name>Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Math\VectorMath.csproj">
+      <Project>{8b82845e-874b-4b7c-9ea6-85c968b73986}</Project>
+      <Name>VectorMath</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
