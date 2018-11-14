@@ -73,7 +73,7 @@ namespace UnityShardViewer
 
 						while (client.Connected)
 						{
-							//Debug.Log("Sector: Deserializing next object");
+							Debug.Log("Sector: Deserializing next object");
 							var obj = f.UnsafeDeserialize(stream, null);
 							Debug.Log("Sector: Deserialized object " + obj);
 
@@ -315,7 +315,7 @@ namespace UnityShardViewer
 				while (newNeighbors.TryTake(out t))
 				{
 					Debug.Log(name + ": received neighbor update: " + t);
-					OnNewNeighbor(t.ShardID, t.PeerAddress);
+					OnNewNeighbor(t.ShardID, t.ObserverAddress);
 				}
 			}
 			

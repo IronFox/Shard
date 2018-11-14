@@ -24,7 +24,7 @@ namespace UnityShardViewer
 		/// <summary>
 		/// 
 		/// </summary>
-		public Address rootHost;
+		//public Address rootHost;
 
 
 		Dictionary<Address, Sector> sectors = new Dictionary<Address, Sector>();
@@ -35,8 +35,8 @@ namespace UnityShardViewer
 
 		public void Start()
 		{
-			if (rootHost.IsSet)
-				AddSector(rootHost,null);
+			//if (rootHost.IsSet)
+				//AddSector(rootHost,ShardID. null);
 			
 		}
 
@@ -54,12 +54,12 @@ namespace UnityShardViewer
 				existing.Host = host;
 				return;
 			}
-			AddSector(host, sec=> shardMap.Add(id, sec));
+			AddSector(host, id, sec=> shardMap.Add(id, sec));
 		}
 
 		public Action<string, Action<GameObject>> OnCreateObject { get; set; }
 
-		public void AddSector(Address host, Action<Sector> onCreate)
+		public void AddSector(Address host, ShardID idk, Action<Sector> onCreate)
 		{
 			Sector rs;
 			if (sectors.TryGetValue(host, out rs))
@@ -69,7 +69,7 @@ namespace UnityShardViewer
 			}
 
 
-			OnCreateObject(host.ToString(),sec =>
+			OnCreateObject(idk.ToString(),sec =>
 			{
 				sec.transform.parent = transform;
 				Sector s = sec.AddComponent<Sector>();
