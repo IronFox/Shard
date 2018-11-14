@@ -326,7 +326,7 @@ namespace Shard.Tests
 
 			internal void InstallConsensusCluster(int size, int basePort, bool awaitFormation)
 			{
-				BaseDB.OverrideAddressRequestFunction = addr => new FullShardAddress(addr, "localhost", 0, basePort + addr.ReplicaLevel);
+				BaseDB.OverrideAddressRequestFunction = addr => new FullShardAddress(addr, "localhost", 0, basePort + addr.ReplicaLevel, basePort + addr.ReplicaLevel+100);
 				BaseDB.SDConfigPoller = new ReplicaOnlySD(size);
 				var dummyNotify = new DummyNotify();
 				consensus = new Consensus.Interface[size];

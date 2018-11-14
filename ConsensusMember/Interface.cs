@@ -109,9 +109,9 @@ namespace Consensus
 		}
 
 
-		public Interface(ShardID myID, int peerPort, int consensusPort, bool updateAddress, ThreadOperations threadOps, INotifiable notify) :
-			this(Member(myID.ReplicaLevel), GetMyAddress(consensusPort),myID.XYZ, threadOps, notify,
-				updateAddress ? addr => PublishAddress(new FullShardAddress(myID, addr.Host, peerPort, addr.Port)) : (Action<Address>)null
+		public Interface(FullShardAddress addr, bool updateAddress, ThreadOperations threadOps, INotifiable notify) :
+			this(Member(addr.ShardID.ReplicaLevel), GetMyAddress(addr.ConsensusPort),addr.ShardID.XYZ, threadOps, notify,
+				a => { if (updateAddress) PublishAddress(new FullShardAddress(addr.ShardID, a.Host, addr.PeerPort, a.Port, addr.ObserverPort)); }
 			)
 		{}
 

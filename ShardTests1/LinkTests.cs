@@ -119,10 +119,10 @@ namespace Shard.Tests
 			public readonly Link Passive;
 			private readonly DataSetReceiverState state;
 
-			public Receiver(DataSetReceiverState state, int port)
+			public Receiver(DataSetReceiverState state, int port, ShardID bindID)
 			{
 				this.state = state;
-				Passive = new Link(new Address("localhost",port), false, 0, false);
+				Passive = new Link(new Address("localhost",port), false, 0, false, bindID);
 				Passive.OnData = OnData;
 				Listener = new Listener(h => Passive,port);
 			}
@@ -507,7 +507,7 @@ namespace Shard.Tests
 			Random random = new Random();
 			var defaultPort = random.Next(1024, 32768);
 
-			Link active = new Link(new Address("localhost", defaultPort), true, 0, false);
+			Link active = new Link(new Address("localhost", defaultPort), true, 0, false, new ShardID(0,0,0,0));
 			active.AddressLocked = true;
 			active.VerboseWriter = true;
 			active.OnData = OnActiveData;
@@ -519,7 +519,7 @@ namespace Shard.Tests
 				for (int j = 0; j < 3; j++)
 				{
 					var state = set.NewState();
-					Receiver recv = new Receiver(state,defaultPort);
+					Receiver recv = new Receiver(state,defaultPort, new ShardID(1,0,0,0));
 					AwaitConnection(recv.Passive);
 					AwaitConnection(active);
 					if (!state.AwaitAllSet(10000))

@@ -182,13 +182,15 @@ namespace Shard
 		{
 			//Host.Domain = ;
 			listener = new Listener(h => FindLink(h));
-			Consensus = new Consensus.Interface(myID, listener.Port, 0, true, Interface.ThreadOperations.Everything, new DefaultNotify());
+			observationListener = new ObservationLink.Listener(0);
+			Consensus = new Consensus.Interface(
+				new FullShardAddress(myID,null,listener.Port,0,observationListener.Port),
+				true, Interface.ThreadOperations.Everything, new DefaultNotify());
 			Configure(myID, BaseDB.Config,false);
 
 			AdvertiseOldestGeneration(0);
 
 
-			observationListener = new ObservationLink.Listener(listener.Port - 1000);
 
 			Log.Message("Polling SDS state...");
 			DB.Begin(myID.XYZ, s => FetchIncoming(null, s), s => FetchIncoming(null, s));

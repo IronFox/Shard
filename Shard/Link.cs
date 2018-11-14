@@ -598,7 +598,8 @@ namespace Shard
 		{
 			get
 			{
-				return new FullShardAddress(ID, address.Host,address.Port,BaseDB.TryGetConsensusAddress(ID).Port);
+				var dbAddr = BaseDB.TryGetAddress(ID);
+				return new FullShardAddress(ID, address.Host,address.Port,dbAddr.ConsensusPort,dbAddr.ObserverPort);
 			}
 		}
 

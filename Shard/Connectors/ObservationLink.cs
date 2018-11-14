@@ -30,12 +30,13 @@ namespace Shard
 			private readonly Thread listenerThread;
 
 			public Action<ObservationLink> OnNewLink { get; set; }
-
+			public readonly int Port;
 			public Listener(int port)
 			{
 				Log.Message("Starting observation link listener on port "+port);
 				server = new TcpListener(IPAddress.Any, port);
 				server.Start();
+				Port = ((IPEndPoint)server.LocalEndpoint).Port;
 				listenerThread = new Thread(new ThreadStart(Listen));
 				listenerThread.Start();
 			}
