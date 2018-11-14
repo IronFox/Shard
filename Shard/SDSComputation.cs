@@ -1,7 +1,9 @@
 ﻿using Base;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using VectorMath;
@@ -51,8 +53,17 @@ namespace Shard
 
 			data = new IntermediateSDS();
 			data.inputConsistent = input.IsFullyConsistent;
-			data.inputHash = input.SDS.HashDigest;
-			
+
+			{
+				using (var ms = new MemoryStream())
+				{
+					input.SDS.AddToStream(ms);
+					clientMessages.AddToStream(ms);
+					ms.Seek(0, SeekOrigin.Begin);
+					data.inputHash = new Digest(SHA256.Create().ComputeHash(ms), true);
+				}
+			}
+
 
 			//old bad or dont exist, new maybe good
 			if (clientMessages.HasBeenDiscarded)
@@ -71,7 +82,10 @@ namespace Shard
 			data.localChangeSet = new EntityChangeSet();
 			data.ic = input.SDS.IC.Clone();
 			if (!this.clientMessages.Completed)
+			{
+				Log.Message("Client messages are not complete for generation " + generation+", setting everything inconsistent");
 				data.ic.SetAllOne();
+			}
 			//bool doSendClientMessages = freshClientMessages != null && freshClientMessages.ArchivedGeneration == generation;
 			errors = data.localChangeSet.Evolve(input.SDS.FinalEntities, this.clientMessages.Messages, data.ic, entityLogicTimeout, ctx);
 			if (errors == null && input.IsFullyConsistent && data.ic.OneCount != 0 && clientMessages.MessagePack.Completed)
@@ -92,7 +106,7 @@ namespace Shard
 				var oID = n.GetOutboundRCSID(Generation);
 				if (generation >= n.OldestGeneration)
 				{
-					Log.Message("Dispatched "+oID);
+					Log.Message("Dispatched "+oID+", IC ones="+ic.OneCount);
 					n.Set(oID.ToString(), new RCS.Serial(rcs, generation));
 					if (rcs.IsFullyConsistent)
 						n.UploadToDB(generation, rcs);

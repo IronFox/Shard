@@ -25,8 +25,8 @@ namespace Shard
 			public readonly int Generation;
 
 
-			public int[] IntArray=>new int[]{ShardID.X,ShardID.Y,ShardID.Z,Generation };
-			
+			public int[] IntArray => new int[] { ShardID.X, ShardID.Y, ShardID.Z, Generation };
+
 			public ID(int[] array, int offset)
 			{
 				ShardID = new Int3(array, offset);
@@ -95,17 +95,22 @@ namespace Shard
 
 		public int Inconsistency { get { return IC != null ? IC.OneCount : -1; } }
 
+		public void AddToStream(Stream stream)
+		{
+			var f = new BinaryFormatter();
+			f.Serialize(stream, IsFullyConsistent);
+			f.Serialize(stream, Generation);
+			f.Serialize(stream, FinalEntities);
+			f.Serialize(stream, IC);
+		}
+
 		public Digest HashDigest
 		{
 			get
 			{
-				var f = new BinaryFormatter();
 				using (var ms = new MemoryStream())
 				{
-					f.Serialize(ms, IsFullyConsistent);
-					f.Serialize(ms, Generation);
-					f.Serialize(ms, FinalEntities);
-					f.Serialize(ms, IC);
+					AddToStream(ms);
 					ms.Seek(0, SeekOrigin.Begin);
 					return new Digest(SHA256.Create().ComputeHash(ms),true);
 				}

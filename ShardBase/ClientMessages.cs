@@ -1,8 +1,10 @@
 ﻿using Base;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -195,6 +197,14 @@ namespace Shard
 				foreach (var m in a)
 					yield return m;
 		}
+
+		internal void AddToStream(Stream stream, BinaryFormatter f)
+		{
+			f.Serialize(stream, Completed);
+			var ar = Messages.Values.ToArray();
+			Array.Sort(ar);
+			f.Serialize(stream, ar);
+		}
 	}
 
 	public struct ExtMessagePack
@@ -217,6 +227,13 @@ namespace Shard
 		}
 
 		public static readonly ExtMessagePack CompleteBlank = new ExtMessagePack(MessagePack.CompleteBlank);
+
+		public void AddToStream(Stream stream)
+		{
+			var f = new BinaryFormatter();
+			MessagePack.AddToStream(stream, f);
+			f.Serialize(stream, HasBeenDiscarded);
+		}
 	}
 
 
