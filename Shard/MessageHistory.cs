@@ -78,9 +78,16 @@ namespace Shard
 				Log.Message("Inserting message generation " + current.Generation + "->" + (endedGeneration + 1));
 				//if (!generations.IsEmpty && !generations.ContainsKey(current.Generation - 1))
 				//throw new IntegrityViolation("Trying to insert generation " + current.Generation + ", but generation " + (current.Generation - 1) + " does not locally exist");
+				
 				if (generations.TryAdd(current.Generation, current))
 				{
 					DB.PutNow(new SerialCCS(new SDS.ID(Simulation.ID.XYZ, current.Generation), current.Export(true)), true);
+				}
+				for (int i = current.Generation + 1; i <= endedGeneration; i++)
+				{
+					var m = new IncomingMessages(i, MessagePack.CompleteBlank);
+					generations.TryAdd(i, m);
+					DB.PutNow(new SerialCCS(new SDS.ID(Simulation.ID.XYZ, i), m.Export(true)), true);
 				}
 				incomingMessages = new IncomingMessages(endedGeneration + 1);
 			}
