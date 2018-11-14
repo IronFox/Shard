@@ -315,7 +315,7 @@ namespace Shard
 					//see if we can recover something
 					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;    //must be > 0
 					int top = Math.Min(stack.Size, stack.ToIndex(timing.TopLevelGeneration));
-					if (oldestInconsistentSDSIndex < top)
+					if (oldestInconsistentSDSIndex <= top)
 					{
 						int recoverAtIndex = oldestInconsistentSDSIndex;
 						int currentGen = stack[recoverAtIndex].Generation;
