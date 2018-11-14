@@ -272,7 +272,12 @@ namespace Shard
 				if (d.Provider.IsCompleted)
 					yield return d.Provider.Get().Assembly;
 				else
-					delayed.Add(d);	//add and directly continue with the next. maybe we are lucky
+					delayed.Add(d); //add and directly continue with the next. maybe we are lucky
+			yield return Assembly.GetExecutingAssembly();
+			yield return typeof(VectorMath.Vec3).Assembly;
+			yield return typeof(EntityChange.Abstract).Assembly;
+			yield return typeof(Base.Box).Assembly;
+
 			//no point distinguishing, wait for each
 			foreach (var d in delayed)
 				yield return d.Provider.Get().Assembly;
