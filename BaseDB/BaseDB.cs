@@ -243,7 +243,7 @@ namespace Shard
 		/// <returns></returns>
 		public static async Task<T> TryForceReplace<T>(DataBase store, T item) where T : Entity
 		{
-			try
+			//try
 			{
 				if (store == null)
 					return item;    //during tests, db is not loaded
@@ -282,11 +282,11 @@ namespace Shard
 				}
 				return JsonConvert.DeserializeObject<T>(echo.Content);    //all good
 			}
-			catch (Exception ex)
-			{
+			//catch (Exception ex)
+			//{
 
-				throw;
-			}
+			//	throw;
+			//}
 		}
 
 
@@ -426,6 +426,28 @@ namespace Shard
 				}
 			}
 
+			public void Get(DataBase store, K id, Action<D> onGet)
+			{
+				ContinuousPoller<D> poller;
+				if (requests.TryGetValue(id, out poller))
+				{
+					poller.GetLatest(onGet);
+					return;
+				}
+				lock (this)
+				{
+					if (requests.TryGetValue(id, out poller))
+					{
+						poller.GetLatest(onGet);
+						return;
+					}
+					if (store == null)
+						return;
+					BeginFetch(store, id);
+					Get(store, id, onGet);
+				}
+			}
+
 			public void FilterRequests(Func<K, bool> filterFunction)
 			{
 				foreach (var pair in requests)
@@ -448,6 +470,16 @@ namespace Shard
 
 
 		public static Func<ShardID, FullShardAddress> OverrideAddressRequestFunction { get; set; }
+
+		public static void GetAddress(ShardID id, Action<FullShardAddress> onGetAddress)
+		{
+			if (OverrideAddressRequestFunction != null)
+			{
+				onGetAddress(OverrideAddressRequestFunction(id));
+				return;
+			}
+			hostRequests.Get(HostsStore, id,a => onGetAddress(a.GetFullAddress(id)));
+		}
 
 		public static FullShardAddress TryGetAddress(ShardID id)
 		{
@@ -515,7 +547,7 @@ namespace Shard
 		public class AddressEntry : Entity
 		{
 			public string host;
-			public int peerPort, consensusPort;
+			public int peerPort, consensusPort, observerPort;
 
 			public AddressEntry(FullShardAddress addr)
 			{
@@ -523,6 +555,7 @@ namespace Shard
 				host = addr.Host;
 				peerPort = addr.PeerPort;
 				consensusPort = addr.ConsensusPort;
+				observerPort = addr.ObserverPort;
 			}
 
 			[JsonIgnore]
@@ -533,7 +566,7 @@ namespace Shard
 
 			internal FullShardAddress GetFullAddress(ShardID id)
 			{
-				return new FullShardAddress(id, host, peerPort, consensusPort);
+				return new FullShardAddress(id, host, peerPort, consensusPort, observerPort);
 			}
 		}
 
