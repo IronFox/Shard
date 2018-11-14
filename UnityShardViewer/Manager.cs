@@ -76,6 +76,7 @@ namespace UnityShardViewer
 				s.CubePrototype = cubePrototype;
 				s.EntityPrototype = entityPrototype;
 				s.Host = host;
+				s.ExpectedID = idk;
 
 				sectors.Add(host, s);
 				s.onNewID = id =>

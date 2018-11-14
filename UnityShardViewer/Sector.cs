@@ -144,6 +144,11 @@ namespace UnityShardViewer
 						client.Close();
 					}
 					catch { };
+					{
+						var naddr = BaseDB.TryGetAddress(ExpectedID);
+						if (!naddr.IsEmpty)
+							lastHost = naddr.ObserverAddress;
+					}
 					Debug.Log("Waiting, then retrying");
 					Thread.Sleep(2000);
 				}
@@ -289,6 +294,7 @@ namespace UnityShardViewer
 		public Action<ShardID> onNewID;
 
 		public Action<ShardID, Address> OnNewNeighbor { get; internal set; }
+		public ShardID ExpectedID { get; internal set; }
 
 		public const float Scale = 100;
 
