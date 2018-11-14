@@ -3,6 +3,7 @@ using MyCouch;
 using MyCouch.Requests;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -20,6 +21,7 @@ namespace DBType
 		//TaskCompletionSource<T> anyValueAsync;
 
 		public Action<T> OnChange { get; set; }
+		private ConcurrentBag<Action<T>> onGet = new ConcurrentBag<Action<T>>();
 		public readonly Func<ICollection<T>, T> Merger;
 		SpinLock sl = new SpinLock();
 		CancellationTokenSource cancellation;
@@ -120,34 +122,31 @@ namespace DBType
 
 		private async Task PollAsync(CancellationToken cancellationToken = default(CancellationToken))
 		{
-			for (int i = 0; i < 3; i++)
+			try
 			{
-				try
+				var header = await store.Documents.HeadAsync(ID, null, cancellationToken);
+				if (cancellationToken.IsCancellationRequested || !header.IsSuccess)
+					return;
+				if (Latest == null || header.Rev != Latest._rev)
 				{
-					var header = await store.Documents.HeadAsync(ID,null, cancellationToken);
-					if (cancellationToken.IsCancellationRequested || !header.IsSuccess)
-						return;
-					if (Latest == null || header.Rev != Latest._rev)
+					var data = await GetConflictResolvedAsync(store, ID, Merger, cancellationToken);
+					if (cancellationToken.IsCancellationRequested || data == null)
+						return; //try again later
+					sl.DoLocked(() =>
 					{
-						var data = await GetConflictResolvedAsync(store, ID, Merger, cancellationToken);
-						if (cancellationToken.IsCancellationRequested || data == null)
-							return; //try again later
-						sl.DoLocked(() =>
-						{
-							Log.Minor("Got new data on "+this+": rev " + header.Rev);
-							//if (lastQueriedValue == null)
-							//	anyValueAsync.SetResult(data);
-							Latest = data;
-							OnChange?.Invoke(data);
-						});
-					}
-					return;
-				}
-				catch (TaskCanceledException)
-				{
-					return;
+						Log.Minor("Got new data on " + this + ": rev " + header.Rev);
+						//if (lastQueriedValue == null)
+						//	anyValueAsync.SetResult(data);
+						Latest = data;
+						OnChange?.Invoke(data);
+						Action<T> next;
+						while (onGet.TryTake(out next))
+							next(data);
+					});
 				}
 			}
+			catch (TaskCanceledException)
+			{}
 		}
 
 		#region IDisposable Support
@@ -210,11 +209,11 @@ namespace DBType
 					var t = PollAsync(cancellation.Token);
 					if (cancellation.IsCancellationRequested)
 						return;
-					if (!t.Wait(500, cancellation.Token))
+					if (!t.Wait(5000, cancellation.Token))
 					{
 						if (cancellation.IsCancellationRequested)
 							return;
-						Log.Error("Failed poll data on " + this + " after 500 ms");
+						Log.Error("Failed to poll data on " + this + " after 500 ms");
 					}
 					Thread.Sleep(500);
 				}
@@ -282,7 +281,20 @@ namespace DBType
 				cancellation.Token);
 			*/
 		}
-		#endregion
+
+		public void GetLatest(Action<T> onGet)
+		{
+			sl.DoLocked(() =>
+			{
+				if (Latest != null)
+				{
+					onGet(Latest);
+					return;
+				}
+				this.onGet.Add(onGet);
+			});
+		}
+	#endregion
 	}
 
 
