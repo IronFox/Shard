@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Base;
 
 namespace Shard
@@ -102,6 +103,7 @@ namespace Shard
 				return new ExtMessagePack(current.Export(false));
 			if (generations.TryGetValue(generation, out current))
 				return new ExtMessagePack(current.Export(true));
+			Debug.Fail("Trying to retrieve previously trimmed messages at g"+generation+", current is g"+current.Generation);
 			return new ExtMessagePack(true);
 		}
 
