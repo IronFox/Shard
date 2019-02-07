@@ -301,7 +301,7 @@ namespace Shard
 					Debug.Assert(newestSDSGeneration == stack.NewestRegisteredSDSGeneration);
 					Debug.Assert(stack.NewestConsistentSDSIndex != -1);
 					int nextGen = newestSDSGeneration + 1;
-					Log.Minor("Processing next TLG g" + nextGen);
+					Log.Message("Processing next TLG g" + nextGen);
 					stack.Insert(new SDS(nextGen));
 					ctx.SetGeneration(nextGen);
 					Debug.Assert(mainComputation == null);
