@@ -376,6 +376,11 @@ namespace Shard
 							);
 				}
 			}
+
+			public override string ToString()
+			{
+				return "mrcs=" + missingRCS + ",ran=" + rcsAvailableFromNeighbor + ",rrd=" + rcsRestoredFromDB + ",pic=" + predecessorIsConsistent + ",tii=" + thisIsConsistent;
+			}
 		}
 
 
