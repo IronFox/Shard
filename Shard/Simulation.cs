@@ -314,12 +314,13 @@ namespace Shard
 				{
 					//see if we can recover something
 					int oldestInconsistentSDSIndex = stack.NewestConsistentSDSIndex + 1;    //must be > 0
-					int top = Math.Min(stack.Size, stack.ToIndex(timing.TopLevelGeneration));
+					int top = Math.Min(stack.Size-1, stack.ToIndex(timing.TopLevelGeneration));
 					if (oldestInconsistentSDSIndex <= top)
 					{
+						int end = mainComputation == null ? top + 1 : top;
 						int recoverAtIndex = oldestInconsistentSDSIndex;
 						int currentGen = stack[recoverAtIndex].Generation;
-						for (; recoverAtIndex < top; recoverAtIndex++)
+						for (; recoverAtIndex < end; recoverAtIndex++)
 						{
 							var current = stack[recoverAtIndex];
 							if (current.SignificantInboundChange)
@@ -330,13 +331,13 @@ namespace Shard
 							if (check.ShouldRecoverThis)
 								break;
 						}
-						if (recoverAtIndex < top)
+						if (recoverAtIndex < end)
 						{
 							var deadline = timing.GetRecoveryStepApplicationDeadline(lastRecoveryIndex);
-							Log.Message("Recovering #"+recoverAtIndex+"/"+top+", g" + stack[recoverAtIndex].Generation+", deadline="+deadline);
+							Log.Message("Recovering #" + recoverAtIndex + "/" + top + ", g" + stack[recoverAtIndex].Generation + ", deadline=" + deadline);
 							//precompute:
 							ctx.SetGeneration(stack[recoverAtIndex].Generation);
-							recoveryComputation = new SDSComputation(deadline, Messages.GetMessages(ctx.GenerationNumber-1), timing.EntityEvaluationTimeWindow,ctx);
+							recoveryComputation = new SDSComputation(deadline, Messages.GetMessages(ctx.GenerationNumber - 1), timing.EntityEvaluationTimeWindow, ctx);
 							//now wait for remote RCS...
 						}
 					}
